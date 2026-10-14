@@ -1,0 +1,196 @@
+package ai.mwm.client.cloud
+
+import ai.mwm.client.data.*
+import android.content.Context
+import com.google.firebase.functions.FirebaseFunctionsException
+import com.google.firebase.auth.FirebaseAuthException
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+
+/** No demo imports, no health serialization, no persistent partner-data cache. */
+data class PartnerConnection(val busy: Boolean=false, val spaceId: String="", val uid: String="", val partnerUid: String="", val generation: String="", val code: String="", val expiresAt: Long=0, val message: String="Local mode · Sign in to connect with your partner", val online: Boolean=false, val pokeCooldowns: Map<String,Long> = emptyMap(), val needsAuth: Boolean=false, val pairingMessage: String="", val retryAt: Long=0, val authenticated: Boolean=false, val role: String="", val partnerRole: String="", val selectedRole: String="", val accountEmail: String="") {
+    val connected get() = spaceId.isNotBlank()
+    val paired get() = connected && partnerUid.isNotBlank()
+}
+val LocalPartnerConnection = androidx.compose.runtime.staticCompositionLocalOf { PartnerConnection() }
+val LocalPartnerNote = androidx.compose.runtime.staticCompositionLocalOf<(String,String,String,String) -> Unit> { {_,_,_,_->} }
+val LocalPartnerPoke = androidx.compose.runtime.staticCompositionLocalOf<(Task) -> Unit> { {} }
+fun connectionError(e: Throwable): String = when(e) {
+    is FirebaseFunctionsException -> when(e.code) {
+        FirebaseFunctionsException.Code.NOT_FOUND -> "Code or server unavailable. Check the code, or ask for a fresh one."
+        FirebaseFunctionsException.Code.ABORTED -> "Changed on another phone. Refresh and try again; your edit was not saved."
+        FirebaseFunctionsException.Code.RESOURCE_EXHAUSTED -> "Please wait before trying again."
+        FirebaseFunctionsException.Code.UNAVAILABLE -> "Offline · Change not sent. Reconnect and try again."
+        else -> e.message ?: "Partner service unavailable. Try again."
+    }
+    is FirebaseAuthException -> "Sign-in could not complete. Check your connection and retry."
+    is SignInRequired -> "Sign in to Supabase to generate a code or join your partner."
+    is SupabaseFailure -> when {
+        e.reason == "40001" -> "Changed on another phone. Refresh and try again; your edit was not saved."
+        e.status == 429 -> "Too many attempts. Please wait before trying again."
+        e.reason == "email_not_confirmed" -> "Confirm your email first, then sign in."
+        e.reason == "invalid_credentials" -> "Email or password is incorrect. Please try again."
+        else -> e.message ?: "Supabase request failed. Please try again."
+    }
+    is java.io.IOException -> "Offline · Supabase could not be reached. Reconnect and try again."
+    else -> e.message ?: "Connection failed. Your change was not sent."
+}
+class PartnerSync(private val context: Context, private val repository: PipoRepository, private val scope: CoroutineScope) {
+    private val api=PipoFirebase.get(context)
+    private val lock=Mutex()
+    private val mutable=MutableStateFlow(PartnerConnection())
+    val state: StateFlow<PartnerConnection> = mutable.asStateFlow()
+    private var taskVersions=mapOf<String,Long>()
+    private var listVersions=mapOf<String,Long>()
+    private var tagVersions=mapOf<String,Long>()
+    private var polling: Job?=null
+    private var pendingAction: Pair<String,String>?=null
+    init {mutable.value=PartnerConnection(selectedRole=roleStore().getString("chosen_role","") ?: "",message=if(repository.isRemote) "Restoring authenticated shared space…" else "Local mode · Sign in to connect with your partner")}
+    private fun roleStore()=context.getSharedPreferences("pipo_role_${AccountScope.current(context)}",Context.MODE_PRIVATE)
+    fun chooseRole(role: String) {
+        if(mutable.value.busy || mutable.value.connected)return
+        require(role in listOf("user_1","user_2"))
+        roleStore().edit().putString("chosen_role",role).commit()
+        mutable.value=mutable.value.copy(selectedRole=role,pairingMessage=if(role=="user_1") "Host selected · User 1. Share your code with the Joiner." else "Joiner selected · User 2. Enter the Host’s code.")
+    }
+    private suspend fun activateIdentity() {
+        val (uid,email)=api.identity()
+        if(mutable.value.uid!=uid) {
+            val chosen=mutable.value.selectedRole
+            repository.activateAccount(uid)
+            taskVersions=emptyMap();listVersions=emptyMap();tagVersions=emptyMap()
+            mutable.value=PartnerConnection(busy=mutable.value.busy,uid=uid,accountEmail=email,authenticated=true,selectedRole=chosen,needsAuth=mutable.value.needsAuth,pairingMessage=mutable.value.pairingMessage)
+            if(chosen.isNotBlank())roleStore().edit().putString("chosen_role",chosen).commit()
+        } else mutable.value=mutable.value.copy(accountEmail=email,authenticated=true)
+    }
+    fun dismissAuth() {pendingAction=null;mutable.value=mutable.value.copy(needsAuth=false)}
+    fun authenticate(email: String,password: String,signup: Boolean) {
+        if(mutable.value.busy)return
+        mutable.value=mutable.value.copy(busy=true,pairingMessage="Signing in to Supabase…")
+        scope.launch {lock.withLock {
+            try {
+                val signedIn=api.authenticate(email,password,signup)
+                if(!signedIn) {mutable.value=mutable.value.copy(pairingMessage="Check your email to confirm your account, then sign in.");return@withLock}
+                mutable.value=mutable.value.copy(needsAuth=false,authenticated=true,pairingMessage="Signed in · Choose Create space or Join")
+                refresh()
+            } catch(e: CancellationException) {throw e} catch(e: Exception) {mutable.value=mutable.value.copy(pairingMessage=connectionError(e))}
+            finally {mutable.value=mutable.value.copy(busy=false)}
+        }
+        if(!mutable.value.needsAuth) {val pending=pendingAction;pendingAction=null;if(pending!=null)connect(pending.first,pending.second)}
+        }
+    }
+    fun signOut() {if(mutable.value.busy)return;scope.launch {lock.withLock {api.signOut();repository.activateAccount("");repository.restoreLocal();taskVersions=emptyMap();listVersions=emptyMap();tagVersions=emptyMap();pendingAction=null;mutable.value=PartnerConnection(message="Signed out · Your local workspace is preserved");PartnerPokeService.clear(context)}}}
+    fun check() {if(mutable.value.busy)return;scope.launch {lock.withLock {mutable.value=mutable.value.copy(busy=true);try {api.probe();refresh()} catch(e: CancellationException){throw e} catch(e: Exception){mutable.value=mutable.value.copy(message=connectionError(e),needsAuth=e is SignInRequired)} finally {mutable.value=mutable.value.copy(busy=false)}}}}
+    fun connect(action: String, code: String="") {
+        if(mutable.value.busy)return
+        mutable.value=mutable.value.copy(busy=true,pairingMessage="Contacting Supabase…")
+        scope.launch {lock.withLock {
+            try {
+                activateIdentity() // Verify and partition by authenticated UID before reading personal state.
+                val chosen=mutable.value.role.ifBlank {mutable.value.selectedRole}
+                check(chosen in listOf("user_1","user_2")){"Choose User 1 or User 2 before creating or joining a space."}
+                if(action=="join") {
+                    val reply=api.joinSpace(code,chosen)
+                    when(reply["status"]) {
+                        "connected" -> {mutable.value=mutable.value.copy(code="",expiresAt=0,retryAt=0);refresh();mutable.value=mutable.value.copy(pairingMessage="Partner joined · Shared space loaded")}
+                        "role_conflict" -> error("Your partner already uses ${roleLabel(chosen)}. Choose ${roleLabel(reply["available_role"] as? String ?: "")} and join again. The code is still valid.")
+                        "role_required" -> error("Choose User 1 or User 2 before joining.")
+                        "rate_limited" -> error("Too many joining attempts. Wait 15 minutes before trying again.")
+                        "invalid_or_unavailable" -> error("Code expired, already used, or unavailable. If you have your own space, leave it before joining another.")
+                        else -> error("Unexpected pairing response. Nobody was connected.")
+                    }
+                } else {
+                    check(action in listOf("create","regenerate")){"Unknown connection action"}
+                    api.createSpace(chosen) // Idempotent; establishes required membership ONLY for creator/regenerator.
+                    refresh()
+                    check(!mutable.value.paired){"Your partner is already connected. No invitation is needed."}
+                    val previous=mutable.value
+                    // A lost HTTP reply may mean the old code was invalidated; never keep it shareable in that case.
+                    mutable.value=previous.copy(code="",expiresAt=0,pairingMessage="Generating server code…")
+                    val reply=api.issueCode()
+                    when(reply["status"]) {
+                        "issued" -> {
+                            val issued=reply["code"] as? String ?: error("Server returned no invitation code")
+                            check(issued.matches(Regex("[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}"))){"Server returned an invalid invitation code"}
+                            val expiry=java.time.OffsetDateTime.parse(reply["expires_at"] as String).toInstant().toEpochMilli()
+                            check(expiry>System.currentTimeMillis()){"Server returned an expired code. Check this phone's clock."}
+                            check(reply["space_id"]==mutable.value.spaceId){"Invitation belongs to a different space"}
+                            mutable.value=mutable.value.copy(code=issued,expiresAt=expiry,online=true,retryAt=System.currentTimeMillis()+30000,pairingMessage="New code issued · Valid for 10 minutes. Any previous code no longer works.")
+                        }
+                        "cooldown" -> mutable.value=mutable.value.copy(code=previous.code,expiresAt=previous.expiresAt,retryAt=System.currentTimeMillis()+30000,pairingMessage="Please wait up to 30 seconds before regenerating. No new code was issued.")
+                        else -> error("Unexpected code response. Please try again.")
+                    }
+                }
+                // No automatic profile import: sharing a minimal display profile is an explicit Settings opt-in.
+            } catch(e: CancellationException){throw e} catch(e: Exception) {
+                if(e is SignInRequired) {pendingAction=action to code;mutable.value=mutable.value.copy(needsAuth=true)}
+                mutable.value=mutable.value.copy(pairingMessage=connectionError(e),message=connectionError(e))
+            } finally {mutable.value=mutable.value.copy(busy=false)}
+        }}
+    }
+    fun resume() {
+        if(polling?.isActive==true)return
+        polling=scope.launch {while(isActive){lock.withLock {
+            if(api.hasSession()) try {refresh()} catch(e: CancellationException){throw e} catch(e: Exception){mutable.value=mutable.value.copy(online=false,message=connectionError(e));if(e is SignInRequired){repository.activateAccount("");repository.restoreLocal();taskVersions=emptyMap();listVersions=emptyMap();tagVersions=emptyMap();mutable.value=PartnerConnection(message=connectionError(e))}}
+        };delay(6000)}}
+    }
+    fun pause(){polling?.cancel();polling=null}
+    private fun maps(value: Any?): List<Map<String,Any?>> { @Suppress("UNCHECKED_CAST") return (value as? List<*>)?.mapNotNull {it as? Map<String,Any?>} ?: emptyList() }
+    private fun n(r: Map<String,Any?>,key: String,default: Long=0)=(r[key] as? Number)?.toLong() ?: default
+    private fun owner(r: Map<String,Any?>,uid: String)=when(r["assigneeUid"]){null->Owner.Together;uid->Owner.Me;else->Owner.You}
+    private suspend fun refresh() {
+        activateIdentity()
+        val r=try {api.snapshot()} catch(e: NoMembership) {repository.restoreLocal();taskVersions=emptyMap();listVersions=emptyMap();tagVersions=emptyMap();mutable.value=mutable.value.copy(spaceId="",partnerUid="",role="",partnerRole="",code="",expiresAt=0,online=true,authenticated=true,message="Signed in · Create a space or join your partner's code");return}
+        val uid=r["uid"] as String;val partner=r["partnerUid"] as? String ?: "";val sid=r["spaceId"] as String;val generation=r["generation"] as String
+        val role=r["role"] as String;val partnerRole=r["partnerRole"] as String
+        check(uid!=partner){"You and your partner must sign in with separate accounts."}
+        val ts=maps(r["tasks"]);val ls=maps(r["lists"]);val tagRows=maps(r["tags"]);val profiles=maps(r["profiles"]);val own=profiles.find {it["uid"]==uid};val other=profiles.find {it["uid"]==partner}
+        taskVersions=ts.associate {it["id"] as String to n(it,"version")};listVersions=ls.associate {it["id"] as String to n(it,"version")};tagVersions=tagRows.associate {it["id"] as String to n(it,"version")}
+        val current=repository.state.value
+        val tasks=ts.map {t->Task(id=t["id"] as String,title=t["title"] as String,owner=owner(t,uid),assigneeUid=t["assigneeUid"] as? String ?: "",day=n(t,"day"),minute=(t["minute"] as? Number)?.toInt(),listId=t["listId"] as String,note=repository.privateNote(t["id"] as String),tags=(t["tags"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),repeat=Repeat.valueOf(t["repeat"] as String),status=TaskStatus.valueOf(t["status"] as String),completedAt=n(t,"completedAt"),parentId=t["parentId"] as? String ?: "",reminder=repository.personalReminder(t["id"] as String).first,offset=repository.personalReminder(t["id"] as String).second)}
+        val lists=ls.map {l->SharedList(id=l["id"] as String,name=l["name"] as String,emoji=l["emoji"] as String,pinned=l["pinned"]==true,owner=owner(l,uid),assigneeUid=l["assigneeUid"] as? String ?: "",pictures=(l["pictures"] as? List<*>)?.filterIsInstance<String>() ?: emptyList())}
+        val notes=maps(r["notes"]).map {v->Appreciation(id=v["id"] as String,kind=v["kind"] as String,message=v["message"] as String,owner=if(v["sender"]==uid)Owner.Me else Owner.You,at=n(v,"at"),taskTitle=v["taskTitle"] as? String ?: "",picture=v["picture"] as? String ?: "")}
+        val p=current.preferences.copy(started=true,myName=if(current.preferences.shareProfile) own?.get("name") as? String ?: current.preferences.myName else current.preferences.myName,avatar=current.preferences.avatar,myPhoto=current.preferences.myPhoto,partnerName=other?.get("name") as? String ?: if(partner.isBlank())"Waiting for partner" else roleLabel(partnerRole),partnerPhoto=other?.get("photo") as? String ?: "",code=mutable.value.code.ifBlank {"------"},codeExpiresAt=mutable.value.expiresAt)
+        // Legacy task tags contained names rather than IDs; keep them readable until migrated.
+        val savedTags=tagRows.map {Tag(it["id"] as String,it["name"] as String)}
+        val legacyTags=tasks.flatMap {it.tags}.distinct().filter {id -> savedTags.none {it.id==id} }.map {Tag(it,it)}
+        repository.importRemote(current.copy(tasks=tasks,lists=lists,notes=notes,tags=savedTags+legacyTags,preferences=p))
+        mutable.value=mutable.value.copy(role=role,partnerRole=partnerRole,selectedRole=role,spaceId=sid,uid=uid,partnerUid=partner,generation=generation,authenticated=true,online=true,message=if(partner.isBlank()) "Space created · Waiting for your partner" else "Partner connected · Synced",code=if(partner.isBlank())mutable.value.code else "",expiresAt=if(partner.isBlank())mutable.value.expiresAt else 0)
+    }
+    /** Network-first edits: rejected/conflicting/offline writes never masquerade as synced. */
+    suspend fun mutate(block: () -> Unit)=lock.withLock {
+        check(!mutable.value.busy){"Please wait for the current account operation."}
+        if(!mutable.value.connected){check(!repository.isRemote){"Shared space is still reconnecting. Wait for a fresh server response."};block();return@withLock}
+        check(mutable.value.online){"Offline · Change not sent. Reconnect and try again."}
+        val old=repository.state.value;val next=repository.preview(block);val c=mutable.value
+        mutable.value=c.copy(busy=true,message="Saving to shared space…")
+        try {
+            require(next.preferences.partnerName==old.preferences.partnerName && next.preferences.partnerPhoto==old.preferences.partnerPhoto){"Only your partner can edit their profile."}
+            requireSharedPermissions(old,next,c)
+            fun depth(task: Task): Int {var t=task;var d=0;val seen=mutableSetOf<String>();while(t.parentId.isNotBlank() && seen.add(t.id) && d<64) {t=old.tasks.find {it.id==t.parentId} ?: break;d++};return d}
+            for(t in old.tasks.filter {before->next.tasks.none {it.id==before.id}}.sortedByDescending(::depth))api.deleteTask(t.id,taskVersions[t.id] ?: 0)
+            for(l in old.lists.filter {before->next.lists.none {it.id==before.id}})api.deleteList(l.id,listVersions[l.id] ?: 0)
+            for(l in next.lists.filter {it !in old.lists}){val pictures=l.pictures.map {api.preparePhoto(it)};api.saveList(l.copy(pictures=pictures),c.uid,c.partnerUid.ifBlank {null},listVersions[l.id] ?: 0)}
+            val renamedOrAdded=next.tags.filter {tag -> old.tags.find {it.id==tag.id}!=tag}
+            // Legacy tags have non-UUID IDs: retain their name IDs until the user replaces them.
+            for(tag in renamedOrAdded) api.saveTag(tag,tagVersions[tag.id] ?: 0)
+            fun sharedTask(t: Task)=t.copy(note="",reminder=false,offset=0,events=emptyList())
+            for(t in next.tasks.filter {t->old.tasks.find {it.id==t.id}?.let {sharedTask(it)==sharedTask(t)}!=true}){api.saveTask(t,c.uid,c.partnerUid.ifBlank {null},taskVersions[t.id] ?: 0)}
+            for(tag in old.tags.filter {before -> next.tags.none {it.id==before.id} && tagVersions.containsKey(before.id)})api.deleteTag(tag.id,tagVersions[tag.id] ?: 0)
+            for(note in old.notes.filter {before->next.notes.none {it.id==before.id}})api.call("deleteNote",mapOf("id" to note.id))
+            for(note in next.notes.filter {it !in old.notes})api.call("saveNote",mapOf("id" to note.id,"value" to mapOf("kind" to note.kind,"message" to note.message,"taskTitle" to note.taskTitle,"picture" to if(note.picture.isBlank())"" else api.preparePhoto(note.picture))))
+            val p=next.preferences
+            if(!p.shareProfile && old.preferences.shareProfile) api.call("deleteProfile")
+            else if(p.shareProfile && (!old.preferences.shareProfile || p.myName!=old.preferences.myName || p.avatar!=old.preferences.avatar || p.myPhoto!=old.preferences.myPhoto)) api.call("profile",mapOf("value" to mapOf("name" to p.myName,"avatar" to p.avatar,"photo" to if(p.myPhoto.isBlank() || p.myPhoto.startsWith("asset:")) "" else api.preparePhoto(p.myPhoto))))
+            repository.savePrivateNotes(next.tasks)
+            repository.savePersonalReminders(next.tasks)
+            // Personal reminders/preferences are local; collections are replaced only by server results.
+            repository.change {it.copy(preferences=next.preferences,tasks=it.tasks.map {t->next.tasks.find {it.id==t.id}?.let {edit->t.copy(reminder=edit.reminder,offset=edit.offset)} ?: t},tags=it.tags)}
+            refresh()
+        } catch(e: Exception){runCatching {refresh()};mutable.value=mutable.value.copy(message="Shared update interrupted. Refresh to review any saved changes. ${connectionError(e)}");throw e} finally {mutable.value=mutable.value.copy(busy=false)}
+    }
+    suspend fun poke(task: Task): Map<String,Any?> = error("Poke delivery is not available yet. Pairing and Android push are verified separately.")
+    fun leave(){ if(mutable.value.busy)return; if(!mutable.value.connected){repository.updateOwnPreferences {it.copy(started=false)};return};scope.launch {lock.withLock {try{api.leaveSpace();PartnerPokeService.clear(context);repository.restoreLocal();repository.updateOwnPreferences {it.copy(started=false)};mutable.value=mutable.value.copy(spaceId="",partnerUid="",role="",partnerRole="",code="",expiresAt=0,retryAt=0,message="Space closed · Account-private data preserved");taskVersions=emptyMap();listVersions=emptyMap();tagVersions=emptyMap();pendingAction=null;runCatching {api.revokeDevice()}}catch(e: Exception){mutable.value=mutable.value.copy(message=connectionError(e))}}} }
+}

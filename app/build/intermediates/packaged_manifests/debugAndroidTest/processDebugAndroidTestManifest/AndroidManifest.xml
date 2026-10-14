@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="ai.mwm.android_2ebb28d1_fa04_4d16_89bf_06b0a18eff09.test" >
+
+    <uses-sdk
+        android:minSdkVersion="26"
+        android:targetSdkVersion="36" />
+
+    <instrumentation
+        android:name="androidx.test.runner.AndroidJUnitRunner"
+        android:functionalTest="false"
+        android:handleProfiling="false"
+        android:label="Tests for ai.mwm.android_2ebb28d1_fa04_4d16_89bf_06b0a18eff09"
+        android:targetPackage="ai.mwm.android_2ebb28d1_fa04_4d16_89bf_06b0a18eff09" />
+
+    <application
+        android:debuggable="true"
+        android:extractNativeLibs="false" />
+
+</manifest>

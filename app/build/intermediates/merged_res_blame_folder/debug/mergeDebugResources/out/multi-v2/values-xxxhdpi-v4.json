@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "ai.mwm.client.app-mergeDebugResources-54:/values-xxxhdpi-v4/values-xxxhdpi-v4.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\anngo\\.gradle\\caches\\9.2.1\\transforms\\02f53271bd64ccac369c5016b3958c48\\workspace\\transformed\\android-flash-sdk-0.07.00\\res\\values-xxxhdpi-v4\\values-xxxhdpi-v4.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "63",
+                        "endOffsets": "114"
+                    }
+                }
+            ]
+        }
+    ]
+}

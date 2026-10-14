@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Only local non-health task data is backed up. Firebase identity/device state is not. -->
+    <include domain="sharedpref" path="pipo_local_v2.xml" />
+</full-backup-content>

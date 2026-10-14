@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="default_web_client_id" translatable="false">1095028015078-12g91f7612epf5gnod9e28aitp1ju0cb.apps.googleusercontent.com</string>
+    <string name="gcm_defaultSenderId" translatable="false">1095028015078</string>
+    <string name="google_api_key" translatable="false">AIzaSyBkJR6HRFShtXk7vT-fNXSSCq_bVUM9cBM</string>
+    <string name="google_app_id" translatable="false">1:1095028015078:android:9cf2ee336fa6f84da2e027</string>
+    <string name="google_crash_reporting_api_key" translatable="false">AIzaSyBkJR6HRFShtXk7vT-fNXSSCq_bVUM9cBM</string>
+    <string name="google_storage_bucket" translatable="false">pipo2doo-bfc83.firebasestorage.app</string>
+    <string name="project_id" translatable="false">pipo2doo-bfc83</string>
+</resources>

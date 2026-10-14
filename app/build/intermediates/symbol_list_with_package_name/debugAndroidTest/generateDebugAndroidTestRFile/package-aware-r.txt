@@ -1,0 +1,2 @@
+ai.mwm.client.test
+string app_name
