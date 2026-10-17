@@ -47,6 +47,7 @@ import kotlinx.coroutines.launch
     var tab by rememberSaveable { mutableStateOf("Today") }
     var taskId by rememberSaveable { mutableStateOf<String?>(null) }
     var listId by rememberSaveable { mutableStateOf<String?>(null) }
+    var calendarOpen by rememberSaveable {mutableStateOf(false)}
     var notesOpen by rememberSaveable { mutableStateOf(false) }
     var thanksFor by rememberSaveable { mutableStateOf("") }
     var remindersOpen by rememberSaveable { mutableStateOf(false) }
@@ -85,10 +86,10 @@ import kotlinx.coroutines.launch
     }
     LaunchedEffect(Unit) { vm?.syncReminders(); vm?.resumeConnection();careVm?.resume() }
     LaunchedEffect(openTaskId) { if(openTaskId != null) { careOpen=false; taskId = openTaskId; listId = null; notesOpen = false; remindersOpen = false; onTaskLinkHandled() } }
-    LaunchedEffect(openCare) { if(openCare) {tab="Care";careOpen=false;taskId=null;listId=null;notesOpen=false;remindersOpen=false;onCareLinkHandled()} }
+    LaunchedEffect(openCare) { if(openCare) {calendarOpen=false;tab="Care";careOpen=false;taskId=null;listId=null;notesOpen=false;remindersOpen=false;onCareLinkHandled()} }
     val accountScope by AccountScope.changes.collectAsState()
     LaunchedEffect(accountScope) {
-        locketToOpen=null;taskId=null;listId=null;notesOpen=false;careOpen=false;remindersOpen=false
+        locketToOpen=null;taskId=null;listId=null;notesOpen=false;calendarOpen=false;careOpen=false;remindersOpen=false
         editorOpen=false;listEditorOpen=false;tagsOpen=false;editId=null;editListId=null
         deleteListConfirm=null;thanksFor="";tab="Today"
         snack.currentSnackbarData?.dismiss()
@@ -96,7 +97,7 @@ import kotlinx.coroutines.launch
     var previousSpace by remember(accountScope) {mutableStateOf(connection.spaceId)}
     LaunchedEffect(connection.spaceId) {
         if(previousSpace.isNotBlank() && previousSpace!=connection.spaceId) {
-            locketToOpen=null;taskId=null;listId=null;notesOpen=false;careOpen=false;remindersOpen=false
+            locketToOpen=null;taskId=null;listId=null;notesOpen=false;calendarOpen=false;careOpen=false;remindersOpen=false
             editorOpen=false;listEditorOpen=false;tagsOpen=false;editId=null;editListId=null
             deleteListConfirm=null;thanksFor="";tab="Today"
             snack.currentSnackbarData?.dismiss()
@@ -104,7 +105,7 @@ import kotlinx.coroutines.launch
         previousSpace=connection.spaceId
     }
     LaunchedEffect(openChat,accountScope) {
-        if(openChat) {taskId=null;listId=null;careOpen=false;remindersOpen=false;editorOpen=false;pairingOpen=false;thanksFor="";notesOpen=true;onChatLinkHandled()}
+        if(openChat) {calendarOpen=false;taskId=null;listId=null;careOpen=false;remindersOpen=false;editorOpen=false;pairingOpen=false;thanksFor="";notesOpen=true;onChatLinkHandled()}
     }
     var readNotes by remember(accountScope,connection.spaceId) {mutableStateOf(ChatReadState.read(context,connection.spaceId))}
     val unreadNotes=if(connection.paired) ChatReadState.unread(state.notes,readNotes) else 0
@@ -120,7 +121,7 @@ import kotlinx.coroutines.launch
     }
     LaunchedEffect(openLocketId) {
         if(openLocketId!=null) {
-            tab="Today";taskId=null;listId=null;notesOpen=false;careOpen=false;remindersOpen=false
+            tab="Today";taskId=null;listId=null;notesOpen=false;calendarOpen=false;careOpen=false;remindersOpen=false
             editorOpen=false;listEditorOpen=false;tagsOpen=false;pairingOpen=false
             locketToOpen=openLocketId
             onLocketLinkHandled()
@@ -140,9 +141,9 @@ import kotlinx.coroutines.launch
     }
     val detail = state.tasks.find { it.id == taskId }
     val list = state.lists.find { it.id == listId }
-    val primary = taskId == null && listId == null && !notesOpen && !remindersOpen && !careOpen && state.preferences.started && !pairingOpen
+    val primary = taskId == null && listId == null && !notesOpen && !calendarOpen && !remindersOpen && !careOpen && state.preferences.started && !pairingOpen
     BackHandler(!primary && state.preferences.started && !editorOpen) {
-        when { pairingOpen -> pairingOpen = false; careOpen -> careOpen = false; taskId != null -> taskId = null; listId != null -> listId = null; notesOpen -> notesOpen = false; remindersOpen -> remindersOpen = false }
+        when { pairingOpen -> pairingOpen = false; careOpen -> careOpen = false; taskId != null -> taskId = null; listId != null -> listId = null; calendarOpen -> calendarOpen=false; notesOpen -> notesOpen = false; remindersOpen -> remindersOpen = false }
     }
     val userContent = remember(state, connection) { (state.tasks.flatMap { listOf(it.title,it.note,it.id,it.parentId) } + state.lists.flatMap {listOf(it.name,it.id)} + state.tags.flatMap {listOf(it.name,it.id)} + state.notes.flatMap {listOf(it.message,it.taskTitle,it.id)} + listOf(state.preferences.myName,state.preferences.partnerName,state.preferences.code,connection.code,connection.accountEmail,connection.uid)).filter {it.isNotBlank()}.toSet() }
     CompositionLocalProvider(LocalUserContent provides userContent, ai.mwm.client.cloud.LocalPartnerConnection provides connection, ai.mwm.client.cloud.LocalPartnerNote provides {kind,message,task,picture -> vm?.thank(kind,message,task,picture)}, ai.mwm.client.cloud.LocalPartnerPoke provides {task -> vm?.poke(task)}) {
@@ -177,13 +178,14 @@ import kotlinx.coroutines.launch
                 taskId != null && detail != null -> TaskDetailScreen(detail, state, { taskId = null }, { editId = detail.id; editorOpen = true }, { toggle(detail) }, { task -> if(task.reminder && !detail.reminder) requestIfNeeded(); vm?.save(task) }, { vm?.delete(detail.id); taskId = null }, { title -> taskId = null; thanksFor = title; notesOpen = true })
                 taskId != null -> Column(Modifier.padding(24.dp)) { PText(if(connection.connected && !connection.online) "Reconnecting · Waiting for a fresh task snapshot." else "This task is no longer available."); OutlinedButton({ taskId = null }) { PText("Back") } }
                 listId != null && list != null -> ListDetailScreen(list, state, { listId = null }, openTask, toggle, { id, status -> vm?.status(id, status) }, { id, status -> add(id, status) }, { editListId = list.id; listEditorOpen = true }, { deleteListConfirm = list.id }, { vm?.saveList(list.copy(pinned = !list.pinned)) }, { vm?.save(it) }, {vm?.saveList(it)})
-                notesOpen -> AppreciationScreen(state, thanksFor, { notesOpen = false }, { vm?.deleteNote(it) }, { id,kind,message,task,picture,done ->
-                    if(vm!=null) vm.sendChatNote(id,kind,message,task,picture,done) else done("Preview only · Run the app to send a message.")
+                calendarOpen -> TaskCalendarScreen(state,{calendarOpen=false},openTask)
+                notesOpen -> AppreciationScreen(state, thanksFor, { notesOpen = false }, { vm?.deleteNote(it) }, { id,kind,message,task,picture,reply,done ->
+                    if(vm!=null) vm.sendChatNote(id,kind,message,task,picture,reply,done) else done("Preview only · Run the app to send a message.")
                 })
                 remindersOpen -> RemindersScreen(state, allowed, { remindersOpen = false }, notificationControl, openTask, toggle)
                 tab == "Care" -> CareScreen(if(careConnection.spaceId==connection.spaceId) care else null,state.preferences.myName,state.preferences.partnerName,careError,allowed,{tab="Today"},{careVm?.save(it)},{careVm?.delete(it)},{careVm?.update(it)},{careVm?.clear()},notificationControl,careConnection,{careVm?.setSharing(it)},{careVm?.refresh()},state.notes,{message,done->if(vm!=null) vm.sendSupport(message,done) else done("Connect your partner to send a note.")})
-                tab == "Upcoming" -> UpcomingScreen(state, openTask, toggle, { id -> editId=id; editorOpen=true })
-                tab == "Lists" -> ListsScreen(state, { listId = it }, { editListId = null; listEditorOpen = true }, openTask, { vm?.saveList(it) }, toggle)
+                tab == "Upcoming" -> UpcomingScreen(state, openTask, toggle, { id -> editId=id; editorOpen=true },{calendarOpen=true})
+                tab == "Lists" -> ListsScreen(state, { listId = it }, { editListId = null; listEditorOpen = true }, openTask, { vm?.saveList(it) }, toggle, {layout->vm?.preferences {it.copy(listLayout=layout)}})
                 tab == "Progress" -> ProgressScreen(state, openTask) { thanksFor = ""; notesOpen = true }
                 tab == "Us" -> SettingsScreen(state, allowed, { vm?.preferences(it) }, notificationControl, { if(allowed) { vm?.testReminder(); scope.launch { snack.showSnackbar("Test task created. Complete it to clear its reminder.") } } else { requestIfNeeded(); scope.launch { snack.showSnackbar("Enable notifications, then create your test task.") } } }, { tagsOpen = true }, { vm?.leaveConnection(); careVm?.refresh(); tab = "Today" }, { tab="Care" }, {vm?.resetWorkspace()}, {pairingOpen=true}, {vm?.checkConnection()}, {vm?.checkConnection();careVm?.refresh()})
                 else -> TodayScreen(state, openTask, toggle, { vm?.preferences(it) }, { remindersOpen = true }, { tab="Care" }, locketToOpen, {locketToOpen=null})

@@ -6,7 +6,7 @@ class WorkspaceIsolationTest {
   val old=Preferences(myName="Kris",partnerName="Old partner",myPhoto="cloud:old/photo.jpg",partnerPhoto="cloud:old/partner.jpg",shareProfile=true,togetherSince=1,code="OLD",avatar=2,language="vi",pokeOptIn=true)
   val next=old.startNewCouple(20000)
   assertEquals("Kris",next.myName);assertEquals(2,next.avatar);assertEquals("vi",next.language);assertTrue(next.pokeOptIn)
-  assertEquals(20000,next.togetherSince);assertEquals("",next.partnerPhoto);assertEquals("",next.myPhoto);assertFalse(next.shareProfile)
+  assertEquals(20000,next.togetherSince);assertEquals("",next.partnerPhoto);assertEquals("",next.myPhoto);assertTrue(next.shareProfile)
   assertEquals("/own/private/photo.jpg",old.copy(myPhoto="/own/private/photo.jpg").startNewCouple(20000).myPhoto)
  }
  @Test fun careStartsEmptyOnlyWhenSpaceChanges() {
@@ -24,7 +24,7 @@ class WorkspaceIsolationTest {
  }
  @Test fun missingPartnerProfileDoesNotReuseFormerPartner() {
   val restored=restoreSharedProfile(Preferences(partnerName="Old partner",partnerPhoto="cloud:old/photo.jpg"),null,null,"User 2")
-  assertEquals("User 2",restored.partnerName);assertEquals("",restored.partnerPhoto);assertFalse(restored.shareProfile)
+  assertEquals("User 2",restored.partnerName);assertEquals("",restored.partnerPhoto);assertTrue(restored.shareProfile)
  }
  @Test fun latestServerProfileWinsOverStaleLocalPhotoPath() {
   val local=Preferences(myPhoto="/another-phone/missing.jpg",shareProfile=true)

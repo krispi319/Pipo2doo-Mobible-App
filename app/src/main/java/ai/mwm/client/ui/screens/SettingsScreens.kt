@@ -93,6 +93,7 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
     var savedName by rememberSaveable {mutableStateOf<String?>(null)}
     LaunchedEffect(connection.uid) {pendingName=null;savedName=null;myName=p.myName}
     LaunchedEffect(p.myName,pendingName) {if(pendingName!=null && pendingName==p.myName) {savedName=p.myName;pendingName=null}}
+    var backupDetails by remember {mutableStateOf(false)}
     var reset by rememberSaveable {mutableStateOf(false)}
     var confirmLeave by rememberSaveable {mutableStateOf(false)}
     var languageOpen by rememberSaveable {mutableStateOf(false)}
@@ -138,18 +139,18 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {OutlinedButton(onPair,enabled=!connection.busy) {PText(if(connection.paired) "Connection details" else "Pair with partner")};OutlinedButton(onCheck,enabled=!connection.busy) {PText("Check setup")}}
             }
         }}
-        item {SettingsGroup("Account backup","v1.2.0") {
+        item {SettingsGroup("Account backup") {
             SettingsStack {
                 val backup by ai.mwm.client.cloud.AccountBackup.status.collectAsState()
                 val owner=AccountScope.current(context)
-                PText("Restore after reinstall",style=MaterialTheme.typography.titleSmall)
-                PText("Sign in with the same account to restore your personal settings, pictures and care records. Account backup is separate from sharing with your partner.",style=MaterialTheme.typography.bodySmall,muted=true)
-                PText("Settings: "+(backup["$owner:main"] ?: "Not checked this session"),style=MaterialTheme.typography.bodySmall,muted=true)
-                PText("Care: "+(backup["$owner:care"] ?: "Not checked this session"),style=MaterialTheme.typography.bodySmall,muted=true)
-                OutlinedButton(onClick=onBackup,enabled=connection.authenticated && !connection.busy) {PText("Back up now")}
-                PText("Before uninstalling, wait for BOTH sections to say Saved to your account. Unsaved/offline changes cannot survive uninstalling. Health records are stored privately in Supabase and encrypted locally; this is not end-to-end encryption.",style=MaterialTheme.typography.bodySmall,muted=true)
+                val main=backup["$owner:main"].orEmpty();val care=backup["$owner:care"].orEmpty()
+                val ready=main.startsWith("Saved to") && care.startsWith("Saved to")
+                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {Icon(if(ready) Icons.Outlined.CloudDone else Icons.Outlined.CloudUpload,null,Modifier.size(24.dp),tint=if(ready)c.success else c.textSecondary);PText(if(ready) "Backed up" else if(!connection.authenticated) "Sign in to back up" else "Backup needs attention",Modifier.weight(1f).padding(horizontal=10.dp),MaterialTheme.typography.bodyMedium);TextButton(onBackup,enabled=connection.authenticated && !connection.busy) {PText("Back up")}}
+                PText("Use the same account after reinstalling. Back up before deleting the app.",style=MaterialTheme.typography.labelSmall,muted=true)
+                if(!ready && connection.authenticated) TextButton({backupDetails=true}) {PText("View status",style=MaterialTheme.typography.labelSmall)}
             }
         }}
+        item {SettingsGroup("Our timezones") {TimezoneControls(p,onPreferences)}}
         item {SettingsGroup("Gentle reminders","Just for me") {
             SettingsStack {
                 PText("Default reminder time",style=MaterialTheme.typography.titleSmall)
@@ -200,8 +201,7 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
             SettingsRow(Icons.Outlined.Vibration,"Haptic tap","Soft buzz on check-off") {Switch(p.haptics,{value->onPreferences {it.copy(haptics=value)}},Modifier.semantics {contentDescription="Haptic tap"})}
             SettingsRow(Icons.Outlined.Celebration,"Two-cat confetti","Try a little celebration",paper=true) {Pill("▶ Preview",true,c.secondary) {celebrate(context,p);preview=true}}
         }}
-        item {SettingsGroup("My profile",if(connection.connected && p.shareProfile) "Name shared" else "Private to me") {
-            SettingsRow(Icons.Outlined.PersonOutline,"Share name and profile avatar","Your shared photo appears on partner notifications. Initials appear if no photo is shared. Care sharing is managed separately in Care.") {Switch(p.shareProfile,{value->onPreferences {it.copy(shareProfile=value)}},enabled=connection.connected && !connection.busy,modifier=Modifier.semantics {contentDescription="Share display profile with partner"})}
+        item {SettingsGroup("My profile",if(connection.connected) "Shared with partner" else "Me") {
             SettingsStack {
                 PText("My name",style=MaterialTheme.typography.labelSmall,muted=true)
                 Row(verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
@@ -213,7 +213,7 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
             DashedRule(Modifier.padding(horizontal=12.dp))
             SettingsStack {
                 PText("Photo",style=MaterialTheme.typography.titleSmall)
-                PText("Pick from your photos or wear a cat · Photos stay on this phone",style=MaterialTheme.typography.bodySmall,muted=true)
+                PText("Pick a photo or a cat · Your partner sees your profile",style=MaterialTheme.typography.bodySmall,muted=true)
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     val labels=listOf("Photos","Sleepy","Curious","Loaf")
                     labels.forEachIndexed {index,label->
@@ -255,6 +255,11 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
         item {SettingsGroup("Device preferences") {
             SettingsStack {Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {PText("Theme",Modifier.weight(1f));ThemeIconSlider(p.themeMode) {mode->onPreferences {it.copy(themeMode=mode)}}};OutlinedButton({languageOpen=true}) {PText("App language · ${appLanguages.firstOrNull {it.code==p.language}?.name ?: "English"}")};OutlinedButton(onTags) {PText("Task tags · ${state.tags.size}")}}
         }}
+    }
+    if(backupDetails) {
+        val backup by ai.mwm.client.cloud.AccountBackup.status.collectAsState()
+        val owner=AccountScope.current(context)
+        AlertDialog(onDismissRequest={backupDetails=false},title={PText("Backup status")},text={Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {PText("Settings: "+(backup["$owner:main"] ?: "Not checked"),style=MaterialTheme.typography.bodySmall);PText("Care: "+(backup["$owner:care"] ?: "Not checked"),style=MaterialTheme.typography.bodySmall);PText("Only uploaded changes restore. Private backups are separate from partner sharing.",style=MaterialTheme.typography.labelSmall,muted=true)}},confirmButton={TextButton({backupDetails=false}) {PText("Close")}})
     }
     if(reset) AlertDialog(onDismissRequest={reset=false},title={PText("Reset workspace content?")},text={PText("All lists, tasks and tags will be permanently removed and task reminders cleared. ${if(p.keepResetHistory) "Thank-you notes stay." else "Thank-you notes will also be removed."} Your profile, settings and encrypted health vault stay. ${if(connection.connected) "Shared tasks and lists are affected for both members." else "Only this phone is affected."} This cannot be undone.")},confirmButton={OutlinedButton({onReset();reset=false},colors=ButtonDefaults.outlinedButtonColors(contentColor=c.error)) {PText("Reset all")}},dismissButton={OutlinedButton({reset=false}) {PText("Cancel")}})
     if(confirmLeave) AlertDialog(onDismissRequest={confirmLeave=false},title={PText("Leave this space?")},text={PText(if(connection.connected) "This closes the shared space for both partners and invalidates all invitation codes. Both accounts lose access to its shared data. Your separate local workspace and care logs stay on this phone." else "You'll return to the welcome screen. Your local lists stay; task reminders pause until you start again. Local health-sharing consent is cleared. No connected partner will be notified.")},confirmButton={OutlinedButton({confirmLeave=false;onLeave()}) {PText("Leave space")}},dismissButton={OutlinedButton({confirmLeave=false}) {PText("Stay")}})

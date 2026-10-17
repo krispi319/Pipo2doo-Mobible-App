@@ -5,7 +5,8 @@ fun restoreSharedProfile(local: Preferences,own: Map<String,Any?>?,other: Map<St
     myName=own?.get("name") as? String ?: local.myName,
     avatar=(own?.get("avatar") as? Number)?.toInt() ?: local.avatar,
     myPhoto=if(own!=null) own["photo"] as? String ?: "" else local.myPhoto,
-    shareProfile=own!=null,
+    shareProfile=true,
     partnerName=other?.get("name") as? String ?: partnerLabel,
-    partnerPhoto=other?.get("photo") as? String ?: ""
+    partnerPhoto=other?.get("photo") as? String ?: "",
+    partnerClockZone=other?.get("timezone") as? String ?: ""
 )

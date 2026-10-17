@@ -38,7 +38,7 @@ data class Task(
 }
 data class SharedList(val id: String = newId(), val name: String, val emoji: String = "🧺", val pinned: Boolean = false, val owner: Owner = Owner.Together, val pictures: List<String> = emptyList(), val assigneeUid: String = "")
 data class Tag(val id: String = newId(), val name: String)
-data class Appreciation(val id: String = newId(), val kind: String, val message: String, val owner: Owner = Owner.Me, val at: Long = System.currentTimeMillis(), val taskTitle: String = "", val sample: Boolean = false, val picture: String = "")
+data class Appreciation(val id: String = newId(), val kind: String, val message: String, val owner: Owner = Owner.Me, val at: Long = System.currentTimeMillis(), val taskTitle: String = "", val sample: Boolean = false, val picture: String = "", val replyTo: String = "")
 data class Preferences(
     val myName: String = "User 1", val partnerName: String = "User 2", val code: String = "K4T9PB",
     val started: Boolean = false, val avatar: Int = -1, val quietEnabled: Boolean = true,
@@ -47,7 +47,8 @@ data class Preferences(
     val myPhoto: String = "", val partnerPhoto: String = "", val pokeOptIn: Boolean = false,
     val themeMode: String = "System", val language: String = "en", val codeExpiresAt: Long = 0L,
     val togetherSince: Long = LocalDate.of(2023, 2, 14).toEpochDay(),
-    val defaultReminderTime: Int = 750, val keepResetHistory: Boolean = true, val shareProfile: Boolean = false
+    val defaultReminderTime: Int = 750, val keepResetHistory: Boolean = true, val shareProfile: Boolean = true,
+    val clockZone: String = "", val partnerClockZone: String = "", val partnerClockOverride: String = "", val listLayout: String = "Wide"
 )
 /** Enforced at the persistence boundary, not just by hiding partner controls.
  * This offline installation has one current individual; Owner.You is never its identity. */

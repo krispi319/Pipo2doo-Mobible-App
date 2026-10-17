@@ -35,7 +35,7 @@ class ChatApi(val client:ChatClient) {
     private fun chatNote(r: JSONObject,uid: String): Appreciation {
         val p=r.getJSONObject("payload")
         return Appreciation(id=r.getString("id"),kind=p.getString("kind"),message=p.optString("message"),owner=if(r.getString("created_by")==uid) Owner.Me else Owner.You,
-            at=p.optLong("at",OffsetDateTime.parse(r.getString("updated_at")).toInstant().toEpochMilli()),taskTitle=p.optString("taskTitle"),picture=p.optString("picture"))
+            at=p.optLong("at",OffsetDateTime.parse(r.getString("updated_at")).toInstant().toEpochMilli()),taskTitle=p.optString("taskTitle"),picture=p.optString("picture"),replyTo=p.optString("replyTo"))
     }
     suspend fun chatReceipts(expectedUid: String,expectedSpace: String): Set<String> {
         check(client.uid()==expectedUid) {"Account changed."}
@@ -44,6 +44,19 @@ class ChatApi(val client:ChatClient) {
     suspend fun markChatRead(expectedUid: String,expectedSpace: String,ids: Set<String>) {
         check(client.uid()==expectedUid) {"Account changed."}
         if(ids.isNotEmpty()) client.rpc("mark_chat_read",JSONObject().put("p_space",expectedSpace).put("p_ids",JSONArray(ids.take(200))))
+    }
+    suspend fun chatReactions(expectedUid:String,expectedSpace:String):List<ChatReaction> {
+        check(client.uid()==expectedUid && space()==expectedSpace) {"Account or partner changed. Reopen chat."}
+        UUID.fromString(expectedSpace)
+        return rows(client.request("/rest/v1/chat_reactions?space_id=eq.$expectedSpace&select=message_id,user_id,emoji"))
+            .map {ChatReaction(it.getString("message_id"),it.getString("user_id"),it.getString("emoji"))}
+    }
+    /** Explicit desired state makes a retry safe even if the previous response was lost. */
+    suspend fun setChatReaction(expectedUid:String,expectedSpace:String,messageId:String,emoji:String) {
+        UUID.fromString(messageId);UUID.fromString(expectedSpace)
+        require(emoji.isEmpty() || emoji in CHAT_EMOJIS) {"Choose an emoji from the picker."}
+        check(client.uid()==expectedUid && space()==expectedSpace) {"Account or partner changed. Reopen chat."}
+        client.rpc("set_chat_reaction",JSONObject().put("p_space",expectedSpace).put("p_message",messageId).put("p_emoji",emoji))
     }
     suspend fun saveChatNote(note: Appreciation,expectedUid: String,expectedSpace: String): Appreciation {
         UUID.fromString(note.id)
@@ -58,7 +71,7 @@ class ChatApi(val client:ChatClient) {
         check(client.uid()==expectedUid && space()==expectedSpace) {"Partner changed while uploading. Reopen chat."}
         client.rpc("mutate_shared_record",JSONObject().put("p_id",note.id).put("p_space",expectedSpace).put("p_kind","appreciation")
             .put("p_parent",JSONObject.NULL).put("p_assigned",JSONObject.NULL)
-            .put("p_payload",JSONObject().put("kind",note.kind).put("message",note.message.trim()).put("taskTitle",note.taskTitle).put("picture",photo).put("at",note.at))
+            .put("p_payload",JSONObject().put("kind",note.kind).put("message",note.message.trim()).put("taskTitle",note.taskTitle).put("picture",photo).put("at",note.at).put("replyTo",note.replyTo))
             .put("p_expected_version",0).put("p_mutation",note.id).put("p_deleted",false))
         val saved=rows(client.request(path())).singleOrNull() ?: error("Message confirmation is pending. Retry with the same message.")
         return chatNote(saved,expectedUid)
@@ -68,9 +81,10 @@ class ChatApi(val client:ChatClient) {
 fun main()= runBlocking {
  val client=ChatClient();val api=ChatApi(client);var checks=0
  fun verify(ok:Boolean,name:String){check(ok){name};checks++;println("PASS $name")}
- val note=Appreciation(id=UUID.randomUUID().toString(),kind="Message",message=" hello ",picture="local.jpg",at=55)
+ val note=Appreciation(id=UUID.randomUUID().toString(),kind="Message",message=" hello ",picture="local.jpg",at=55,replyTo="quoted-message")
  val sent=api.saveChatNote(note,"alice","space")
  verify(sent.message=="hello" && sent.picture.startsWith("cloud:"),"send confirms normalized saved photo message")
+ verify(sent.replyTo=="quoted-message","reply reference survives save and reload")
  verify(client.writes==1 && client.photoUploads==1,"first send uploads and writes once")
  val retried=api.saveChatNote(note.copy(at=99),"alice","space")
  verify(retried.at==55L && client.writes==1 && client.photoUploads==1,"uncertain retry preserves original message and avoids duplicate image upload")

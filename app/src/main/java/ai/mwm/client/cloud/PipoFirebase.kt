@@ -45,7 +45,11 @@ class PipoFirebase private constructor(context: Context) {
         val active=rows(client.request("/rest/v1/partner_spaces?id=eq.$sid&closed_at=is.null&select=id"))
         if(active.isEmpty() || members.none {it.getString("user_id")==uid})throw NoMembership()
         val rs=records(sid)
-        fun payload(r: JSONObject)=map(r.getJSONObject("payload")) + mapOf("id" to r.getString("id"),"version" to r.getLong("version"),"assigneeUid" to convert(r.opt("assigned_to")),"sender" to r.getString("created_by"),"uid" to r.getString("created_by"))
+        fun payload(r: JSONObject): Map<String,Any?> {
+            val value=r.getJSONObject("payload")
+            val uploadTime=if(r.getString("kind")=="appreciation" && value.optString("kind")=="Locket") mapOf("at" to OffsetDateTime.parse(r.getString("updated_at")).toInstant().toEpochMilli()) else emptyMap()
+            return map(value)+uploadTime+mapOf("id" to r.getString("id"),"version" to r.getLong("version"),"assigneeUid" to convert(r.opt("assigned_to")),"sender" to r.getString("created_by"),"uid" to r.getString("created_by"))
+        }
         val self=members.single {it.getString("user_id")==uid}
         val partner=members.singleOrNull {it.getString("user_id")!=uid}
         val role=self.getString("member_role")
@@ -60,7 +64,7 @@ class PipoFirebase private constructor(context: Context) {
     private fun chatNote(r: JSONObject,uid: String): Appreciation {
         val p=r.getJSONObject("payload")
         return Appreciation(id=r.getString("id"),kind=p.getString("kind"),message=p.optString("message"),owner=if(r.getString("created_by")==uid) Owner.Me else Owner.You,
-            at=p.optLong("at",OffsetDateTime.parse(r.getString("updated_at")).toInstant().toEpochMilli()),taskTitle=p.optString("taskTitle"),picture=p.optString("picture"))
+            at=p.optLong("at",OffsetDateTime.parse(r.getString("updated_at")).toInstant().toEpochMilli()),taskTitle=p.optString("taskTitle"),picture=p.optString("picture"),replyTo=p.optString("replyTo"))
     }
     suspend fun chatReceipts(expectedUid: String,expectedSpace: String): Set<String> {
         check(client.uid()==expectedUid) {"Account changed."}
@@ -69,6 +73,19 @@ class PipoFirebase private constructor(context: Context) {
     suspend fun markChatRead(expectedUid: String,expectedSpace: String,ids: Set<String>) {
         check(client.uid()==expectedUid) {"Account changed."}
         if(ids.isNotEmpty()) client.rpc("mark_chat_read",JSONObject().put("p_space",expectedSpace).put("p_ids",JSONArray(ids.take(200))))
+    }
+    suspend fun chatReactions(expectedUid:String,expectedSpace:String):List<ChatReaction> {
+        check(client.uid()==expectedUid && space()==expectedSpace) {"Account or partner changed. Reopen chat."}
+        UUID.fromString(expectedSpace)
+        return rows(client.request("/rest/v1/chat_reactions?space_id=eq.$expectedSpace&select=message_id,user_id,emoji"))
+            .map {ChatReaction(it.getString("message_id"),it.getString("user_id"),it.getString("emoji"))}
+    }
+    /** Explicit desired state makes a retry safe even if the previous response was lost. */
+    suspend fun setChatReaction(expectedUid:String,expectedSpace:String,messageId:String,emoji:String) {
+        UUID.fromString(messageId);UUID.fromString(expectedSpace)
+        require(emoji.isEmpty() || emoji in CHAT_EMOJIS) {"Choose an emoji from the picker."}
+        check(client.uid()==expectedUid && space()==expectedSpace) {"Account or partner changed. Reopen chat."}
+        client.rpc("set_chat_reaction",JSONObject().put("p_space",expectedSpace).put("p_message",messageId).put("p_emoji",emoji))
     }
     suspend fun saveChatNote(note: Appreciation,expectedUid: String,expectedSpace: String): Appreciation {
         UUID.fromString(note.id)
@@ -83,7 +100,7 @@ class PipoFirebase private constructor(context: Context) {
         check(client.uid()==expectedUid && space()==expectedSpace) {"Partner changed while uploading. Reopen chat."}
         client.rpc("mutate_shared_record",JSONObject().put("p_id",note.id).put("p_space",expectedSpace).put("p_kind","appreciation")
             .put("p_parent",JSONObject.NULL).put("p_assigned",JSONObject.NULL)
-            .put("p_payload",JSONObject().put("kind",note.kind).put("message",note.message.trim()).put("taskTitle",note.taskTitle).put("picture",photo).put("at",note.at))
+            .put("p_payload",JSONObject().put("kind",note.kind).put("message",note.message.trim()).put("taskTitle",note.taskTitle).put("picture",photo).put("at",note.at).put("replyTo",note.replyTo))
             .put("p_expected_version",0).put("p_mutation",note.id).put("p_deleted",false))
         val saved=rows(client.request(path())).singleOrNull() ?: error("Message confirmation is pending. Retry with the same message.")
         return chatNote(saved,expectedUid)
@@ -132,8 +149,13 @@ class PipoFirebase private constructor(context: Context) {
     }
     suspend fun ensureProfile(p: Preferences) {
         val uid=client.uid()
-        if(records(space()).none {it.getString("kind")=="profile" && it.getString("created_by")==uid}) {
-            write(UUID.randomUUID().toString(),"profile",mapOf("name" to p.myName,"avatar" to p.avatar,"photo" to ""),0)
+        val old=records(space()).firstOrNull {it.getString("kind")=="profile" && it.getString("created_by")==uid}
+        val previous=old?.getJSONObject("payload")
+        val name=p.myName.trim().ifBlank {"Me"}
+        val zone=clockZone(p.clockZone).id
+        val photo=if(p.myPhoto.isBlank() || p.myPhoto.startsWith("asset:")) "" else p.myPhoto
+        if(previous==null || previous.optString("name")!=name || previous.optString("photo")!=photo || previous.optInt("avatar",-1)!=p.avatar || previous.optString("timezone")!=zone) {
+            write(old?.getString("id") ?: UUID.randomUUID().toString(),"profile",mapOf("name" to name,"avatar" to p.avatar,"photo" to if(photo.isBlank()) "" else preparePhoto(photo),"timezone" to zone),old?.getLong("version") ?: 0)
         }
     }
     private var pushKey = ""

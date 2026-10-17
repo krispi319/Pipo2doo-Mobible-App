@@ -47,8 +47,8 @@ class PipoRepository private constructor(private val context: Context) {
                 ) } ?: emptyList(),
                 lists = root.optJSONArray("lists")?.objects()?.map { SharedList(it.getString("id"), it.getString("name"), it.optString("emoji", "🧺"), it.optBoolean("pinned"), enumValue(it.optString("owner"), Owner.Together), it.optJSONArray("pictures")?.strings() ?: emptyList()) } ?: emptyList(),
                 tags = root.optJSONArray("tags")?.objects()?.map { Tag(it.getString("id"), it.getString("name")) } ?: emptyList(),
-                notes = root.optJSONArray("notes")?.objects()?.map { Appreciation(it.getString("id"), it.getString("kind"), it.optString("message"), enumValue(it.optString("owner"), Owner.Me), it.optLong("at"), it.optString("taskTitle"), it.optBoolean("sample", it.optString("id").startsWith("sample_") || it.optString("message") in listOf("You even got the oat milk I like.", "Pipo's litter box has never smelled so innocent.")), it.optString("picture")) } ?: emptyList(),
-                preferences = Preferences(p.optString("myName", "User 1"), p.optString("partnerName", "User 2"), p.optString("code", "K4T9PB"), p.optBoolean("started"), p.optInt("avatar", -1).let { if(root.optInt("version") < 4 && it == 0 && p.optString("myPhoto").isBlank()) -1 else it }, p.optBoolean("quietEnabled", true), p.optInt("quietStart", 1320), p.optInt("quietEnd", 450), p.optString("style", "Soft purr"), p.optBoolean("sound", true), p.optBoolean("haptics", true), p.optString("myPhoto"), p.optString("partnerPhoto"), p.optBoolean("pokeOptIn"), p.optString("themeMode", "System"), p.optString("language", "en"), p.optLong("codeExpiresAt"), p.optLong("togetherSince", java.time.LocalDate.of(2023,2,14).toEpochDay()), p.optInt("defaultReminderTime",750).coerceIn(0,1439), p.optBoolean("keepResetHistory",true), p.optBoolean("shareProfile",false))
+                notes = root.optJSONArray("notes")?.objects()?.map { Appreciation(it.getString("id"), it.getString("kind"), it.optString("message"), enumValue(it.optString("owner"), Owner.Me), it.optLong("at"), it.optString("taskTitle"), it.optBoolean("sample", it.optString("id").startsWith("sample_") || it.optString("message") in listOf("You even got the oat milk I like.", "Pipo's litter box has never smelled so innocent.")), it.optString("picture"),it.optString("replyTo")) } ?: emptyList(),
+                preferences = Preferences(p.optString("myName", "User 1"), p.optString("partnerName", "User 2"), p.optString("code", "K4T9PB"), p.optBoolean("started"), p.optInt("avatar", -1).let { if(root.optInt("version") < 4 && it == 0 && p.optString("myPhoto").isBlank()) -1 else it }, p.optBoolean("quietEnabled", true), p.optInt("quietStart", 1320), p.optInt("quietEnd", 450), p.optString("style", "Soft purr"), p.optBoolean("sound", true), p.optBoolean("haptics", true), p.optString("myPhoto"), p.optString("partnerPhoto"), p.optBoolean("pokeOptIn"), p.optString("themeMode", "System"), p.optString("language", "en"), p.optLong("codeExpiresAt"), p.optLong("togetherSince", java.time.LocalDate.of(2023,2,14).toEpochDay()), p.optInt("defaultReminderTime",750).coerceIn(0,1439), p.optBoolean("keepResetHistory",true), true,p.optString("clockZone"),"",p.optString("partnerClockOverride"),p.optString("listLayout","Wide"))
             )
         }.getOrElse { if(AccountScope.current(context)=="local") seedState() else PipoState(preferences=Preferences(myName="Me",partnerName="Partner")) }
     }
@@ -81,7 +81,7 @@ class PipoRepository private constructor(private val context: Context) {
             val old=mutable.value.preferences
             val p=old.startNewCouple(java.time.LocalDate.now().toEpochDay())
             val stored=JSONObject(prefs.getString("state","{}") ?: "{}")
-            val own=(stored.optJSONObject("preferences") ?: JSONObject()).put("myName",p.myName).put("avatar",p.avatar).put("started",p.started).put("togetherSince",p.togetherSince).put("partnerName",p.partnerName).put("partnerPhoto","").put("myPhoto",p.myPhoto).put("shareProfile",false).put("code","------").put("codeExpiresAt",0)
+            val own=(stored.optJSONObject("preferences") ?: JSONObject()).put("myName",p.myName).put("avatar",p.avatar).put("started",p.started).put("togetherSince",p.togetherSince).put("partnerName",p.partnerName).put("partnerPhoto","").put("myPhoto",p.myPhoto).put("shareProfile",true).put("partnerClockOverride","").put("code","------").put("codeExpiresAt",0)
             stored.put("preferences",own).put("tasks",JSONArray()).put("lists",JSONArray()).put("notes",JSONArray()).put("tags",JSONArray())
             edit.putString("state",stored.toString()).remove("private_task_notes").remove("personal_reminders")
             check(edit.commit()) {"Could not open the new couple workspace."}
@@ -120,8 +120,8 @@ class PipoRepository private constructor(private val context: Context) {
             .put("events", JSONArray(t.events.map { JSONObject().put("text", it.text).put("at", it.at).put("owner", it.owner.name) })) }))
             .put("lists", JSONArray(next.lists.map { JSONObject().put("id", it.id).put("name", it.name).put("emoji", it.emoji).put("pinned", it.pinned).put("owner", it.owner.name).put("pictures", JSONArray(it.pictures)) }))
             .put("tags", JSONArray(next.tags.map { JSONObject().put("id", it.id).put("name", it.name) }))
-            .put("notes", JSONArray(next.notes.map { JSONObject().put("id", it.id).put("kind", it.kind).put("message", it.message).put("owner", it.owner.name).put("at", it.at).put("taskTitle", it.taskTitle).put("sample", it.sample).put("picture", it.picture) }))
-            .put("preferences", JSONObject().put("myName", p.myName).put("partnerName", p.partnerName).put("code", p.code).put("started", p.started).put("avatar", p.avatar).put("quietEnabled", p.quietEnabled).put("quietStart", p.quietStart).put("quietEnd", p.quietEnd).put("style", p.style).put("sound", p.sound).put("haptics", p.haptics).put("myPhoto", p.myPhoto).put("partnerPhoto", p.partnerPhoto).put("pokeOptIn", p.pokeOptIn).put("themeMode", p.themeMode).put("language", p.language).put("codeExpiresAt", p.codeExpiresAt).put("togetherSince", p.togetherSince).put("defaultReminderTime", p.defaultReminderTime).put("keepResetHistory",p.keepResetHistory).put("shareProfile",p.shareProfile))
+            .put("notes", JSONArray(next.notes.map { JSONObject().put("id", it.id).put("kind", it.kind).put("message", it.message).put("owner", it.owner.name).put("at", it.at).put("taskTitle", it.taskTitle).put("sample", it.sample).put("picture", it.picture).put("replyTo",it.replyTo) }))
+            .put("preferences", JSONObject().put("myName", p.myName).put("partnerName", p.partnerName).put("code", p.code).put("started", p.started).put("avatar", p.avatar).put("quietEnabled", p.quietEnabled).put("quietStart", p.quietStart).put("quietEnd", p.quietEnd).put("style", p.style).put("sound", p.sound).put("haptics", p.haptics).put("myPhoto", p.myPhoto).put("partnerPhoto", p.partnerPhoto).put("pokeOptIn", p.pokeOptIn).put("themeMode", p.themeMode).put("language", p.language).put("codeExpiresAt", p.codeExpiresAt).put("togetherSince", p.togetherSince).put("defaultReminderTime", p.defaultReminderTime).put("keepResetHistory",p.keepResetHistory).put("shareProfile",true).put("clockZone",p.clockZone).put("partnerClockOverride",p.partnerClockOverride).put("listLayout",p.listLayout))
         val persisted = if(remote) {
             // Never persist partner task/photo data into the local demo workspace.
             val local=JSONObject(prefs.getString("state", "{}") ?: "{}")
@@ -303,14 +303,14 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
             onResult(failure)
         }
     }
-    fun sendChatNote(id: String,kind: String,message: String,taskTitle: String,picture: String,onResult: (String?)->Unit) {
+    fun sendChatNote(id: String,kind: String,message: String,taskTitle: String,picture: String,replyTo: String,onResult: (String?)->Unit) {
         val account=AccountScope.current(getApplication())
         val target=connection.value.partnerUid
         viewModelScope.launch {
             val failure=try {
                 require(kind in listOf("Message","Thank you","You're the best","Purr-fect")) {"Choose a message type."}
                 require(message.trim().length<=240 && (kind!="Message" || message.isNotBlank() || picture.isNotBlank())) {"Write a message or choose a picture."}
-                withContext(Dispatchers.IO) {sync.sendChatNote(Appreciation(id=id,kind=kind,message=message.trim(),taskTitle=taskTitle,picture=picture),account,target)}
+                withContext(Dispatchers.IO) {sync.sendChatNote(Appreciation(id=id,kind=kind,message=message.trim(),taskTitle=taskTitle,picture=picture,replyTo=replyTo),account,target)}
                 null
             } catch(e: CancellationException) {throw e} catch(e: Exception) {ai.mwm.client.cloud.connectionError(e)}
             onResult(failure)

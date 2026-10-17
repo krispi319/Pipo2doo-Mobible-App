@@ -155,8 +155,9 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
         val current=repository.state.value
         val tasks=ts.map {t->Task(id=t["id"] as String,title=t["title"] as String,owner=owner(t,uid),assigneeUid=t["assigneeUid"] as? String ?: "",day=n(t,"day"),minute=(t["minute"] as? Number)?.toInt(),listId=t["listId"] as String,note=repository.privateNote(t["id"] as String),tags=(t["tags"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),repeat=Repeat.valueOf(t["repeat"] as String),status=TaskStatus.valueOf(t["status"] as String),completedAt=n(t,"completedAt"),parentId=t["parentId"] as? String ?: "",reminder=repository.personalReminder(t["id"] as String).first,offset=repository.personalReminder(t["id"] as String).second)}
         val lists=ls.map {l->SharedList(id=l["id"] as String,name=l["name"] as String,emoji=l["emoji"] as String,pinned=l["pinned"]==true,owner=owner(l,uid),assigneeUid=l["assigneeUid"] as? String ?: "",pictures=(l["pictures"] as? List<*>)?.filterIsInstance<String>() ?: emptyList())}
-        val notes=maps(r["notes"]).map {v->Appreciation(id=v["id"] as String,kind=v["kind"] as String,message=v["message"] as String,owner=if(v["sender"]==uid)Owner.Me else Owner.You,at=n(v,"at"),taskTitle=v["taskTitle"] as? String ?: "",picture=v["picture"] as? String ?: "")}
+        val notes=maps(r["notes"]).map {v->Appreciation(id=v["id"] as String,kind=v["kind"] as String,message=v["message"] as String,owner=if(v["sender"]==uid)Owner.Me else Owner.You,at=n(v,"at"),taskTitle=v["taskTitle"] as? String ?: "",picture=v["picture"] as? String ?: "",replyTo=v["replyTo"] as? String ?: "")}
         val p=restoreSharedProfile(current.preferences,own,other,if(partner.isBlank()) "Waiting for partner" else roleLabel(partnerRole)).copy(started=true,code=mutable.value.code.ifBlank {"------"},codeExpiresAt=mutable.value.expiresAt)
+        val profileNotice=try {api.ensureProfile(p);""} catch(e: CancellationException) {throw e} catch(_: Exception) {" · Profile update waiting to retry"}
         // Legacy task tags contained names rather than IDs; keep them readable until migrated.
         val savedTags=tagRows.map {Tag(it["id"] as String,it["name"] as String)}
         val legacyTags=tasks.flatMap {it.tags}.distinct().filter {id -> savedTags.none {it.id==id} }.map {Tag(it,it)}
@@ -165,7 +166,7 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
             if(error is CancellationException) throw error
             // Task synchronization stays available while push setup retries on the next refresh.
         }
-        mutable.value=mutable.value.copy(role=role,partnerRole=partnerRole,selectedRole=role,spaceId=sid,uid=uid,partnerUid=partner,generation=generation,partnerAvatar=(other?.get("avatar") as? Number)?.toInt() ?: -1,authenticated=true,online=true,message=if(partner.isBlank()) "Space created · Waiting for your partner" else "Partner connected · Synced",code=if(partner.isBlank())mutable.value.code else "",expiresAt=if(partner.isBlank())mutable.value.expiresAt else 0)
+        mutable.value=mutable.value.copy(role=role,partnerRole=partnerRole,selectedRole=role,spaceId=sid,uid=uid,partnerUid=partner,generation=generation,partnerAvatar=(other?.get("avatar") as? Number)?.toInt() ?: -1,authenticated=true,online=true,message=(if(partner.isBlank()) "Space created · Waiting for your partner" else "Partner connected · Synced")+profileNotice,code=if(partner.isBlank())mutable.value.code else "",expiresAt=if(partner.isBlank())mutable.value.expiresAt else 0)
     }
     /** Network-first edits: rejected/conflicting/offline writes never masquerade as synced. */
     suspend fun mutate(block: () -> Unit)=lock.withLock {
@@ -205,8 +206,7 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
                 }
             }
             val p=next.preferences
-            if(!p.shareProfile && old.preferences.shareProfile) api.call("deleteProfile")
-            else if(p.shareProfile && (!old.preferences.shareProfile || p.myName!=old.preferences.myName || p.avatar!=old.preferences.avatar || p.myPhoto!=old.preferences.myPhoto)) api.call("profile",mapOf("value" to mapOf("name" to p.myName,"avatar" to p.avatar,"photo" to if(p.myPhoto.isBlank() || p.myPhoto.startsWith("asset:")) "" else api.preparePhoto(p.myPhoto))))
+            if(p.myName!=old.preferences.myName || p.avatar!=old.preferences.avatar || p.myPhoto!=old.preferences.myPhoto || p.clockZone!=old.preferences.clockZone) api.ensureProfile(p)
             repository.savePrivateNotes(next.tasks)
             repository.savePersonalReminders(next.tasks)
             // Personal reminders/preferences are local; collections are replaced only by server results.

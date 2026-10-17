@@ -6,7 +6,7 @@ fun chatDelivery(note: Appreciation,pending: ChatPending?,readIds: Set<String>,s
     pending?.state=="Sending" -> "Sending"
     pending?.state=="Failed" -> "Failed · Retry"
     !shared -> "Saved here"
-    note.id in readIds -> "Read"
+    note.id in readIds -> "Seen"
     else -> "Sent"
 }
 fun mergeChatNotes(server: List<Appreciation>,pending: Map<String,ChatPending>): List<Appreciation> =

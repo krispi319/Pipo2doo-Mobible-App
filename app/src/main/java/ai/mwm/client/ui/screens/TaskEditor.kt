@@ -154,8 +154,8 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
                         Column(Modifier.padding(14.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                                 Column(Modifier.weight(1f)) {
-                                    PText("Gentle reminder", style = MaterialTheme.typography.titleMedium)
-                                    PText("A soft nudge on this phone only", style = MaterialTheme.typography.bodySmall, muted = true)
+                                    PText(if(draft.reminder) "Gentle nudge" else "No nudge", style = MaterialTheme.typography.titleMedium)
+                                    PText("Optional · Off for new tasks", style = MaterialTheme.typography.bodySmall, muted = true)
                                 }
                                 // CSS-sized switch; Material's default switch is wider and taller.
                                 Box(Modifier.size(50.dp, 30.dp).background(if(draft.reminder) c.secondary else c.surface, CircleShape).semantics { contentDescription = "Gentle reminder" }.toggleable(value = draft.reminder, role = Role.Switch) { enabled -> draft = draft.copy(reminder = enabled); if(enabled) requestNotifications() }.padding(4.dp), contentAlignment = if(draft.reminder) Alignment.CenterEnd else Alignment.CenterStart) {

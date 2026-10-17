@@ -187,7 +187,7 @@ import java.util.Locale
     }
 }
 
-@Composable fun AppreciationScreen(state: PipoState, taskTitle: String, onBack: () -> Unit, onDeleteNote: (String) -> Unit = {}, onSend: (String, String, String, String, String, (String?)->Unit) -> Unit) {
+@Composable fun AppreciationScreen(state: PipoState, taskTitle: String, onBack: () -> Unit, onDeleteNote: (String) -> Unit = {}, onSend: (String, String, String, String, String, String, (String?)->Unit) -> Unit) {
     CuteChatScreen(state,taskTitle,onBack,onDeleteNote,onSend)
 }
 

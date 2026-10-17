@@ -59,12 +59,13 @@ import java.util.Locale
 
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable fun UpcomingScreen(state: PipoState, onOpen: (String) -> Unit, onToggle: (Task) -> Unit, onEdit: (String) -> Unit) {
+@Composable fun UpcomingScreen(state: PipoState, onOpen: (String) -> Unit, onToggle: (Task) -> Unit, onEdit: (String) -> Unit, onCalendar: () -> Unit = {}) {
     val context = LocalContext.current
     val today = LocalDate.now().toEpochDay()
     var selected by rememberSaveable { mutableStateOf<Long?>(null) }
     val tasks = state.tasks.filterNot { it.done }
     LazyColumn(contentPadding = PaddingValues(bottom = 144.dp)) {
+        item {OutlinedButton(onCalendar,Modifier.padding(horizontal=20.dp,vertical=8.dp).fillMaxWidth()) {Icon(Icons.Outlined.CalendarMonth,null,Modifier.size(18.dp));Spacer(Modifier.width(8.dp));PText("Calendar · Completed & missed")}}
         item { Row(Modifier.fillMaxWidth().padding(20.dp,16.dp),verticalAlignment=Alignment.CenterVertically) { Column(Modifier.weight(1f)) { PText("${dayText(today)} – ${dayText(tasks.maxOfOrNull { it.day } ?: today)}",style=MaterialTheme.typography.labelSmall,muted=true);PText("Upcoming",style=MaterialTheme.typography.headlineLarge);Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) { PText("${tasks.count { it.day>=today }} tasks ahead",style=MaterialTheme.typography.bodySmall,muted=true);Badge("${tasks.count { it.day<today }} overdue",AppTheme.colors.error) } };Image(androidx.compose.ui.res.painterResource(ai.mwm.client.R.mipmap.ic_launcher_foreground),"Pipo2doo app icon",Modifier.size(48.dp).clip(RoundedCornerShape(14.dp))) } }
         item {
             LazyRow(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -99,33 +100,35 @@ import java.util.Locale
     }
 }
 
-@Composable fun ListsScreen(state: PipoState, onOpen: (String) -> Unit, onNew: () -> Unit, onTask: (String) -> Unit, onListSave: (SharedList) -> Unit = {}, onToggle: (Task) -> Unit = {}) {
+@Composable fun ListsScreen(state: PipoState, onOpen: (String) -> Unit, onNew: () -> Unit, onTask: (String) -> Unit, onListSave: (SharedList) -> Unit = {}, onToggle: (Task) -> Unit = {}, onLayoutChange: (String)->Unit = {}) {
+    var wide by rememberSaveable {mutableStateOf(state.preferences.listLayout!="Grid")}
     var query by rememberSaveable { mutableStateOf("") }
     var ownerFilter by rememberSaveable { mutableStateOf("All") }
     var filterMenu by remember { mutableStateOf(false) }
     var manage by remember { mutableStateOf(false) }
     val lists = state.lists.filter { list -> (ownerFilter == "All" || list.owner.name == ownerFilter) && (list.name.contains(query, true) || state.tasks.any { it.listId == list.id && it.title.contains(query, true) }) }
-    LazyVerticalGrid(GridCells.Fixed(2), contentPadding = PaddingValues(20.dp, 0.dp, 20.dp, 88.dp), verticalArrangement = Arrangement.spacedBy(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyVerticalGrid(GridCells.Fixed(2), contentPadding = PaddingValues(16.dp, 0.dp, 16.dp, 140.dp), verticalArrangement = Arrangement.spacedBy(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         item(span = { GridItemSpan(2) }) { Row(Modifier.fillMaxWidth().padding(top=12.dp),verticalAlignment=Alignment.Bottom) { Column(Modifier.weight(1f)) { PText("${state.preferences.myName} & ${state.preferences.partnerName} · ${state.lists.size} lists",style=MaterialTheme.typography.labelSmall,muted=true);PText("Shared lists",style=MaterialTheme.typography.headlineLarge) };FilledIconButton(onNew,Modifier.size(48.dp)) { Icon(Icons.Outlined.Add,"New list") } } }
         item(span = { GridItemSpan(2) }) { Surface(color=AppTheme.colors.surfaceSunken,shape=CircleShape,border=BorderStroke(1.5.dp,AppTheme.colors.separator)) {Row(Modifier.padding(start=18.dp,end=8.dp,top=4.dp,bottom=4.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {Icon(Icons.Outlined.Search,null,Modifier.size(18.dp));BasicTextField(query,{query=it},Modifier.weight(1f).padding(vertical=10.dp),singleLine=true,textStyle=MaterialTheme.typography.bodyLarge.copy(color=AppTheme.colors.textPrimary),decorationBox={inner->if(query.isBlank()) PText("Find a list or a task…",muted=true);inner()});Surface(onClick={filterMenu=true},shape=CircleShape,color=AppTheme.colors.surface,border=BorderStroke(1.dp,AppTheme.colors.separator)) {PText(if(ownerFilter=="All") "All of us" else ownerName(Owner.valueOf(ownerFilter),state.preferences),Modifier.padding(12.dp,8.dp),MaterialTheme.typography.bodySmall)}} } }
+        item(span={GridItemSpan(2)}) {Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {FilterChip(wide,{wide=true;onLayoutChange("Wide")},label={PText("Wide")},leadingIcon={Icon(Icons.Outlined.ViewAgenda,null,Modifier.size(17.dp))});FilterChip(!wide,{wide=false;onLayoutChange("Grid")},label={PText("Grid")},leadingIcon={Icon(Icons.Outlined.GridView,null,Modifier.size(17.dp))})}}
         if(query.isNotBlank()) {
             items(state.tasks.filter { it.title.contains(query, true) && (ownerFilter=="All" || it.owner.name==ownerFilter) }, key = { "search_${it.id}" }, span = { GridItemSpan(2) }) { task -> TaskRow(task, state, { onTask(task.id) }, { onToggle(task) }, aligned = false) }
         }
         if(lists.any { it.pinned }) item(span = { GridItemSpan(2) }) { Column { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { PText("Pinned on the fridge", Modifier.weight(1f), MaterialTheme.typography.titleMedium); OutlinedButton({ manage = true },contentPadding=PaddingValues(horizontal=12.dp),modifier=Modifier.height(40.dp)) { Icon(Icons.Outlined.Tune,null,Modifier.size(16.dp));PText("Manage",style=MaterialTheme.typography.bodySmall) } };PText("Tap a pin to unpin, or choose lists in fridge settings.",style=MaterialTheme.typography.bodySmall,muted=true) } }
-        items(lists.filter { it.pinned }.chunked(2), key = { "pinned_${it.first().id}" }, span = { GridItemSpan(2) }) { pair ->
+        items(lists.filter { it.pinned }.chunked(if(wide) 1 else 2), key = { "pinned_${it.first().id}" }, span = { GridItemSpan(2) }) { pair ->
             Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 pair.forEach { list -> FridgeListCard(list,state.tasks.filter { it.listId==list.id },state,true,{onOpen(list.id)},{onListSave(list.copy(pinned=false))},Modifier.weight(1f).fillMaxHeight()) }
-                if(pair.size==1) Spacer(Modifier.weight(1f))
+                if(pair.size==1 && !wide) Spacer(Modifier.weight(1f))
             }
         }
         item(span = { GridItemSpan(2) }) { PText("All lists", Modifier.padding(top = 8.dp), MaterialTheme.typography.titleMedium) }
-        items(lists.filterNot { it.pinned }.chunked(2), key = { "list_${it.first().id}" }, span = { GridItemSpan(2) }) { pair ->
+        items(lists.filterNot { it.pinned }.chunked(if(wide) 1 else 2), key = { "list_${it.first().id}" }, span = { GridItemSpan(2) }) { pair ->
             Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 pair.forEach { list -> FridgeListCard(list,state.tasks.filter { it.listId==list.id },state,false,{onOpen(list.id)},{onListSave(list.copy(pinned=true))},Modifier.weight(1f).fillMaxHeight()) }
-                if(pair.size==1) Spacer(Modifier.weight(1f))
+                if(pair.size==1 && !wide) Spacer(Modifier.weight(1f))
             }
         }
-        item { Surface(onClick=onNew,modifier=Modifier.fillMaxWidth().heightIn(min=270.dp),shape=RoundedCornerShape(20.dp),color=AppTheme.colors.primary.copy(alpha=.06f),border=BorderStroke(1.5.dp,AppTheme.colors.primary)) {Column(Modifier.padding(14.dp,12.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(10.dp,Alignment.CenterVertically)) {OutlinedIconButton(onNew,Modifier.size(56.dp)) {Icon(Icons.Outlined.Add,"New list")};PText("New list",style=MaterialTheme.typography.titleLarge);PText("Name it, pick an emoji or a cat",style=MaterialTheme.typography.bodySmall,muted=true,align=TextAlign.Center)}} }
+        item(span={GridItemSpan(if(wide) 2 else 1)}) { Surface(onClick=onNew,modifier=Modifier.fillMaxWidth().heightIn(min=if(wide) 130.dp else 270.dp),shape=RoundedCornerShape(20.dp),color=AppTheme.colors.primary.copy(alpha=.06f),border=BorderStroke(1.5.dp,AppTheme.colors.primary)) {Column(Modifier.padding(14.dp,12.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(10.dp,Alignment.CenterVertically)) {OutlinedIconButton(onNew,Modifier.size(56.dp)) {Icon(Icons.Outlined.Add,"New list")};PText("New list",style=MaterialTheme.typography.titleLarge);PText("Name it, pick an emoji or a cat",style=MaterialTheme.typography.bodySmall,muted=true,align=TextAlign.Center)}} }
         item(span = { GridItemSpan(2) }) { PText("${state.tasks.count { !it.done }} open tasks · ${state.lists.size} shared lists", Modifier.fillMaxWidth().padding(12.dp), MaterialTheme.typography.bodySmall, true, TextAlign.Center) }
     }
     if(filterMenu) AlertDialog(onDismissRequest={filterMenu=false},title={PText("Whose lists?")},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {(listOf("All")+Owner.entries.map {it.name}).forEach {value->Pill(if(value=="All") "All of us" else ownerName(Owner.valueOf(value),state.preferences),ownerFilter==value) {ownerFilter=value;filterMenu=false}}}},confirmButton={TextButton({filterMenu=false}) {PText("Close")}})

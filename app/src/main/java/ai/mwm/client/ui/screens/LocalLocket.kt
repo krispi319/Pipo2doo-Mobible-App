@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
                             else Box(contentAlignment=Alignment.Center) {Icon(Icons.Outlined.FavoriteBorder,"No photo yet",tint=c.accent)}
                         }
                         Text(if(owner==Owner.Me) preferences.myName else preferences.partnerName,style=MaterialTheme.typography.labelSmall,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis,color=c.textPrimary)
+                        latest?.let {PText(java.time.Instant.ofEpochMilli(it.at).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("d MMM · HH:mm")),style=MaterialTheme.typography.labelSmall,muted=true)}
                     }
                 }
             }
@@ -82,6 +83,7 @@ import androidx.compose.ui.unit.dp
                 Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     PText(if(mine) preferences.myName else preferences.partnerName,preserveContent=true,style=MaterialTheme.typography.labelSmall,muted=true)
                     LocalPicture(photo.picture,Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(14.dp)))
+                    PText("Uploaded "+java.time.Instant.ofEpochMilli(photo.at).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy · HH:mm")),style=MaterialTheme.typography.labelSmall,muted=true)
                     PText(photo.message,preserveContent=true)
                     Row(verticalAlignment=Alignment.CenterVertically) {
                         IconButton({send("Heart","Loved your picture.",photo.id,"")},enabled=!mine && !heart && connection.online && !connection.busy) {Icon(if(heart) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,if(mine) "Partner heart" else "Send a heart",tint=c.accent)}
