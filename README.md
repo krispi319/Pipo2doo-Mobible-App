@@ -12,9 +12,8 @@ Pipo2doo is a cute Android app for couples who want to organize everyday life, s
 
 ## 📥 Download
 
-**[Download Pipo2doo v1.1.0 for Android](https://github.com/YOUR_USERNAME/YOUR_REPOSITORY/releases/download/v1.1.0/Pipo2doo-v1.1.0.apk)**
+**[Download Pipo2doo v1.1.0 for Android](https://github.com/krispi319/Pipo2doo-Mobible-App/releases/tag/v1.1.0)**
 
-[Release notes and all downloads](https://github.com/YOUR_USERNAME/YOUR_REPOSITORY/releases)
 
 Download the **`.apk` file** from the release's **Assets** section. The automatically generated “Source code” ZIP files are for development and cannot be installed as an Android app.
 
