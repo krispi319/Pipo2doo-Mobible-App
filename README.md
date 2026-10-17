@@ -78,7 +78,7 @@ GitHub publishing does not automatically update an installed app. Download and i
 
 **Something still does not work**
 
-[Report a problem](https://github.com/YOUR_USERNAME/YOUR_REPOSITORY/issues)
+[Report a problem](https://github.com/krispi319/Visual-Pinout-Studio/issues)
 
 Include the app version, phone model, Android version, steps to reproduce, and expected versus actual behavior. Screenshots help, but remove private messages, personal information, pairing codes, and credentials first.
 
@@ -89,14 +89,6 @@ Include the app version, phone model, Android version, steps to reproduce, and e
 - **Firebase Cloud Messaging** for Android push delivery.
 
 Supabase provides the shared backend; Firebase is used for push notifications. Notification delivery depends on network connectivity, device settings, and platform services.
-
-## 🧪 Before sharing a release
-
-Test the signed APK on two phones with two accounts: pair them, create and complete a task, upload a photo from each account, exchange a message and poke, test background notifications and sounds, and reopen the app to check saved data. A successful Gradle sync alone does not verify these features.
-
-## 🔐 For contributors
-
-Never commit Firebase service-account private keys, Supabase service-role keys, signing keystores, or passwords. Keep a secure backup of the release signing key so future APKs can update existing installations.
 
 ---
 
