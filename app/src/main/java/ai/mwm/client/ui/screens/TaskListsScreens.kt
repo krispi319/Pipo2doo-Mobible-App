@@ -32,18 +32,18 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 @OptIn(ExperimentalLayoutApi::class)
-@Composable fun TodayScreen(state: PipoState, onOpen: (String) -> Unit, onToggle: (Task) -> Unit, onPreferences: ((Preferences) -> Preferences) -> Unit = {}, onReminders: () -> Unit, onCare: () -> Unit = {}) {
+@Composable fun TodayScreen(state: PipoState, onOpen: (String) -> Unit, onToggle: (Task) -> Unit, onPreferences: ((Preferences) -> Preferences) -> Unit = {}, onReminders: () -> Unit, onCare: () -> Unit = {}, locketRequest: String? = null, onLocketOpened: () -> Unit = {}) {
     var filter by rememberSaveable { mutableStateOf("All") }
     val today = LocalDate.now().toEpochDay()
     val tasks = state.tasks.filter { (!it.done && it.day <= today) || (it.done && it.completedAt > 0 && Instant.ofEpochMilli(it.completedAt).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay() == today) }
     val done = tasks.count { it.done }
     val colors = AppTheme.colors
-    LazyColumn(contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
+    LazyColumn(contentPadding = PaddingValues(top = 8.dp, bottom = 144.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
         item { Row(Modifier.fillMaxWidth().padding(20.dp,12.dp), verticalAlignment = Alignment.Top) { Column(Modifier.weight(1f)) { PText("Good morning, ${state.preferences.myName}", style = MaterialTheme.typography.labelLarge, muted = true); PText("Today", style = MaterialTheme.typography.headlineLarge) }; Surface(onClick = onReminders, modifier = Modifier.size(48.dp), shape = CircleShape, color = colors.surface, border = BorderStroke(1.dp, colors.separator), shadowElevation = 1.dp) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Outlined.NotificationsNone, "Notifications",Modifier.size(22.dp)); if(state.tasks.any { it.isOwnReminder() }) Box(Modifier.align(Alignment.TopEnd).padding(top=11.dp,end=12.dp).size(9.dp).background(colors.accent,CircleShape)) } } } }
         item {
             TodayRings(state.preferences,tasks,filter) {filter=it}
         }
-        item {LocalLocket(state.notes)}
+        item {LocalLocket(state.notes,locketRequest,onLocketOpened,state.preferences)}
         item {
             FlowRow(Modifier.padding(start=20.dp,end=20.dp,bottom=24.dp),horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) { (listOf("All") + Owner.entries.map { it.label }).forEach { label -> Pill("${if(label=="All") "All" else ownerName(Owner.valueOf(label),state.preferences)} · ${tasks.count { label == "All" || it.owner.label == label }}", filter == label, Owner.entries.find { it.label == label }?.let { ownerColor(it) } ?: colors.primary) { filter = label } } }
         }
@@ -51,12 +51,12 @@ import java.util.Locale
         item { Row(Modifier.fillMaxWidth().padding(start=20.dp,end=20.dp,bottom=12.dp),horizontalArrangement=Arrangement.SpaceBetween) { PText("Still to do",style=MaterialTheme.typography.titleMedium); PText("${shown.count { !it.done }} left",style=MaterialTheme.typography.bodySmall,muted=true) } }
         items(shown.filterNot { it.done }.sortedWith(compareBy<Task> { it.day }.thenBy { it.minute ?: 1440 }), key = { it.id }) { task -> TaskRow(task, state, { onOpen(task.id) }, { onToggle(task) }) }
         if(shown.none { !it.done }) item { PText("A clear windowsill. Add a little task when you're ready.", Modifier.padding(24.dp), muted = true) }
-        item {PText("Care",Modifier.padding(20.dp,10.dp),MaterialTheme.typography.labelSmall,true);Surface(onClick=onCare,modifier=Modifier.padding(start=16.dp,end=56.dp,top=2.dp,bottom=14.dp),shape=RoundedCornerShape(14.dp),color=colors.accent.copy(alpha=.16f).compositeOver(colors.surface),border=BorderStroke(1.dp,colors.separator)) {Row(Modifier.padding(14.dp,12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {Icon(Icons.Outlined.WaterDrop,null,Modifier.size(24.dp));Column(Modifier.weight(1f)) {PText("Period & Care",style=MaterialTheme.typography.titleMedium);PText("Private mood, craving & symptom logs",style=MaterialTheme.typography.bodySmall,muted=true);PText("Only you can see this",style=MaterialTheme.typography.bodySmall,muted=true)};Icon(Icons.Outlined.ChevronRight,null,Modifier.size(18.dp))}}}
         item { Row(Modifier.fillMaxWidth().padding(20.dp,12.dp),verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.spacedBy(12.dp)) { DashedRule(Modifier.weight(1f).padding(bottom=10.dp));ApprovedCat(Modifier.size(58.dp,44.dp)) } }
         if(shown.any { it.done }) item { Row(Modifier.fillMaxWidth().padding(20.dp,12.dp),horizontalArrangement=Arrangement.SpaceBetween) { PText("Done today",style=MaterialTheme.typography.titleMedium);PText("${shown.count { it.done }} finished",style=MaterialTheme.typography.bodySmall,muted=true) } }
         items(shown.filter { it.done }.sortedByDescending { it.completedAt }, key = { it.id }) { task -> TaskRow(task, state, { onOpen(task.id) }, { onToggle(task) }) }
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable fun UpcomingScreen(state: PipoState, onOpen: (String) -> Unit, onToggle: (Task) -> Unit, onEdit: (String) -> Unit) {
@@ -64,7 +64,7 @@ import java.util.Locale
     val today = LocalDate.now().toEpochDay()
     var selected by rememberSaveable { mutableStateOf<Long?>(null) }
     val tasks = state.tasks.filterNot { it.done }
-    LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
+    LazyColumn(contentPadding = PaddingValues(bottom = 144.dp)) {
         item { Row(Modifier.fillMaxWidth().padding(20.dp,16.dp),verticalAlignment=Alignment.CenterVertically) { Column(Modifier.weight(1f)) { PText("${dayText(today)} – ${dayText(tasks.maxOfOrNull { it.day } ?: today)}",style=MaterialTheme.typography.labelSmall,muted=true);PText("Upcoming",style=MaterialTheme.typography.headlineLarge);Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) { PText("${tasks.count { it.day>=today }} tasks ahead",style=MaterialTheme.typography.bodySmall,muted=true);Badge("${tasks.count { it.day<today }} overdue",AppTheme.colors.error) } };Image(androidx.compose.ui.res.painterResource(ai.mwm.client.R.mipmap.ic_launcher_foreground),"Pipo2doo app icon",Modifier.size(48.dp).clip(RoundedCornerShape(14.dp))) } }
         item {
             LazyRow(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -12,6 +12,7 @@ int drawable demo_scarf 0x0
 int drawable demo_tap 0x0
 int drawable demo_travel 0x0
 int drawable ic_launcher_background 0x0
+int drawable ic_pipo_notification 0x0
 int drawable ic_task_reminder 0x0
 int drawable owner_mina 0x0
 int drawable owner_theo 0x0
@@ -21,6 +22,7 @@ int drawable settings_demo_me 0x0
 int drawable settings_demo_partner 0x0
 int mipmap ic_launcher 0x0
 int mipmap ic_launcher_foreground 0x0
+int raw pi_style 0x0
 int string app_name 0x0
 int string default_web_client_id 0x0
 int string gcm_defaultSenderId 0x0

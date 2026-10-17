@@ -3,24 +3,24 @@
 3    package="ai.mwm.android_2ebb28d1_fa04_4d16_89bf_06b0a18eff09.test" >
 4
 5    <uses-sdk
-5-->D:\Krisative\Coding\Pipo2doo App\Pipo2doo_v1.1.3_repair_patch\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest2607758326920896726.xml:5:5-74
+5-->D:\Krisative\Coding\Pipo2doo App\Pipo2doo-Mobible-App\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest7899013626695852192.xml:5:5-74
 6        android:minSdkVersion="26"
-6-->D:\Krisative\Coding\Pipo2doo App\Pipo2doo_v1.1.3_repair_patch\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest2607758326920896726.xml:5:15-41
+6-->D:\Krisative\Coding\Pipo2doo App\Pipo2doo-Mobible-App\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest7899013626695852192.xml:5:15-41
 7        android:targetSdkVersion="36" />
-7-->D:\Krisative\Coding\Pipo2doo App\Pipo2doo_v1.1.3_repair_patch\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest2607758326920896726.xml:5:42-71
+7-->D:\Krisative\Coding\Pipo2doo App\Pipo2doo-Mobible-App\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest7899013626695852192.xml:5:42-71
 8
 9    <instrumentation
-9-->D:\Krisative\Coding\Pipo2doo App\Pipo2doo_v1.1.3_repair_patch\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest2607758326920896726.xml:7:5-11:101
+9-->D:\Krisative\Coding\Pipo2doo App\Pipo2doo-Mobible-App\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest7899013626695852192.xml:7:5-11:101
 10        android:name="androidx.test.runner.AndroidJUnitRunner"
-10-->D:\Krisative\Coding\Pipo2doo App\Pipo2doo_v1.1.3_repair_patch\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest2607758326920896726.xml:7:22-76
+10-->D:\Krisative\Coding\Pipo2doo App\Pipo2doo-Mobible-App\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest7899013626695852192.xml:7:22-76
 11        android:functionalTest="false"
-11-->D:\Krisative\Coding\Pipo2doo App\Pipo2doo_v1.1.3_repair_patch\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest2607758326920896726.xml:10:22-52
+11-->D:\Krisative\Coding\Pipo2doo App\Pipo2doo-Mobible-App\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest7899013626695852192.xml:10:22-52
 12        android:handleProfiling="false"
-12-->D:\Krisative\Coding\Pipo2doo App\Pipo2doo_v1.1.3_repair_patch\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest2607758326920896726.xml:9:22-53
+12-->D:\Krisative\Coding\Pipo2doo App\Pipo2doo-Mobible-App\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest7899013626695852192.xml:9:22-53
 13        android:label="Tests for ai.mwm.android_2ebb28d1_fa04_4d16_89bf_06b0a18eff09"
-13-->D:\Krisative\Coding\Pipo2doo App\Pipo2doo_v1.1.3_repair_patch\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest2607758326920896726.xml:11:22-99
+13-->D:\Krisative\Coding\Pipo2doo App\Pipo2doo-Mobible-App\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest7899013626695852192.xml:11:22-99
 14        android:targetPackage="ai.mwm.android_2ebb28d1_fa04_4d16_89bf_06b0a18eff09" />
-14-->D:\Krisative\Coding\Pipo2doo App\Pipo2doo_v1.1.3_repair_patch\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest2607758326920896726.xml:8:22-97
+14-->D:\Krisative\Coding\Pipo2doo App\Pipo2doo-Mobible-App\app\build\intermediates\tmp\manifest\androidTest\debug\tempFile1ProcessTestManifest7899013626695852192.xml:8:22-97
 15
 16    <application
 17        android:debuggable="true"

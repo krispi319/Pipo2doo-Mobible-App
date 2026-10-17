@@ -1,12 +1,12 @@
-#Sat Oct 10 12:02:55 CEST 2026
-base.0=D\:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo_v1.1.3_repair_patch\\app\\build\\intermediates\\dex\\debug\\mergeExtDexDebug\\classes.dex
-base.1=D\:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo_v1.1.3_repair_patch\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\0\\classes.dex
-base.2=D\:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo_v1.1.3_repair_patch\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\10\\classes.dex
-base.3=D\:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo_v1.1.3_repair_patch\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\15\\classes.dex
-base.4=D\:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo_v1.1.3_repair_patch\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\2\\classes.dex
-base.5=D\:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo_v1.1.3_repair_patch\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\7\\classes.dex
-base.6=D\:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo_v1.1.3_repair_patch\\app\\build\\intermediates\\dex\\debug\\mergeExtDexDebug\\classes2.dex
-base.7=D\:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo_v1.1.3_repair_patch\\app\\build\\intermediates\\dex\\debug\\mergeExtDexDebug\\classes3.dex
+#Sat Oct 17 17:11:56 CEST 2026
+base.0=D\:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo-Mobible-App\\app\\build\\intermediates\\dex\\debug\\mergeExtDexDebug\\classes.dex
+base.1=D\:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo-Mobible-App\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\0\\classes.dex
+base.2=D\:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo-Mobible-App\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\10\\classes.dex
+base.3=D\:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo-Mobible-App\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\15\\classes.dex
+base.4=D\:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo-Mobible-App\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\2\\classes.dex
+base.5=D\:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo-Mobible-App\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\7\\classes.dex
+base.6=D\:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo-Mobible-App\\app\\build\\intermediates\\dex\\debug\\mergeExtDexDebug\\classes2.dex
+base.7=D\:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo-Mobible-App\\app\\build\\intermediates\\dex\\debug\\mergeExtDexDebug\\classes3.dex
 path.0=classes.dex
 path.1=0/classes.dex
 path.2=10/classes.dex

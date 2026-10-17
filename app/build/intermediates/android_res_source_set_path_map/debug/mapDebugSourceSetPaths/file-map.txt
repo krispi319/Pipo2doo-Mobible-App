@@ -49,12 +49,12 @@ ai.mwm.client.app-datastore-preferences-core-release-47 C:\Users\anngo\.gradle\c
 ai.mwm.client.app-ui-text-48 C:\Users\anngo\.gradle\caches\9.2.1\transforms\f71370bf7538751639fa641145bfb672\workspace\transformed\ui-text\res
 ai.mwm.client.app-ui-49 C:\Users\anngo\.gradle\caches\9.2.1\transforms\fd822e875d3c237ec7066620713283d8\workspace\transformed\ui\res
 ai.mwm.client.app-navigationevent-50 C:\Users\anngo\.gradle\caches\9.2.1\transforms\fee1ab6e0cb067b5d4b5178c0388eb05\workspace\transformed\navigationevent\res
-ai.mwm.client.app-pngs-51 D:\Krisative\Coding\Pipo2doo App\Pipo2doo_v1.1.3_repair_patch\app\build\generated\res\pngs\debug
-ai.mwm.client.app-res-52 D:\Krisative\Coding\Pipo2doo App\Pipo2doo_v1.1.3_repair_patch\app\build\generated\res\processDebugGoogleServices
-ai.mwm.client.app-resValues-53 D:\Krisative\Coding\Pipo2doo App\Pipo2doo_v1.1.3_repair_patch\app\build\generated\res\resValues\debug
-ai.mwm.client.app-updated_navigation_xml-54 D:\Krisative\Coding\Pipo2doo App\Pipo2doo_v1.1.3_repair_patch\app\build\generated\updated_navigation_xml\debug
-ai.mwm.client.app-packageDebugResources-55 D:\Krisative\Coding\Pipo2doo App\Pipo2doo_v1.1.3_repair_patch\app\build\intermediates\incremental\debug\packageDebugResources\merged.dir
-ai.mwm.client.app-packageDebugResources-56 D:\Krisative\Coding\Pipo2doo App\Pipo2doo_v1.1.3_repair_patch\app\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
-ai.mwm.client.app-debug-57 D:\Krisative\Coding\Pipo2doo App\Pipo2doo_v1.1.3_repair_patch\app\build\intermediates\merged_res\debug\mergeDebugResources
-ai.mwm.client.app-debug-58 D:\Krisative\Coding\Pipo2doo App\Pipo2doo_v1.1.3_repair_patch\app\src\debug\res
-ai.mwm.client.app-main-59 D:\Krisative\Coding\Pipo2doo App\Pipo2doo_v1.1.3_repair_patch\app\src\main\res
+ai.mwm.client.app-pngs-51 D:\Krisative\Coding\Pipo2doo App\Pipo2doo-Mobible-App\app\build\generated\res\pngs\debug
+ai.mwm.client.app-res-52 D:\Krisative\Coding\Pipo2doo App\Pipo2doo-Mobible-App\app\build\generated\res\processDebugGoogleServices
+ai.mwm.client.app-resValues-53 D:\Krisative\Coding\Pipo2doo App\Pipo2doo-Mobible-App\app\build\generated\res\resValues\debug
+ai.mwm.client.app-updated_navigation_xml-54 D:\Krisative\Coding\Pipo2doo App\Pipo2doo-Mobible-App\app\build\generated\updated_navigation_xml\debug
+ai.mwm.client.app-packageDebugResources-55 D:\Krisative\Coding\Pipo2doo App\Pipo2doo-Mobible-App\app\build\intermediates\incremental\debug\packageDebugResources\merged.dir
+ai.mwm.client.app-packageDebugResources-56 D:\Krisative\Coding\Pipo2doo App\Pipo2doo-Mobible-App\app\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
+ai.mwm.client.app-debug-57 D:\Krisative\Coding\Pipo2doo App\Pipo2doo-Mobible-App\app\build\intermediates\merged_res\debug\mergeDebugResources
+ai.mwm.client.app-debug-58 D:\Krisative\Coding\Pipo2doo App\Pipo2doo-Mobible-App\app\src\debug\res
+ai.mwm.client.app-main-59 D:\Krisative\Coding\Pipo2doo App\Pipo2doo-Mobible-App\app\src\main\res

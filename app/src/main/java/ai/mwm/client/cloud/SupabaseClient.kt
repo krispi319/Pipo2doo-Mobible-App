@@ -142,7 +142,7 @@ class SupabaseClient(private val context: Context) {
             val text=(if(status in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader()?.use {it.readText()} ?: ""
             if(status !in 200..299) {
                 val error=runCatching {JSONObject(text)}.getOrDefault(JSONObject())
-                val reason=error.optString("code",error.optString("error_code"))
+                val reason=error.optString("code",error.optString("error_code",error.optString("status")))
                 val detail=error.optString("msg",error.optString("message",error.optString("error_description","Supabase request failed (HTTP $status).")))
                 throw SupabaseFailure(status,reason,detail)
             }

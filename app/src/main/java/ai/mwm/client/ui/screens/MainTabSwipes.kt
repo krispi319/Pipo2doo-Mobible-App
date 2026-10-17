@@ -11,7 +11,7 @@ import kotlin.math.abs
 /** Observe only unclaimed swipes. Horizontal rails and task swipe actions win. */
 fun Modifier.mainTabSwipes(enabled: Boolean, tab: String, onTab: (String) -> Unit): Modifier =
     if(!enabled) this else pointerInput(tab) {
-        val tabs = listOf("Today", "Upcoming", "Lists", "Progress", "Us")
+        val tabs = listOf("Today", "Upcoming", "Lists", "Care", "Progress", "Us")
         val threshold = 72.dp.toPx()
         val verticalLimit = 40.dp.toPx()
         awaitEachGesture {

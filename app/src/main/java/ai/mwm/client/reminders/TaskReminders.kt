@@ -23,16 +23,11 @@ object TaskReminders {
     private const val NOTIFICATION_ID = 501
     const val LIMITS = "Reminders stay ongoing until you complete the task, unless you dismiss or disable them in Android. Android 14 and newer allow individual dismissal. You can always turn notifications off or force-stop the app. Battery saving can delay delivery; after a force-stop, reopen Pipo2doo to restore scheduling."
     fun createChannel(context: Context) {
-        context.getSystemService(NotificationManager::class.java).createNotificationChannel(
-            NotificationChannel(CHANNEL, "Ongoing task reminders", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "Task reminders that clear on completion, subject to Android notification controls."
-                enableVibration(false)
-            }
-        )
+        NotificationSounds.ensure(context,CHANNEL,"Ongoing task reminders",NotificationManager.IMPORTANCE_DEFAULT,"Task reminders that clear on completion, subject to Android notification controls.")
     }
     fun allowed(context: Context): Boolean {
         val manager = context.getSystemService(NotificationManager::class.java)
-        return (Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) && manager.areNotificationsEnabled() && manager.getNotificationChannel(CHANNEL)?.importance != NotificationManager.IMPORTANCE_NONE
+        return (Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) && manager.areNotificationsEnabled() && manager.getNotificationChannel(NotificationSounds.channelId(context,CHANNEL))?.importance != NotificationManager.IMPORTANCE_NONE
     }
     private fun pending(context: Context, action: String, task: Task? = null): PendingIntent = PendingIntent.getBroadcast(context, 0,
         Intent(context, ReminderReceiver::class.java).setAction(action).setData(Uri.parse("pipo2doo://reminder/$action/${task?.id ?: "all"}"))
@@ -74,7 +69,7 @@ object TaskReminders {
             val present = active.any { it.tag == task.id }
             val delivered = delivery.getString("delivered_${task.id}", "") == task.reminderKey
             val dismissed = delivery.getString("dismissed_${task.id}", "") == task.reminderKey
-            val baseAt = if(task.minute == null && task.offset != -1) java.time.LocalDate.ofEpochDay(task.day).atTime(state.preferences.defaultReminderTime / 60, state.preferences.defaultReminderTime % 60).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() - task.offset * 60_000L else task.reminderAt()
+            val baseAt = task.reminderAt(state.preferences.defaultReminderTime)
             val at = quietAdjusted(baseAt, state.preferences)
             val repeats = state.preferences.style == "Paw nudge"
             val lastAlert = delivery.getLong("repeat_${task.id}", 0L)
@@ -103,8 +98,8 @@ object TaskReminders {
         val content = PendingIntent.getActivity(context, 0, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val owner = when(task.owner) { Owner.Me -> state.preferences.myName; Owner.You -> state.preferences.partnerName; Owner.Together -> "Together" }
         val description = "$owner · ${dayText(task.day)} · ${timeText(task.minute)} · ${task.repeat.label}"
-        val notification = NotificationCompat.Builder(context, CHANNEL)
-            .setSmallIcon(R.drawable.ic_task_reminder).setContentTitle(task.title).setContentText(description)
+        val notification = NotificationCompat.Builder(context, NotificationSounds.ensure(context,CHANNEL,"Ongoing task reminders",NotificationManager.IMPORTANCE_DEFAULT))
+            .setSmallIcon(R.drawable.ic_pipo_notification).setLargeIcon(ai.mwm.client.cloud.NotificationArtwork.logo(context)).setContentTitle(task.title).setContentText(description)
             .setStyle(NotificationCompat.BigTextStyle().bigText("$description\n${task.note}\nComplete this task to clear its reminder."))
             .setSubText(state.preferences.style)
             .setContentIntent(content).setDeleteIntent(pending(context, DISMISS, task))

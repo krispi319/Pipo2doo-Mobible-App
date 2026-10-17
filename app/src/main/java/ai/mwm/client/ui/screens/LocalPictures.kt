@@ -50,18 +50,14 @@ fun bundledPicture(photo: String): Int? = when(photo) {
     val resource = bundledPicture(photo)
     if(resource != null) Image(painterResource(resource), "Sample picture", modifier, contentScale = ContentScale.Crop)
     else {
-        val bitmap by produceState<android.graphics.Bitmap?>(null, photo, connection.uid, connection.generation, connection.online, connection.connected) {
-            value = withContext(Dispatchers.IO) { runCatching {
-                if(photo.startsWith("cloud:")) {if(!connection.connected || !connection.online)return@runCatching null;val bytes=ai.mwm.client.cloud.PipoFirebase.get(context).readPhoto(photo);return@runCatching BitmapFactory.decodeByteArray(bytes,0,bytes.size)}
-                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                BitmapFactory.decodeFile(photo, bounds)
-                bounds.inSampleSize = (maxOf(bounds.outWidth, bounds.outHeight) / 1024).coerceAtLeast(1)
-                bounds.inJustDecodeBounds = false
-                BitmapFactory.decodeFile(photo, bounds)
-            }.getOrNull() }
+        val image=rememberSharedImage(photo,1024)
+        val bitmap=image.result.bitmap
+        if(bitmap != null) Image(bitmap.asImageBitmap(), "Saved picture", modifier, contentScale = ContentScale.Crop)
+        else Box(modifier.background(AppTheme.colors.surfaceSunken), contentAlignment = Alignment.Center) {
+            if(image.result.loading) CircularProgressIndicator(Modifier.size(24.dp),strokeWidth=2.dp)
+            else if(image.result.failed) IconButton(image.retry) {Icon(Icons.Outlined.Refresh,"Retry picture")}
+            else Icon(Icons.Outlined.Image,"No picture yet")
         }
-        if(bitmap != null) Image(bitmap!!.asImageBitmap(), "Saved picture", modifier, contentScale = ContentScale.Crop)
-        else Box(modifier.background(AppTheme.colors.surfaceSunken), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Image, "Picture unavailable") }
     }
 }
 

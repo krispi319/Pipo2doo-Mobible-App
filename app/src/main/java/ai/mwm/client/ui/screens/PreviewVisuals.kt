@@ -30,13 +30,13 @@ import androidx.compose.ui.unit.*
         Box {
             DashedRule(Modifier.padding(horizontal = 26.dp).offset(y = 5.dp))
             Row(Modifier.fillMaxWidth().padding(6.dp, if(slim) 8.dp else 10.dp,6.dp,if(slim) 4.dp else 8.dp)) {
-                listOf("Today" to Icons.Outlined.Home, "Upcoming" to Icons.Outlined.CalendarMonth, "Lists" to Icons.Outlined.Checklist, "Progress" to Icons.Outlined.BarChart, "Us" to Icons.Outlined.PersonOutline).forEach { (name, icon) ->
+                listOf("Today" to Icons.Outlined.Home, "Upcoming" to Icons.Outlined.CalendarMonth, "Lists" to Icons.Outlined.Checklist, "Care" to Icons.Outlined.FavoriteBorder, "Progress" to Icons.Outlined.BarChart, "Us" to Icons.Outlined.PersonOutline).forEach { (name, icon) ->
                     Column(Modifier.weight(1f).selectable(selected == name, role = Role.Tab) { onSelect(name) }.padding(top = 4.dp,bottom = 2.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Box(Modifier.size(56.dp,32.dp).offset(y = if(selected == name) (-2).dp else 0.dp).background(if(selected == name) c.primary.copy(alpha = .38f).compositeOver(c.surfaceElevated) else Color.Transparent,CircleShape), contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(44.dp,32.dp).offset(y = if(selected == name) (-2).dp else 0.dp).background(if(selected == name) c.primary.copy(alpha = .38f).compositeOver(c.surfaceElevated) else Color.Transparent,CircleShape), contentAlignment = Alignment.Center) {
                             Icon(icon,name,Modifier.size(22.dp),tint = if(selected == name) c.textPrimary else c.textSecondary)
                             if(selected == name) Row(Modifier.align(Alignment.TopEnd).offset(x = (-9).dp,y = (-2).dp)) { Box(Modifier.size(8.dp).background(c.secondary,CircleShape)); Box(Modifier.offset(x = (-3).dp).size(8.dp).background(c.accent,CircleShape)) }
                         }
-                        PText(name,style = MaterialTheme.typography.labelSmall,muted = selected != name)
+                        Text(if(name=="Upcoming") "Plan" else name,style = MaterialTheme.typography.labelSmall,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis,color=if(selected==name) c.textPrimary else c.textSecondary)
                     }
                 }
             }

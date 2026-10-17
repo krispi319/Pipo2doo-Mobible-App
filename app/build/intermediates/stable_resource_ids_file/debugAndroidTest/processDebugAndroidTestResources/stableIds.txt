@@ -1,0 +1,1 @@
+ai.mwm.android_2ebb28d1_fa04_4d16_89bf_06b0a18eff09.test:string/app_name = 0x7f010000

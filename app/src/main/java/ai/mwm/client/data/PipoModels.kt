@@ -28,7 +28,12 @@ data class Task(
     val done: Boolean get() = status == TaskStatus.Done
     fun dueAt(zone: ZoneId = ZoneId.systemDefault()): Long = LocalDate.ofEpochDay(day)
         .atTime(LocalTime.of((minute ?: 540) / 60, (minute ?: 540) % 60)).atZone(zone).toInstant().toEpochMilli()
-    fun reminderAt(): Long = if (offset == -1) LocalDate.ofEpochDay(day).atTime(9, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() else dueAt() - offset * 60_000L
+    fun reminderAt(defaultMinute: Int = 540, zone: ZoneId = ZoneId.systemDefault()): Long {
+        val dueMinute = minute ?: defaultMinute.coerceIn(0, 1439)
+        val time = if(offset == -1) 540 else dueMinute
+        val due = LocalDate.ofEpochDay(day).atTime(time / 60, time % 60).atZone(zone).toInstant().toEpochMilli()
+        return if(offset == -1) due else due - offset * 60_000L
+    }
     val reminderKey: String get() = "$day:$minute:$offset"
 }
 data class SharedList(val id: String = newId(), val name: String, val emoji: String = "🧺", val pinned: Boolean = false, val owner: Owner = Owner.Together, val pictures: List<String> = emptyList(), val assigneeUid: String = "")

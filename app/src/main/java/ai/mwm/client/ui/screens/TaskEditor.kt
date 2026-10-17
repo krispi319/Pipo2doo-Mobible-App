@@ -43,7 +43,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 
-private val DraftSaver = listSaver<Task, Any>(save = { listOf(it.id, it.title, it.owner.name, it.day, it.minute ?: -1, it.listId, it.note, it.tags.joinToString(","), it.repeat.name, it.reminder, it.offset, it.status.name, it.completedAt, it.parentId) }, restore = { Task(id = it[0] as String, title = it[1] as String, owner = Owner.valueOf(it[2] as String), day = it[3] as Long, minute = (it[4] as Int).takeIf { m -> m >= 0 }, listId = it[5] as String, note = it[6] as String, tags = (it[7] as String).split(",").filter(String::isNotEmpty), repeat = Repeat.valueOf(it[8] as String), reminder = it[9] as Boolean, offset = it[10] as Int, status = TaskStatus.valueOf(it[11] as String), completedAt = it[12] as Long, parentId = it[13] as String) })
+private val DraftSaver = listSaver<Task, Any>(save = { listOf(it.id, it.title, it.owner.name, it.day, it.minute ?: -1, it.listId, it.note, org.json.JSONArray(it.tags).toString(), it.repeat.name, it.reminder, it.offset, it.status.name, it.completedAt, it.parentId, it.assigneeUid) }, restore = { Task(id = it[0] as String, title = it[1] as String, owner = Owner.valueOf(it[2] as String), day = it[3] as Long, minute = (it[4] as Int).takeIf { m -> m >= 0 }, listId = it[5] as String, note = it[6] as String, tags = runCatching { org.json.JSONArray(it[7] as String).let { a -> (0 until a.length()).map { index -> a.getString(index) } } }.getOrElse { _ -> (it[7] as String).split(",").filter(String::isNotEmpty) }, repeat = Repeat.valueOf(it[8] as String), reminder = it[9] as Boolean, offset = it[10] as Int, status = TaskStatus.valueOf(it[11] as String), completedAt = it[12] as Long, parentId = it[13] as String, assigneeUid = it.getOrNull(14) as? String ?: "") })
 
 fun pickDay(context: android.content.Context, day: Long, onSelect: (Long) -> Unit) {
     val date = LocalDate.ofEpochDay(day)
@@ -69,12 +69,12 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
     var saveError by remember { mutableStateOf<String?>(null) }
     val presetOffsets = listOf(0, 10, 30, 60, 120, 1440, 2880)
     var customReminder by rememberSaveable { mutableStateOf(draft.offset !in presetOffsets) }
-    var customAmount by rememberSaveable { mutableIntStateOf(if(draft.offset >= 1440) draft.offset / 1440 else draft.offset.coerceAtLeast(1)) }
-    var customUnit by rememberSaveable { mutableIntStateOf(if(draft.offset >= 1440) 2 else 0) }
-    var customAt by rememberSaveable { mutableIntStateOf(if(draft.offset > 0) ((draft.minute ?: 540) - draft.offset % 1440 + 1440) % 1440 else 540) }
+    var customAmount by rememberSaveable { mutableIntStateOf(draft.offset.coerceAtLeast(1)) }
+    var customUnit by rememberSaveable { mutableIntStateOf(0) }
+    var customAt by rememberSaveable { mutableIntStateOf(draft.minute ?: state.preferences.defaultReminderTime) }
     fun updateCustom(amount: Int = customAmount, unit: Int = customUnit, at: Int = customAt) {
-        customAmount = amount; customUnit = unit; customAt = at; customReminder = true
-        val offset = when(unit) { 0 -> amount; 1 -> amount * 60; else -> amount * 1440 + (draft.minute ?: 540) - at }
+        customAmount = amount.coerceIn(1, if(unit == 2) 29 else if(unit == 1) 720 else 43200); customUnit = unit; customAt = at; customReminder = true
+        val offset = when(unit) { 0 -> customAmount; 1 -> customAmount * 60; else -> customAmount * 1440 + (draft.minute ?: state.preferences.defaultReminderTime) - at }
         draft = draft.copy(offset = offset.coerceIn(0, 43200))
     }
     fun updateTime(minute: Int?) {
@@ -169,7 +169,7 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
                                     Row(Modifier.fillMaxWidth().padding(bottom = if(row == 0) 8.dp else 0.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         labels.forEachIndexed { col, label ->
                                             val index = row * 4 + col
-                                            TaskReminderPreset(label, when(index) { 0 -> timeText(draft.minute ?: 540); 5, 6 -> "Same time"; 7 -> ""; else -> "Before" }, if(index == 7) customReminder else !customReminder && draft.offset == presetOffsets[index], Modifier.weight(1f)) {
+                                            TaskReminderPreset(label, when(index) { 0 -> timeText(draft.minute ?: state.preferences.defaultReminderTime); 5, 6 -> "Same time"; 7 -> ""; else -> "Before" }, if(index == 7) customReminder else !customReminder && draft.offset == presetOffsets[index], Modifier.weight(1f)) {
                                                 if(index == 7) updateCustom() else { customReminder = false; draft = draft.copy(offset = presetOffsets[index]) }
                                             }
                                         }
@@ -201,10 +201,10 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
                                         }
                                     }
                                 }
-                                val fire = java.time.Instant.ofEpochMilli(draft.reminderAt()).atZone(java.time.ZoneId.systemDefault())
+                                val fire = java.time.Instant.ofEpochMilli(draft.reminderAt(state.preferences.defaultReminderTime)).atZone(java.time.ZoneId.systemDefault())
                                 Row(Modifier.fillMaxWidth().padding(top = 12.dp).drawBehind { drawLine(c.separator, Offset.Zero, Offset(size.width, 0f), 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx()))) }.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Icon(Icons.Outlined.NotificationsNone, null, Modifier.size(18.dp), tint = c.textPrimary)
-                                    PText("Nudge at ${fire.format(DateTimeFormatter.ofPattern("h:mm a, EEE d MMM", Locale.ENGLISH))}", style = MaterialTheme.typography.bodyMedium)
+                                    PText("Nudge at ${fire.format(DateTimeFormatter.ofPattern("h:mm a, EEE d MMM", Locale.ENGLISH))} · Quiet hours may delay delivery", style = MaterialTheme.typography.bodyMedium)
                                 }
                                 val allowed = TaskReminders.allowed(context)
                                 Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -274,19 +274,35 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
     if(confirmClearNote) AlertDialog(onDismissRequest = { confirmClearNote = false }, title = { PText("Clear this note?") }, text = { PText("Your task will stay. The note will be removed when you save.") }, confirmButton = { OutlinedButton({ draft = draft.copy(note = ""); confirmClearNote = false }) { PText("Clear note") } }, dismissButton = { OutlinedButton({ confirmClearNote = false }) { PText("Keep note") } })
 }
 
-@Composable fun TagManager(state: PipoState, onSave: (Tag) -> Unit, onDelete: (String) -> Unit, onClose: () -> Unit) {
+@Composable fun TagManager(state: PipoState, onSave: (Tag, (String?) -> Unit) -> Unit, onDelete: (String, (String?) -> Unit) -> Unit, onClose: () -> Unit) {
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     var name by rememberSaveable { mutableStateOf("") }
     var deleteId by rememberSaveable { mutableStateOf<String?>(null) }
     val duplicate = state.tags.any { it.id != editingId && it.name.equals(name.trim(), true) }
-    AlertDialog(onDismissRequest = onClose, title = { PText("Set tags", style = MaterialTheme.typography.titleLarge) }, text = {
+    AlertDialog(onDismissRequest = { if(!busy) onClose() }, title = { PText("Set tags", style = MaterialTheme.typography.titleLarge) }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             PText("Create, rename or remove tags. Removing a tag also removes it from your tasks.", style = MaterialTheme.typography.bodySmall, muted = true)
-            LazyColumn(Modifier.heightIn(max = 240.dp)) { items(state.tags, key = { it.id }) { tag -> Row(verticalAlignment = Alignment.CenterVertically) { OutlinedButton({ editingId = tag.id; name = tag.name }, Modifier.weight(1f)) { PText(tag.name) }; IconButton({ deleteId = tag.id }) { Icon(Icons.Outlined.DeleteOutline, "Delete ${tag.name}") } } } }
-            OutlinedTextField(name, { name = it.take(30) }, label = { PText(if(editingId == null) "New tag" else "Rename tag") }, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences), singleLine = true, isError = duplicate, supportingText = { if(duplicate) PText("That tag already exists.") })
-            Row { Button({ onSave(Tag(editingId ?: newId(), name)); name = ""; editingId = null }, enabled = name.isNotBlank() && !duplicate) { PText(if(editingId == null) "Add tag" else "Rename") }; if(editingId != null) OutlinedButton({ editingId = null; name = "" }) { PText("Cancel edit") } }
+            LazyColumn(Modifier.heightIn(max = 240.dp)) { items(state.tags, key = { it.id }) { tag -> Row(verticalAlignment = Alignment.CenterVertically) { OutlinedButton({ editingId = tag.id; name = tag.name }, Modifier.weight(1f), enabled = !busy) { PText(tag.name) }; IconButton({ deleteId = tag.id }, enabled = !busy) { Icon(Icons.Outlined.DeleteOutline, "Delete ${tag.name}") } } } }
+            OutlinedTextField(name, { name = it.take(30) }, enabled = !busy, label = { PText(if(editingId == null) "New tag" else "Rename tag") }, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences), singleLine = true, isError = duplicate, supportingText = { if(duplicate) PText("That tag already exists.") })
+            Row {
+                Button({
+                    busy = true; error = null
+                    onSave(Tag(editingId ?: newId(), name.trim())) { failure ->
+                        busy = false
+                        if(failure == null) { name = ""; editingId = null } else error = failure
+                    }
+                }, enabled = !busy && name.isNotBlank() && !duplicate) { PText(if(busy) "Saving…" else if(editingId == null) "Add tag" else "Rename") }
+                if(editingId != null) OutlinedButton({ editingId = null; name = "" }, enabled = !busy) { PText("Cancel edit") }
+            }
+            error?.let { PText(it, style = MaterialTheme.typography.bodySmall) }
         }
-    }, confirmButton = { OutlinedButton(onClose) { PText("Done") } })
-    deleteId?.let { id -> AlertDialog(onDismissRequest = { deleteId = null }, title = { PText("Remove tag?") }, text = { PText("Your tasks will stay, without this tag.") }, confirmButton = { OutlinedButton({ onDelete(id); if(editingId == id) { editingId = null; name = "" }; deleteId = null }) { PText("Remove") } }, dismissButton = { OutlinedButton({ deleteId = null }) { PText("Cancel") } }) }
+    }, confirmButton = { OutlinedButton(onClose, enabled = !busy) { PText("Done") } })
+    deleteId?.let { id -> AlertDialog(onDismissRequest = { deleteId = null }, title = { PText("Remove tag?") }, text = { PText("Your tasks will stay, without this tag.") }, confirmButton = { OutlinedButton({ busy = true; error = null; deleteId = null
+        onDelete(id) { failure ->
+            busy = false
+            if(failure == null) { if(editingId == id) { editingId = null; name = "" } } else error = failure
+        } }) { PText("Remove") } }, dismissButton = { OutlinedButton({ deleteId = null }) { PText("Cancel") } }) }
 }
 

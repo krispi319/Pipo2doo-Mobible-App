@@ -1,0 +1,15 @@
+READ_FIRST_v1.1.4.md
+app/build.gradle.kts
+app/src/main/java/ai/mwm/client/cloud/PartnerSync.kt
+app/src/main/java/ai/mwm/client/data/PipoModels.kt
+app/src/main/java/ai/mwm/client/data/PipoRepository.kt
+app/src/main/java/ai/mwm/client/reminders/TaskReminders.kt
+app/src/main/java/ai/mwm/client/ui/screens/HomeScreen.kt
+app/src/main/java/ai/mwm/client/ui/screens/ListEditor.kt
+app/src/main/java/ai/mwm/client/ui/screens/SettingsScreens.kt
+app/src/main/java/ai/mwm/client/ui/screens/TaskEditor.kt
+app/src/test/kotlin/ai/mwm/client/data/RepositoryRegressionTest.kt
+app/src/test/kotlin/ai/mwm/client/data/TaskModelRegressionTest.kt
+backend/supabase/photo_storage.sql
+backend/supabase/regression_tests.sql
+backend/supabase/validation_patch.sql

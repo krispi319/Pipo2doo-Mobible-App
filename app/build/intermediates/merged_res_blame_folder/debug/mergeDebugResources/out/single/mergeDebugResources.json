@@ -1,110 +1,118 @@
 [
     {
-        "merged": "ai.mwm.client.app-debug-56:/mipmap-mdpi_ic_launcher_foreground.webp.flat",
-        "source": "ai.mwm.client.app-main-58:/mipmap-mdpi/ic_launcher_foreground.webp"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\drawable_demo_balcony.png.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\drawable\\demo_balcony.png"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/drawable_demo_tap.png.flat",
-        "source": "ai.mwm.client.app-main-58:/drawable/demo_tap.png"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\drawable_owner_theo.png.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\drawable\\owner_theo.png"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/mipmap-xxhdpi_ic_launcher.webp.flat",
-        "source": "ai.mwm.client.app-main-58:/mipmap-xxhdpi/ic_launcher.webp"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\drawable_settings_demo_me.png.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\drawable\\settings_demo_me.png"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/mipmap-hdpi_ic_launcher_foreground.webp.flat",
-        "source": "ai.mwm.client.app-main-58:/mipmap-hdpi/ic_launcher_foreground.webp"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\mipmap-xxhdpi_ic_launcher.webp.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\mipmap-xxhdpi\\ic_launcher.webp"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/mipmap-xxhdpi_ic_launcher_foreground.webp.flat",
-        "source": "ai.mwm.client.app-main-58:/mipmap-xxhdpi/ic_launcher_foreground.webp"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\mipmap-hdpi_ic_launcher.webp.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\mipmap-hdpi\\ic_launcher.webp"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/drawable_owner_theo.png.flat",
-        "source": "ai.mwm.client.app-main-58:/drawable/owner_theo.png"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\drawable_profile_mina.png.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\drawable\\profile_mina.png"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/drawable_demo_locket.png.flat",
-        "source": "ai.mwm.client.app-main-58:/drawable/demo_locket.png"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\drawable_owner_mina.png.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\drawable\\owner_mina.png"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/drawable_owner_mina.png.flat",
-        "source": "ai.mwm.client.app-main-58:/drawable/owner_mina.png"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\drawable_demo_travel.png.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\drawable\\demo_travel.png"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/mipmap-mdpi_ic_launcher.webp.flat",
-        "source": "ai.mwm.client.app-main-58:/mipmap-mdpi/ic_launcher.webp"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\mipmap-xhdpi_ic_launcher_foreground.webp.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\mipmap-xhdpi\\ic_launcher_foreground.webp"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/mipmap-xhdpi_ic_launcher_foreground.webp.flat",
-        "source": "ai.mwm.client.app-main-58:/mipmap-xhdpi/ic_launcher_foreground.webp"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\drawable_profile_partner.png.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\drawable\\profile_partner.png"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/drawable_settings_demo_partner.png.flat",
-        "source": "ai.mwm.client.app-main-58:/drawable/settings_demo_partner.png"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\xml_data_extraction_rules.xml.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\xml\\data_extraction_rules.xml"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/drawable_settings_demo_me.png.flat",
-        "source": "ai.mwm.client.app-main-58:/drawable/settings_demo_me.png"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\mipmap-mdpi_ic_launcher_foreground.webp.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\mipmap-mdpi\\ic_launcher_foreground.webp"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/drawable_demo_balcony.png.flat",
-        "source": "ai.mwm.client.app-main-58:/drawable/demo_balcony.png"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\mipmap-mdpi_ic_launcher.webp.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\mipmap-mdpi\\ic_launcher.webp"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/xml_backup_rules.xml.flat",
-        "source": "ai.mwm.client.app-main-58:/xml/backup_rules.xml"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\mipmap-anydpi_ic_launcher.xml.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\mipmap-anydpi\\ic_launcher.xml"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/drawable_profile_partner.png.flat",
-        "source": "ai.mwm.client.app-main-58:/drawable/profile_partner.png"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\mipmap-hdpi_ic_launcher_foreground.webp.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\mipmap-hdpi\\ic_launcher_foreground.webp"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/mipmap-hdpi_ic_launcher.webp.flat",
-        "source": "ai.mwm.client.app-main-58:/mipmap-hdpi/ic_launcher.webp"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\mipmap-xxxhdpi_ic_launcher.webp.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\mipmap-xxxhdpi\\ic_launcher.webp"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/drawable_ic_task_reminder.xml.flat",
-        "source": "ai.mwm.client.app-main-58:/drawable/ic_task_reminder.xml"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\mipmap-xxxhdpi_ic_launcher_foreground.webp.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\mipmap-xxxhdpi\\ic_launcher_foreground.webp"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/drawable_demo_movie.png.flat",
-        "source": "ai.mwm.client.app-main-58:/drawable/demo_movie.png"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\drawable_demo_movie.png.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\drawable\\demo_movie.png"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/mipmap-anydpi_ic_launcher.xml.flat",
-        "source": "ai.mwm.client.app-main-58:/mipmap-anydpi/ic_launcher.xml"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\drawable_demo_scarf.png.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\drawable\\demo_scarf.png"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/mipmap-xxxhdpi_ic_launcher_foreground.webp.flat",
-        "source": "ai.mwm.client.app-main-58:/mipmap-xxxhdpi/ic_launcher_foreground.webp"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\drawable_settings_demo_partner.png.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\drawable\\settings_demo_partner.png"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/mipmap-xhdpi_ic_launcher.webp.flat",
-        "source": "ai.mwm.client.app-main-58:/mipmap-xhdpi/ic_launcher.webp"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\drawable_ic_task_reminder.xml.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\drawable\\ic_task_reminder.xml"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/drawable_demo_scarf.png.flat",
-        "source": "ai.mwm.client.app-main-58:/drawable/demo_scarf.png"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\drawable_demo_locket.png.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\drawable\\demo_locket.png"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/drawable_demo_travel.png.flat",
-        "source": "ai.mwm.client.app-main-58:/drawable/demo_travel.png"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\xml_backup_rules.xml.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\xml\\backup_rules.xml"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/mipmap-xxxhdpi_ic_launcher.webp.flat",
-        "source": "ai.mwm.client.app-main-58:/mipmap-xxxhdpi/ic_launcher.webp"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\mipmap-xxhdpi_ic_launcher_foreground.webp.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\mipmap-xxhdpi\\ic_launcher_foreground.webp"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/drawable_ic_launcher_background.xml.flat",
-        "source": "ai.mwm.client.app-main-58:/drawable/ic_launcher_background.xml"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\mipmap-xhdpi_ic_launcher.webp.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\mipmap-xhdpi\\ic_launcher.webp"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/drawable_profile_mina.png.flat",
-        "source": "ai.mwm.client.app-main-58:/drawable/profile_mina.png"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\drawable_demo_tap.png.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\drawable\\demo_tap.png"
     },
     {
-        "merged": "ai.mwm.client.app-debug-56:/xml_data_extraction_rules.xml.flat",
-        "source": "ai.mwm.client.app-main-58:/xml/data_extraction_rules.xml"
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\drawable_ic_pipo_notification.xml.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\drawable\\ic_pipo_notification.xml"
+    },
+    {
+        "merged": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-debug-56:\\drawable_ic_launcher_background.xml.flat",
+        "source": "C:\\Users\\anngo\\.gradle\\daemon\\9.2.1\\ai.mwm.client.app-main-58:\\drawable\\ic_launcher_background.xml"
+    },
+    {
+        "merged": "ai.mwm.client.app-debug-56:/raw_pi_style.mp3.flat",
+        "source": "ai.mwm.client.app-main-58:/raw/pi_style.mp3"
     }
 ]

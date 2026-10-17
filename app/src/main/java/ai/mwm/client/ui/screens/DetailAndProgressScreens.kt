@@ -69,6 +69,7 @@ import java.util.Locale
             }}
             item {Sticky(Modifier.padding(start=52.dp,end=12.dp,top=26.dp,bottom=8.dp)) {PText("Little note",style=MaterialTheme.typography.labelSmall,muted=true);PText(task.note.ifBlank {"No note"});ApprovedCat(Modifier.size(64.dp,38.dp),"note")}}
             item {Paper(Modifier.padding(20.dp)) {PText("When & nudges",style=MaterialTheme.typography.titleMedium);PText("${dayText(task.day)} · ${timeText(task.minute)} · ${task.repeat.label}");PText("Lives in ${state.lists.find {it.id==task.listId}?.name ?: "a list"}",muted=true);PText("Your partner's personal reminders are private.",style=MaterialTheme.typography.bodySmall,muted=true)}}
+            if(!task.done) item { Box(Modifier.padding(horizontal=20.dp)) { PokeButton(state.preferences.partnerName,task) } }
             if(task.done) item {Button({onThanks(task.title)},Modifier.fillMaxWidth().padding(20.dp)) {PText("Send ${state.preferences.partnerName} a thank-you")}}
         }
         return
@@ -123,7 +124,7 @@ import java.util.Locale
             }
         } }
         item { Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { PText("Little history", style = MaterialTheme.typography.titleMedium); Seam(Modifier.fillMaxWidth()) {Column(Modifier.fillMaxWidth()) {task.events.sortedByDescending { it.at }.take(10).forEach { event -> Row(Modifier.fillMaxWidth().padding(vertical=7.dp), horizontalArrangement = if(event.owner == Owner.You) Arrangement.End else Arrangement.Start) { Column(Modifier.fillMaxWidth(.45f),horizontalAlignment=if(event.owner==Owner.You) Alignment.Start else Alignment.End) { PText(event.text, style = MaterialTheme.typography.bodySmall.copy(fontWeight=FontWeight.SemiBold),align=if(event.owner==Owner.You) TextAlign.Start else TextAlign.End); PText(Instant.ofEpochMilli(event.at).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("EEE, d MMM · h:mm a", Locale.getDefault())), style = MaterialTheme.typography.bodySmall, muted = true,align=if(event.owner==Owner.You) TextAlign.Start else TextAlign.End) } } }} } } }
-        item { Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { if(!task.done) Button(onToggle, Modifier.fillMaxWidth().height(52.dp)) { PText("Mark complete") }; if(!task.done && task.owner != Owner.Me) PokeButton(state.preferences.partnerName); if(task.done) Button({ onThanks(task.title) }, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = AppTheme.colors.accent)) { Icon(Icons.Outlined.FavoriteBorder,null,Modifier.size(22.dp));Spacer(Modifier.width(8.dp));PText("Send ${state.preferences.partnerName} a thank-you") }; OutlinedButton({ confirmDelete = true }, Modifier.align(Alignment.End),border=BorderStroke(1.5.dp,AppTheme.colors.error),colors=ButtonDefaults.outlinedButtonColors(contentColor=AppTheme.colors.error)) { Text("Delete task") } } }
+        item { Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { if(!task.done) Button(onToggle, Modifier.fillMaxWidth().height(52.dp)) { PText("Mark complete") }; if(!task.done && task.owner != Owner.Me) PokeButton(state.preferences.partnerName, task); if(task.done) Button({ onThanks(task.title) }, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = AppTheme.colors.accent)) { Icon(Icons.Outlined.FavoriteBorder,null,Modifier.size(22.dp));Spacer(Modifier.width(8.dp));PText("Send ${state.preferences.partnerName} a thank-you") }; OutlinedButton({ confirmDelete = true }, Modifier.align(Alignment.End),border=BorderStroke(1.5.dp,AppTheme.colors.error),colors=ButtonDefaults.outlinedButtonColors(contentColor=AppTheme.colors.error)) { Text("Delete task") } } }
     }
     if(move) AlertDialog(onDismissRequest = { move = false }, title = { PText("Move to a list") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -186,68 +187,8 @@ import java.util.Locale
     }
 }
 
-@Composable fun AppreciationScreen(state: PipoState, taskTitle: String, onBack: () -> Unit, onDeleteNote: (String) -> Unit = {}, onSend: (String, String, String, String) -> Unit) {
-    val connection=ai.mwm.client.cloud.LocalPartnerConnection.current
-    var deleteExample by rememberSaveable { mutableStateOf<String?>(null) }
-    var kind by rememberSaveable { mutableStateOf("Thank you") }
-    var promptVisible by rememberSaveable(taskTitle) { mutableStateOf(taskTitle.isNotBlank()) }
-    var picture by rememberSaveable {mutableStateOf("")}
-    val pickPicture=rememberPhotoPicker {picture=it}
-    var message by rememberSaveable { mutableStateOf("") }
-    val weekStart = LocalDate.now().minusDays(6).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-    val notes = state.notes.filter { it.at >= weekStart && !it.sample }
-    Column(Modifier.fillMaxSize().imePadding()) {
-        BackBar("Back", onBack) { Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(30.dp)) {PText("Appreciation",style=MaterialTheme.typography.titleMedium);Badge(if(connection.connected) "Shared space" else "Local mode")} }
-        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 24.dp)) {
-            item {
-                val c = AppTheme.colors
-                Surface(Modifier.padding(16.dp,10.dp),shape=RoundedCornerShape(3.dp,3.dp,14.dp,14.dp),color=c.surface,border=BorderStroke(1.dp,c.separator),shadowElevation=4.dp) {
-                    Box {
-                        Canvas(Modifier.fillMaxWidth().height(64.dp)) { drawPath(Path().apply {moveTo(0f,0f);lineTo(size.width,0f);lineTo(size.width/2,size.height);close()},c.primary.copy(alpha=.22f).compositeOver(c.surface)) }
-                        PawStamp(Modifier.align(Alignment.TopCenter).offset(y=44.dp).size(40.dp),c.secondary)
-                        Column(Modifier.padding(20.dp,64.dp,20.dp,18.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                            PText("Dear ${state.preferences.myName} & ${state.preferences.partnerName},",muted=true,style=MaterialTheme.typography.bodyMedium.copy(fontStyle=androidx.compose.ui.text.font.FontStyle.Italic))
-                            PText("A soft week — ${notes.size} kind notes ${if(connection.connected) "in our shared space" else "saved on this phone"}",style=MaterialTheme.typography.titleLarge)
-                            Row(Modifier.fillMaxWidth().padding(top=8.dp),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {Column {PText(notes.count {it.owner==Owner.Me}.toString(),style=MaterialTheme.typography.headlineLarge.copy(fontWeight=FontWeight.Light));PText("${state.preferences.myName} saved",style=MaterialTheme.typography.labelSmall,muted=true)};Duo(44.dp,middle=notes.size.toString());Column(horizontalAlignment=Alignment.End) {PText(notes.count {it.owner==Owner.You}.toString(),style=MaterialTheme.typography.headlineLarge.copy(fontWeight=FontWeight.Light));PText("${state.preferences.partnerName} ${if(connection.connected) "shared" else "received · Unavailable"}",style=MaterialTheme.typography.labelSmall,muted=true)} }
-                            DashedRule(Modifier.padding(top=6.dp));PText(if(connection.connected) "Synced notes · No read receipts" else "Kind notes saved on this device",style=MaterialTheme.typography.bodySmall,muted=true)
-                        }
-                    }
-                }
-            }
-            if(promptVisible) item { Sticky(Modifier.padding(24.dp), color = AppTheme.colors.secondary) { PText("A little thank-you?", style = MaterialTheme.typography.titleMedium); PText(taskTitle); Row { Button({ kind = "Thank you"; promptVisible = false }) { PText("Say thanks") }; OutlinedButton({ promptVisible = false }) { PText("Later") } } } }
-            items(state.notes.sortedBy { it.at }, key = { it.id }) { note ->
-                Seam {
-                    val partner = note.owner == Owner.You
-                    val c = AppTheme.colors
-                    val color = if(partner) c.accent else c.primary
-                    Box(Modifier.fillMaxWidth().padding(vertical=10.dp)) {
-                        Surface(Modifier.fillMaxWidth(.8f).align(if(partner) Alignment.CenterEnd else Alignment.CenterStart),shape=if(partner) RoundedCornerShape(20.dp,0.dp,0.dp,20.dp) else RoundedCornerShape(0.dp,20.dp,20.dp,0.dp),color=color.copy(alpha=if(partner) .24f else .28f).compositeOver(c.surface),shadowElevation=1.dp) {
-                            Column(Modifier.padding(if(partner) 30.dp else 20.dp,16.dp,if(partner) 20.dp else 30.dp,14.dp),verticalArrangement=Arrangement.spacedBy(6.dp),horizontalAlignment=if(partner) Alignment.End else Alignment.Start) {
-                                PText(note.kind,style=MaterialTheme.typography.titleLarge)
-                                if(note.message.isNotBlank()) PText(note.message,align=if(partner) TextAlign.End else TextAlign.Start)
-                                if(note.taskTitle.isNotBlank()) Badge("For · ${note.taskTitle}",c.surface)
-                                if(note.picture.isNotBlank()) LocalPicture(note.picture,Modifier.fillMaxWidth().height(140.dp))
-                                if(note.sample) Badge("Sample · Not sent or received")
-                                PText("${if(partner) state.preferences.partnerName else state.preferences.myName} · ${Instant.ofEpochMilli(note.at).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("h:mm a",Locale.getDefault()))}",style=MaterialTheme.typography.labelSmall,muted=true)
-                                if(note.sample) OutlinedButton({deleteExample = note.id},contentPadding=PaddingValues(0.dp)) {Icon(Icons.Outlined.DeleteOutline,null,Modifier.size(16.dp));PText("Delete example",style=MaterialTheme.typography.bodySmall)}
-                                else Surface(color=c.secondary.copy(alpha=.34f).compositeOver(c.surface),shape=CircleShape) {Row(Modifier.padding(6.dp,2.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(4.dp)) {Icon(Icons.Outlined.CheckCircle,null,Modifier.size(16.dp),tint=c.secondary);PText(if(connection.connected) "Shared" else "Saved",style=MaterialTheme.typography.bodySmall.copy(fontWeight=FontWeight.Bold))} }
-                            }
-                        }
-                        PawStamp(Modifier.align(if(partner) Alignment.TopStart else Alignment.TopEnd).padding(start=if(partner) 64.dp else 0.dp,end=if(partner) 0.dp else 64.dp).offset(y=(-10).dp).size(32.dp),color)
-                    }
-                }
-            }
-        }
-        Surface(color = AppTheme.colors.surfaceElevated, shape = RoundedCornerShape(28.dp,28.dp,0.dp,0.dp), shadowElevation = 8.dp) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            PText("To ${state.preferences.partnerName}${if(taskTitle.isBlank()) "" else " · For $taskTitle"}", style = MaterialTheme.typography.labelSmall, muted = true)
-            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {listOf("Thank you","You're the best","Purr-fect").forEachIndexed {index,value->Surface(onClick={kind=value},modifier=Modifier.weight(1f),shape=RoundedCornerShape(14.dp),color=if(kind==value) AppTheme.colors.primary.copy(alpha=.3f).compositeOver(AppTheme.colors.surface) else AppTheme.colors.surface,border=BorderStroke(if(kind==value) 2.dp else 1.dp,if(kind==value) AppTheme.colors.primary else AppTheme.colors.separator)) {Column(Modifier.padding(6.dp,10.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(6.dp)) {Icon(when(index) {0->Icons.Outlined.FavoriteBorder;1->Icons.Outlined.StarOutline;else->Icons.Outlined.Pets},null,Modifier.size(28.dp));PText(value,style=MaterialTheme.typography.labelSmall,align=TextAlign.Center)}}} }
-            Row(verticalAlignment=Alignment.CenterVertically) {OutlinedIconButton(pickPicture) {Icon(Icons.Outlined.AddPhotoAlternate,"Add a picture")};OutlinedTextField(message,{message=it.take(240)},Modifier.weight(1f),placeholder={PText("Add a little note (optional)")},maxLines=3,shape=RoundedCornerShape(12.dp))}
-            if(picture.isNotBlank()) Row(verticalAlignment=Alignment.CenterVertically) {LocalPicture(picture,Modifier.size(60.dp));OutlinedButton({picture=""}) {PText("Remove picture")}}
-            Button({onSend(kind,message,taskTitle,picture);message="";picture=""},Modifier.fillMaxWidth().heightIn(min=48.dp),enabled=!connection.busy && (!connection.connected || connection.online)) {Icon(Icons.Outlined.FavoriteBorder,null,Modifier.size(20.dp));Spacer(Modifier.width(8.dp));PText("${if(connection.connected) "Share" else "Save"} a thank-you for ${state.preferences.partnerName}")}
-            Surface(color=AppTheme.colors.surfaceSunken,shape=RoundedCornerShape(8.dp)) {PText(if(connection.connected) "Uploads only this note and optional picture. A shared note appears after server confirmation." else "Local mode · Saved here, not delivered to another phone.",Modifier.padding(10.dp,6.dp),MaterialTheme.typography.bodySmall,true)}
-        } }
-    }
-    deleteExample?.let { id -> AlertDialog(onDismissRequest = { deleteExample = null }, title = { PText("Delete this example?") }, text = { PText("This little note will be removed from this device.") }, confirmButton = { OutlinedButton({ onDeleteNote(id); deleteExample = null }) { PText("Delete") } }, dismissButton = { OutlinedButton({ deleteExample = null }) { PText("Keep note") } }) }
+@Composable fun AppreciationScreen(state: PipoState, taskTitle: String, onBack: () -> Unit, onDeleteNote: (String) -> Unit = {}, onSend: (String, String, String, String, String, (String?)->Unit) -> Unit) {
+    CuteChatScreen(state,taskTitle,onBack,onDeleteNote,onSend)
 }
 
 fun celebrate(context: android.content.Context, preferences: Preferences) {

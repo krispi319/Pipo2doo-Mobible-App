@@ -1,0 +1,26 @@
+{
+    "logs": [
+        {
+            "outputFile": "ai.mwm.client.test.app-mergeDebugAndroidTestResources-1:/values/values.xml",
+            "map": [
+                {
+                    "source": "D:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo-Mobible-App\\app\\build\\generated\\res\\resValues\\androidTest\\debug\\values\\gradleResValues.xml",
+                    "from": {
+                        "startLines": "6",
+                        "startColumns": "4",
+                        "startOffsets": "159",
+                        "endColumns": "66",
+                        "endOffsets": "221"
+                    },
+                    "to": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "66",
+                        "endOffsets": "117"
+                    }
+                }
+            ]
+        }
+    ]
+}

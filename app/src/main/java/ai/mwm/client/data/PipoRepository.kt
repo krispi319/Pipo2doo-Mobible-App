@@ -71,6 +71,25 @@ class PipoRepository private constructor(private val context: Context) {
             TaskReminders.sync(context,mutable.value)
         }
     }
+    /** A new couple is a new workspace. Never import the previous couple's local helpers. */
+    @Synchronized internal fun bindSharedSpace(space: String) {
+        java.util.UUID.fromString(space)
+        val previous=prefs.getString("last_shared_space","") ?: ""
+        if(previous==space) return
+        val edit=prefs.edit().putString("last_shared_space",space)
+        if(previous.isNotBlank()) {
+            val old=mutable.value.preferences
+            val p=old.startNewCouple(java.time.LocalDate.now().toEpochDay())
+            val stored=JSONObject(prefs.getString("state","{}") ?: "{}")
+            val own=(stored.optJSONObject("preferences") ?: JSONObject()).put("myName",p.myName).put("avatar",p.avatar).put("started",p.started).put("togetherSince",p.togetherSince).put("partnerName",p.partnerName).put("partnerPhoto","").put("myPhoto",p.myPhoto).put("shareProfile",false).put("code","------").put("codeExpiresAt",0)
+            stored.put("preferences",own).put("tasks",JSONArray()).put("lists",JSONArray()).put("notes",JSONArray()).put("tags",JSONArray())
+            edit.putString("state",stored.toString()).remove("private_task_notes").remove("personal_reminders")
+            check(edit.commit()) {"Could not open the new couple workspace."}
+            mutable.value=PipoState(preferences=p)
+            ai.mwm.client.cloud.PartnerPokeService.clear(context)
+            TaskReminders.sync(context,mutable.value)
+        } else check(edit.commit()) {"Could not remember your couple workspace."}
+    }
     @Synchronized internal fun savePrivateNotes(tasks: List<Task>) {
         val values=JSONObject(prefs.getString("private_task_notes","{}") ?: "{}")
         tasks.forEach { values.put(it.id,it.note) }
@@ -122,7 +141,9 @@ class PipoRepository private constructor(private val context: Context) {
     fun saveTask(task: Task) = change { s ->
         val old = s.tasks.find { it.id == task.id }
         val saved = task.copy(title = task.title.trim(), note = task.note.trim(), completedAt = if(task.done) { if(old?.done == true) old.completedAt else System.currentTimeMillis() } else 0L, events = (old?.events ?: emptyList()) + TaskEvent(if(old == null) "Created this task" else "Edited this task"))
-        s.copy(tasks = if(old == null) s.tasks + saved else s.tasks.map { if(it.id == saved.id) saved else it })
+        val tasks = if(old == null) s.tasks + saved else s.tasks.map { if(it.id == saved.id) saved else it }
+        val next = if(saved.done && old?.done != true) nextOccurrence(saved) else null
+        s.copy(tasks = tasks + if(next != null && tasks.none { it.parentId == saved.id }) listOf(next) else emptyList())
     }
     fun setStatus(id: String, status: TaskStatus) = change { s ->
         val task = s.tasks.find { it.id == id } ?: return@change s
@@ -133,11 +154,20 @@ class PipoRepository private constructor(private val context: Context) {
             s.copy(tasks = s.tasks.map { if(it.id == id) done else it } + if(next != null && s.tasks.none { it.parentId == id }) listOf(next) else emptyList())
         } else {
             // Undo removes only an untouched next occurrence, never a completed occurrence.
-            val tasks = if(task.done) s.tasks.filterNot { it.parentId == id && !it.done } else s.tasks
+            val tasks = if(task.done) s.tasks.filterNot { child ->
+                child.parentId == id && child.status == TaskStatus.Todo && child.events.size == 1 &&
+                    child.events.first().text.startsWith("Next ") && s.tasks.none { it.parentId == child.id }
+            } else s.tasks
             s.copy(tasks = tasks.map { if(it.id == id) it.copy(status = status, completedAt = 0, events = it.events + TaskEvent(if(task.done) "Reopened this task" else "Started this task")) else it })
         }
     }
-    fun deleteTask(id: String) = change { it.copy(tasks = it.tasks.filterNot { t -> t.id == id }) }
+    fun deleteTask(id: String) = change { state ->
+        val deleted = state.tasks.find { it.id == id } ?: return@change state
+        // Keep future occurrences and their history editable after deleting an ancestor.
+        state.copy(tasks = state.tasks.filterNot { it.id == id }.map {
+            if(it.parentId == id) it.copy(parentId = deleted.parentId) else it
+        })
+    }
     companion object {
         @Volatile private var instance: PipoRepository? = null
         fun get(context: Context): PipoRepository = instance ?: synchronized(this) { instance ?: PipoRepository(context.applicationContext).also { instance = it } }
@@ -166,7 +196,17 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
     fun resumeConnection() = sync.resume()
     fun pauseConnection() = sync.pause()
     fun leaveConnection() = sync.leave()
-    fun poke(task: Task) { viewModelScope.launch { runCatching { sync.poke(task) }.onFailure {errorState.value=ai.mwm.client.cloud.connectionError(it)}.onSuccess {errorState.value="Poke accepted by the server. Delivery is not confirmed."} } }
+    fun poke(task: Task) { viewModelScope.launch { runCatching { sync.poke(task) }.onFailure {errorState.value=ai.mwm.client.cloud.connectionError(it)}.onSuccess { reply ->
+        errorState.value=when(reply["status"]) {
+            "provider_accepted" -> "Poke sent to the notification provider. Phone delivery is not confirmed."
+            "no_device" -> "Your partner needs to enable Receive pokes and allow Android notifications."
+            "recipient_unavailable" -> "Your partner has pokes off or is in quiet hours."
+            "cooldown" -> "Please wait 15 minutes between partner pokes."
+            "unavailable", "canceled" -> "This task is no longer available for a Poke."
+            "unknown", "pending", "sending", "queued" -> "Poke status is pending. Delivery is not confirmed."
+            else -> "Poke was not sent. Check notification setup and retry."
+        }
+    } } }
     fun clearError() { errorState.value = null }
     fun event(name: String) { runCatching { SparkApplication.spark.analytics.logEvent(type = name) } }
     fun save(task: Task) = act(after={event("task_saved")}) { repository.saveTask(task) }
@@ -199,6 +239,13 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
     fun setCode(code: String) = act { repository.change { it.copy(preferences = it.preferences.copy(code = code)) } }
     fun regenerate() = sync.connect("regenerate")
     fun saveList(list: SharedList) = act { repository.change { s -> s.copy(lists = if(s.lists.any { it.id == list.id }) s.lists.map { if(it.id == list.id) list.copy(name = list.name.trim()) else it } else s.lists + list.copy(name = list.name.trim())) } }
+    fun saveListWithResult(list: SharedList, onResult: (String?) -> Unit) = mutationWithResult(onResult) {
+        repository.change { s ->
+            require(list.name.trim().isNotBlank()) { "List name is required." }
+            val saved = list.copy(name = list.name.trim())
+            s.copy(lists = if(s.lists.any { it.id == list.id }) s.lists.map { if(it.id == list.id) saved else it } else s.lists + saved)
+        }
+    }
     fun deleteList(id: String) = act { repository.change { s -> s.copy(lists = s.lists.filterNot { it.id == id }, tasks = s.tasks.filterNot { it.listId == id }) } }
     private fun updateTag(tag: Tag) = repository.change { s ->
         val name=tag.name.trim()
@@ -216,14 +263,18 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
     fun saveTag(tag: Tag) = act { updateTag(tag) }
 
     /** Wait for the shared-tag write before selecting the tag in a new task. */
-    fun saveTagWithResult(tag: Tag, onResult: (String?) -> Unit) {
+    fun saveTagWithResult(tag: Tag, onResult: (String?) -> Unit) = mutationWithResult(onResult) { updateTag(tag) }
+    fun deleteTagWithResult(id: String, onResult: (String?) -> Unit) = mutationWithResult(onResult) {
+        repository.change { s -> s.copy(tags = s.tags.filterNot { it.id == id }, tasks = s.tasks.map { it.copy(tags = it.tags - id) }) }
+    }
+    private fun mutationWithResult(onResult: (String?) -> Unit, change: () -> Unit) {
         val account=AccountScope.current(getApplication())
         viewModelScope.launch {
             val failure=try {
                 withContext(Dispatchers.IO) {
                     sync.mutate {
-                        check(account==AccountScope.current(getApplication())){"Account changed. Retry tag creation."}
-                        updateTag(tag)
+                        check(account==AccountScope.current(getApplication())){"Account changed. Reopen this screen before saving."}
+                        change()
                     }
                 }
                 null
@@ -234,6 +285,36 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
     fun deleteTag(id: String) = act { repository.change { s -> s.copy(tags = s.tags.filterNot { it.id == id }, tasks = s.tasks.map { it.copy(tags = it.tags - id) }) } }
+    fun sendSupport(message: String,onResult: (String?)->Unit) {
+        val account=AccountScope.current(getApplication())
+        val target=connection.value.partnerUid
+        viewModelScope.launch {
+            val failure=try {
+                withContext(Dispatchers.IO) {
+                    check(connection.value.paired && message.trim().length in 1..500) {"Connect your partner and write a support note first."}
+                    sync.mutate {
+                        check(account==AccountScope.current(getApplication()) && target==connection.value.partnerUid) {"Account or partner changed. Reopen Care before sending."}
+                        repository.change {it.copy(notes=it.notes+Appreciation(kind="CareSupport",message=message.trim(),taskTitle=target))}
+                    }
+                }
+                null
+            } catch(e: kotlinx.coroutines.CancellationException) {throw e} catch(e: Exception) {ai.mwm.client.cloud.connectionError(e)}
+            onResult(failure)
+        }
+    }
+    fun sendChatNote(id: String,kind: String,message: String,taskTitle: String,picture: String,onResult: (String?)->Unit) {
+        val account=AccountScope.current(getApplication())
+        val target=connection.value.partnerUid
+        mutationWithResult(onResult) {
+            check(account==AccountScope.current(getApplication()) && target==connection.value.partnerUid) {"Account or partner changed. Reopen chat."}
+            require(kind in listOf("Message","Thank you","You're the best","Purr-fect")) {"Choose a message type."}
+            require(message.trim().length<=240 && (kind!="Message" || message.isNotBlank() || picture.isNotBlank())) {"Write a message or choose a picture."}
+            repository.change {current->
+                // The same ID is reused after an uncertain network result, avoiding duplicate messages.
+                if(current.notes.any {it.id==id}) current else current.copy(notes=current.notes+Appreciation(id=id,kind=kind,message=message.trim(),taskTitle=taskTitle,picture=picture))
+            }
+        }
+    }
     fun thank(kind: String, message: String, taskTitle: String = "", picture: String = "") = act(after={event(if(connection.value.connected) "appreciation_shared" else "appreciation_saved_local")}) { repository.change { it.copy(notes = it.notes + Appreciation(kind = kind, message = message.trim(), taskTitle = taskTitle,picture=picture)) } }
     fun deleteNote(id: String) = act { repository.change { s -> s.copy(notes = s.notes.filterNot { it.id == id }) } }
     fun syncReminders() = act { TaskReminders.sync(getApplication(), state.value, restore = true) }

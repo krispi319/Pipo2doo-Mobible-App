@@ -40,7 +40,5 @@ with check (
     )
 );
 
--- Note: shared_records must support kind='tag' and mutate_shared_record must
--- permit it under the same authenticated space-member checks as tasks/lists.
--- The active database RPC code was not included in the uploaded ZIP.
--- Do not replace the RPC or weaken RLS without auditing your actual schema.
+-- Verified on 2026-10-17: the restored shared_records schema and RPC accept tag records.
+-- Applied and policy-tested on 2026-10-17 after user approval.

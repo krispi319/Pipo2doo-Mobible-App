@@ -41,22 +41,23 @@ private val emojiLibrary=listOf(
 ).flatMap {(category,entries)->entries.map {val parts=it.split(':',limit=2);EmojiChoice(parts[0],parts[1],category)}}
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable fun ListEditor(list: SharedList?, onSave: (SharedList)->Unit, onClose: ()->Unit,preferences: Preferences=Preferences()) {
+@Composable fun ListEditor(list: SharedList?, onSave: (SharedList, (String?) -> Unit)->Unit, onClose: ()->Unit,preferences: Preferences=Preferences()) {
+    var saving by remember { mutableStateOf(false) }
+    var saveError by remember { mutableStateOf<String?>(null) }
     val context=LocalContext.current
     val recentsStore=remember {context.getSharedPreferences("pipo_emoji_recents",0)}
     val recents=remember {recentsStore.getString("icons", "🛒|🧳|🎁|🧺|🍜|🪴|🎬")!!.split('|')}
+    val draftId = rememberSaveable(list?.id) { list?.id ?: newId() }
     var name by rememberSaveable(list?.id) {mutableStateOf(list?.name ?: "")}
     var emoji by rememberSaveable(list?.id) {mutableStateOf(list?.emoji ?: "🧺")}
     var pictures by remember(list?.id) {mutableStateOf(list?.pictures ?: emptyList<String>())}
     var owner by rememberSaveable(list?.id) {mutableStateOf(list?.owner ?: Owner.Together)}
-    var query by rememberSaveable {mutableStateOf("")}
-    var category by rememberSaveable {mutableStateOf("Travel")}
-    val language=LocalAppLanguage.current
-    val choices=if(query.isNotBlank()) emojiLibrary.filter {it.name.contains(query,true)||localized(it.name,language).contains(query,true)||it.category.contains(query,true)||localized(it.category,language).contains(query,true)||it.icon.contains(query)} else if(category=="Recent") recents.map {EmojiChoice(it,"Recently used","Recent")} else emojiLibrary.filter {it.category==category}
+    var category by rememberSaveable {mutableStateOf("Recent")}
+    val choices=if(category=="Recent") recents.map {EmojiChoice(it,"Recently used","Recent")} else emojiLibrary.filter {it.category==category}
     val c = AppTheme.colors
-    ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),containerColor=c.surfaceElevated,shape=RoundedCornerShape(28.dp,28.dp,0.dp,0.dp),scrimColor=c.textPrimary.copy(alpha=.34f),dragHandle={Box(Modifier.padding(top=10.dp,bottom=2.dp).size(40.dp,4.dp).background(c.separator,CircleShape))}) {
+    ModalBottomSheet(onDismissRequest={ if(!saving) onClose() },sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),containerColor=c.surfaceElevated,shape=RoundedCornerShape(28.dp,28.dp,0.dp,0.dp),scrimColor=c.textPrimary.copy(alpha=.34f),dragHandle={Box(Modifier.padding(top=10.dp,bottom=2.dp).size(40.dp,4.dp).background(c.separator,CircleShape))}) {
         Column(Modifier.fillMaxWidth().fillMaxHeight(.90f).imePadding()) {
-            Row(Modifier.fillMaxWidth().padding(start=20.dp,end=12.dp),verticalAlignment=Alignment.CenterVertically) {PText(if(list==null) "New list" else "Edit list",Modifier.weight(1f),MaterialTheme.typography.titleLarge);TextButton(onClose) {PText("Cancel",decoration=TextDecoration.Underline)}}
+            Row(Modifier.fillMaxWidth().padding(start=20.dp,end=12.dp),verticalAlignment=Alignment.CenterVertically) {PText(if(list==null) "New list" else "Edit list",Modifier.weight(1f),MaterialTheme.typography.titleLarge);TextButton(onClose, enabled = !saving) {PText("Cancel",decoration=TextDecoration.Underline)}}
             LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(20.dp,6.dp,20.dp,16.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
                 item {
                     Surface(color=c.surface,shape=RoundedCornerShape(14.dp),border=BorderStroke(1.dp,c.separator)) {
@@ -69,20 +70,36 @@ private val emojiLibrary=listOf(
                 item {PictureActions(pictures) {pictures=it}}
                 item {ListSheetGroup {
                     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {PText("Whose list",Modifier.weight(1f),MaterialTheme.typography.labelSmall,true);Badge(if(ai.mwm.client.cloud.LocalPartnerConnection.current.connected) "Shared space" else "Local mode",c.surface)}
-                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {listOf(Owner.Me,Owner.Together,Owner.You).forEach {value ->Surface(onClick={owner=value},modifier=Modifier.weight(1f),shape=CircleShape,color=if(owner==value) ownerColor(value) else c.surface,border=if(owner==value) null else BorderStroke(1.5.dp,c.separator)) {Box(Modifier.padding(6.dp,10.dp),contentAlignment=Alignment.Center) {PText(if(value==Owner.Me) "Me" else ownerName(value,preferences),style=MaterialTheme.typography.labelLarge)}}}}
+                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {listOf(Owner.Me,Owner.Together,Owner.You).forEach {value ->Surface(onClick={owner=value},modifier=Modifier.weight(1f),shape=CircleShape,color=if(owner==value) ownerColor(value) else c.surface,border=if(owner==value) null else BorderStroke(1.5.dp,c.separator)) {Column(Modifier.padding(6.dp,10.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(5.dp)) {Icon(if(value==Owner.Together) Icons.Outlined.PeopleOutline else Icons.Outlined.PersonOutline,null,Modifier.size(22.dp));Text(if(value==Owner.Me) "Me" else ownerName(value,preferences),style=MaterialTheme.typography.labelSmall,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)}}}}
                 }}
-                item {Surface(color=c.surface,shape=RoundedCornerShape(14.dp),border=BorderStroke(1.5.dp,c.secondary.copy(alpha=.6f))) {Row(Modifier.fillMaxWidth().padding(14.dp,10.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {Surface(Modifier.size(44.dp),shape=CircleShape,color=c.secondary.copy(alpha=.22f).compositeOver(c.surface),border=BorderStroke(2.dp,c.secondary)) {Box(contentAlignment=Alignment.Center) {Text(emoji,fontSize=24.sp)}};Column(Modifier.weight(1f)) {PText("Type your own emoji",style=MaterialTheme.typography.labelSmall,muted=true);SheetInput(emoji,{emoji=it.take(16)},"Custom emoji from keyboard",Modifier.fillMaxWidth(),16.sp,underline=false)};Badge("In use",c.secondary)}}}
                 item {ListSheetGroup {
-                    Row {PText("Icon library",Modifier.weight(1f),MaterialTheme.typography.labelSmall,true);Badge("Search or type",c.surface)}
-                    Surface(shape=CircleShape,color=c.surface,border=BorderStroke(1.5.dp,c.separator)) {Row(Modifier.padding(14.dp,2.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {Icon(Icons.Outlined.Search,null,Modifier.size(18.dp));SheetInput(query,{query=it},"Search emoji — try Beach",Modifier.weight(1f),16.sp,underline=false)}}
-                    LazyRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {items(listOf("Recent","Pipo themes","Travel","Food","Home","Nature","Fun","Symbols")) {value->Pill(value,category==value,c.secondary) {category=value;query=""}}}
+                    var menu by remember {mutableStateOf(false)}
+                    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                        Surface(Modifier.size(52.dp),shape=RoundedCornerShape(16.dp),color=c.secondary.copy(alpha=.2f).compositeOver(c.surface)) {Box(contentAlignment=Alignment.Center) {Text(emoji,fontSize=28.sp)}}
+                        Box(Modifier.weight(1f)) {
+                            OutlinedButton({menu=true},Modifier.fillMaxWidth(),shape=CircleShape) {Icon(iconCategory(category),null,Modifier.size(18.dp));Spacer(Modifier.width(8.dp));PText(if(category=="Custom") "Custom emoji" else category,Modifier.weight(1f),MaterialTheme.typography.labelLarge);Icon(Icons.Outlined.ExpandMore,null,Modifier.size(18.dp))}
+                            DropdownMenu(menu,{menu=false}) {listOf("Recent","Pipo themes","Travel","Food","Home","Nature","Fun","Symbols","Custom").forEach {value->DropdownMenuItem(text={PText(if(value=="Custom") "Custom emoji" else value)},leadingIcon={Icon(iconCategory(value),null,Modifier.size(20.dp))},onClick={category=value;menu=false})}}
+                        }
+                    }
+                    if(category=="Custom") OutlinedTextField(emoji,{emoji=it.take(16)},Modifier.fillMaxWidth(),leadingIcon={Icon(Icons.Outlined.Edit,null)},label={PText("Your emoji")},placeholder={PText("Paste a symbol or emoji")},singleLine=true,shape=RoundedCornerShape(16.dp))
                 }}
-                if(query.isBlank() && category!="Recent") item {EmojiGroup("Recently used",recents.map {EmojiChoice(it,"Recently used","Recent")},emoji) {emoji=it}}
-                if(query.isBlank() && category!="Pipo themes") item {EmojiGroup("Pipo themes",emojiLibrary.filter {it.category=="Pipo themes"},emoji) {emoji=it}}
-                item {EmojiGroup(if(query.isBlank()) if(category=="Travel") "Travel & places" else category else "Search results",choices,emoji) {emoji=it}}
+                if(category!="Custom") item {EmojiGroup(category,choices.take(14),emoji) {emoji=it}}
+
+
             }
             DashedRule()
-            Button({recentsStore.edit().putString("icons",(listOf(emoji)+recents.filterNot {it==emoji}).take(14).joinToString("|")).apply();onSave((list ?: SharedList(name=name)).copy(name=name.trim(),emoji=emoji.trim(),owner=owner,pictures=pictures));onClose()},enabled=name.isNotBlank()&&emoji.isNotBlank(),modifier=Modifier.fillMaxWidth().padding(20.dp,10.dp).heightIn(min=52.dp)) {PText(if(list==null) "Create list" else "Save list")}
+            saveError?.let { PText(it, Modifier.padding(horizontal = 20.dp), MaterialTheme.typography.bodySmall) }
+            Button({
+                saving = true; saveError = null
+                val submitted = (list ?: SharedList(id=draftId,name=name)).copy(name=name.trim(),emoji=emoji.trim(),owner=owner,pictures=pictures)
+                onSave(submitted) { failure ->
+                    saving = false
+                    if(failure == null) {
+                        recentsStore.edit().putString("icons",(listOf(submitted.emoji)+recents.filterNot {it==submitted.emoji}).take(14).joinToString("|")).apply()
+                        onClose()
+                    } else saveError = failure
+                }
+            },enabled=!saving&&name.isNotBlank()&&emoji.isNotBlank(),modifier=Modifier.fillMaxWidth().padding(20.dp,10.dp).heightIn(min=52.dp)) {PText(if(saving) "Saving…" else if(list==null) "Create list" else "Save list")}
         }
     }
 }
@@ -94,11 +111,23 @@ private val emojiLibrary=listOf(
 
 @Composable private fun ListSheetGroup(content: @Composable ColumnScope.()->Unit) {Surface(color=AppTheme.colors.surfaceSunken,shape=RoundedCornerShape(14.dp)) {Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp),content=content)}}
 
+private fun iconCategory(category: String)=when(category) {
+    "Travel"->Icons.Outlined.Flight
+    "Food"->Icons.Outlined.Restaurant
+    "Home"->Icons.Outlined.Home
+    "Nature"->Icons.Outlined.LocalFlorist
+    "Fun"->Icons.Outlined.Celebration
+    "Symbols"->Icons.Outlined.FavoriteBorder
+    "Custom"->Icons.Outlined.Edit
+    "Pipo themes"->Icons.Outlined.Pets
+    else->Icons.Outlined.History
+}
+
 @Composable private fun EmojiGroup(title: String,choices: List<EmojiChoice>,selectedIcon: String,onSelect: (String)->Unit) {
     val c=AppTheme.colors
     ListSheetGroup {
         Row {PText(title,Modifier.weight(1f),MaterialTheme.typography.labelSmall,true);Badge(choices.size.toString(),c.surface)}
-        choices.chunked(7).forEach {row->Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(6.dp)) {row.forEach {choice->Surface(onClick={onSelect(choice.icon)},modifier=Modifier.weight(1f).heightIn(min=42.dp).semantics {contentDescription=choice.name;selected=selectedIcon==choice.icon},color=if(selectedIcon==choice.icon) c.secondary.copy(alpha=.34f).compositeOver(c.surface) else c.surface,shape=RoundedCornerShape(8.dp),border=BorderStroke(if(selectedIcon==choice.icon) 2.dp else 1.dp,if(selectedIcon==choice.icon) c.secondary else c.separator)) {Box(contentAlignment=Alignment.Center) {Text(choice.icon,fontSize=22.sp,modifier=Modifier.padding(4.dp))}}};repeat(7-row.size) {Spacer(Modifier.weight(1f))}}}
-        if(choices.isEmpty()) PText("No matching icons. Try another word or enter your own emoji.",muted=true)
+        choices.chunked(5).forEach {row->Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(6.dp)) {row.forEach {choice->Surface(onClick={onSelect(choice.icon)},modifier=Modifier.weight(1f).heightIn(min=48.dp).semantics {contentDescription=choice.name;selected=selectedIcon==choice.icon},color=if(selectedIcon==choice.icon) c.secondary.copy(alpha=.34f).compositeOver(c.surface) else c.surface,shape=RoundedCornerShape(8.dp),border=BorderStroke(if(selectedIcon==choice.icon) 2.dp else 1.dp,if(selectedIcon==choice.icon) c.secondary else c.separator)) {Box(contentAlignment=Alignment.Center) {Text(choice.icon,fontSize=22.sp,modifier=Modifier.padding(4.dp))}}};repeat(5-row.size) {Spacer(Modifier.weight(1f))}}}
+        if(choices.isEmpty()) PText("Choose another category or use a custom emoji.",muted=true)
     }
 }

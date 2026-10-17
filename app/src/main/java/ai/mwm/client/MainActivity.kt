@@ -21,6 +21,8 @@ import androidx.compose.runtime.setValue
 
 class MainActivity : ComponentActivity() {
     private var notificationTaskId by mutableStateOf<String?>(null)
+    private var locketRequest by mutableStateOf<String?>(null)
+    private var chatRequest by mutableStateOf(false)
     private var privateReminder by mutableStateOf(false)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -32,7 +34,7 @@ class MainActivity : ComponentActivity() {
             val dark = when(state.preferences.themeMode) { "Night" -> true; "Light" -> false; else -> isSystemInDarkTheme() }
             MyApplicationTheme(darkTheme = dark) {
                 LocalizedApp(state.preferences.language) {
-                    HomeScreen(openTaskId = notificationTaskId, onTaskLinkHandled = { notificationTaskId = null }, openCare = privateReminder, onCareLinkHandled = { privateReminder = false })
+                    HomeScreen(openChat = chatRequest, onChatLinkHandled = { chatRequest = false }, openLocketId = locketRequest, onLocketLinkHandled = { locketRequest = null }, openTaskId = notificationTaskId, onTaskLinkHandled = { notificationTaskId = null }, openCare = privateReminder, onCareLinkHandled = { privateReminder = false })
                 }
             }
         }
@@ -46,14 +48,23 @@ class MainActivity : ComponentActivity() {
     private fun route(intent: Intent) {
         val matches=intent.getStringExtra("account_scope")?.let {it==ai.mwm.client.data.AccountScope.current(this)} ?: (intent.data?.host!="private-reminder")
         privateReminder=matches && intent.data?.host=="private-reminder"
+        locketRequest=null
+        chatRequest=false
         if(!matches) {notificationTaskId=null;return}
+        if(intent.data?.host=="chat" && intent.hasExtra("account_scope")) {notificationTaskId=null;chatRequest=true;return}
+        if(intent.data?.host=="locket" && intent.hasExtra("account_scope")) {
+            notificationTaskId=null
+            locketRequest=intent.data?.lastPathSegment
+            return
+        }
         val event=intent.getStringExtra("poke_event_id")
         if(event==null) { notificationTaskId=intent.getStringExtra("task_id"); return }
         notificationTaskId=null
-        if(!CloudRelease.ENABLED) return
+        val pokeScope=intent.getStringExtra("account_scope") ?: return
+        if(pokeScope!=ai.mwm.client.data.AccountScope.current(this) || !CloudRelease.ENABLED) return
         lifecycleScope.launch {
             val data=runCatching { PipoFirebase.get(this@MainActivity).call("validatePoke",mapOf("eventId" to event)) }.getOrNull()
-            notificationTaskId=data?.get("taskId") as? String
+            if(pokeScope==ai.mwm.client.data.AccountScope.current(this@MainActivity)) notificationTaskId=data?.get("taskId") as? String
         }
     }
 }

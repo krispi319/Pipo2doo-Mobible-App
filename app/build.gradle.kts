@@ -24,8 +24,8 @@ android {
         applicationId = properties.getProperty("APPLICATION_ID", "")
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 117
+        versionName = "1.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         resValue(
@@ -82,6 +82,7 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
+    testImplementation(libs.junit)
     testImplementation(libs.roborazzi)
     testImplementation(libs.roborazzi.compose)
     testImplementation(libs.robolectric)

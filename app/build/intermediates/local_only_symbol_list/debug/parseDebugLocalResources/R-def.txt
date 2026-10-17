@@ -14,6 +14,7 @@ drawable demo_scarf
 drawable demo_tap
 drawable demo_travel
 drawable ic_launcher_background
+drawable ic_pipo_notification
 drawable ic_task_reminder
 drawable owner_mina
 drawable owner_theo
@@ -23,6 +24,7 @@ drawable settings_demo_me
 drawable settings_demo_partner
 mipmap ic_launcher
 mipmap ic_launcher_foreground
+raw pi_style
 string app_name
 string default_web_client_id
 string gcm_defaultSenderId

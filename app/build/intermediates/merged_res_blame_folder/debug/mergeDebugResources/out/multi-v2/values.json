@@ -95,6 +95,23 @@
                     }
                 },
                 {
+                    "source": "D:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo-Mobible-App\\app\\src\\main\\res\\values\\themes.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "90",
+                        "endOffsets": "141"
+                    },
+                    "to": {
+                        "startLines": "382",
+                        "startColumns": "4",
+                        "startOffsets": "23875",
+                        "endColumns": "89",
+                        "endOffsets": "23960"
+                    }
+                },
+                {
                     "source": "C:\\Users\\anngo\\.gradle\\caches\\9.2.1\\transforms\\7cae90634d81e4720f233907cd9cb20a\\workspace\\transformed\\credentials-1.2.0-rc01\\res\\values\\values.xml",
                     "from": {
                         "startLines": "2,3",
@@ -109,23 +126,6 @@
                         "startOffsets": "10817,10899",
                         "endColumns": "81,83",
                         "endOffsets": "10894,10978"
-                    }
-                },
-                {
-                    "source": "D:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo_v1.1.3_repair_patch\\app\\build\\generated\\res\\resValues\\debug\\values\\gradleResValues.xml",
-                    "from": {
-                        "startLines": "6",
-                        "startColumns": "4",
-                        "startOffsets": "159",
-                        "endColumns": "66",
-                        "endOffsets": "221"
-                    },
-                    "to": {
-                        "startLines": "219",
-                        "startColumns": "4",
-                        "startOffsets": "11206",
-                        "endColumns": "66",
-                        "endOffsets": "11268"
                     }
                 },
                 {
@@ -305,6 +305,40 @@
                     }
                 },
                 {
+                    "source": "D:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo-Mobible-App\\app\\build\\generated\\res\\processDebugGoogleServices\\values\\values.xml",
+                    "from": {
+                        "startLines": "2,3,4,5,6,7,8",
+                        "startColumns": "4,4,4,4,4,4,4",
+                        "startOffsets": "55,200,283,387,497,617,723",
+                        "endColumns": "144,82,103,109,119,105,74",
+                        "endOffsets": "195,278,382,492,612,718,793"
+                    },
+                    "to": {
+                        "startLines": "250,257,258,259,260,261,337",
+                        "startColumns": "4,4,4,4,4,4,4",
+                        "startOffsets": "14471,15038,15121,15225,15335,15455,20989",
+                        "endColumns": "144,82,103,109,119,105,74",
+                        "endOffsets": "14611,15116,15220,15330,15450,15556,21059"
+                    }
+                },
+                {
+                    "source": "D:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo-Mobible-App\\app\\src\\main\\res\\values\\colors.xml",
+                    "from": {
+                        "startLines": "7,2,3,4,5,6,8",
+                        "startColumns": "4,4,4,4,4,4,4",
+                        "startOffsets": "286,55,102,149,196,241,328",
+                        "endColumns": "41,46,46,46,44,44,41",
+                        "endOffsets": "323,97,144,191,236,281,365"
+                    },
+                    "to": {
+                        "startLines": "77,94,95,96,97,98,99",
+                        "startColumns": "4,4,4,4,4,4,4",
+                        "startOffsets": "2609,3883,3930,3977,4024,4069,4114",
+                        "endColumns": "41,46,46,46,44,44,41",
+                        "endOffsets": "2646,3925,3972,4019,4064,4109,4151"
+                    }
+                },
+                {
                     "source": "C:\\Users\\anngo\\.gradle\\caches\\9.2.1\\transforms\\d6c62ae54afb01f2cc62ef27e6067968\\workspace\\transformed\\savedstate\\res\\values\\values.xml",
                     "from": {
                         "startLines": "2",
@@ -373,20 +407,20 @@
                     }
                 },
                 {
-                    "source": "D:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo_v1.1.3_repair_patch\\app\\src\\main\\res\\values\\colors.xml",
+                    "source": "D:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo-Mobible-App\\app\\build\\generated\\res\\resValues\\debug\\values\\gradleResValues.xml",
                     "from": {
-                        "startLines": "7,2,3,4,5,6,8",
-                        "startColumns": "4,4,4,4,4,4,4",
-                        "startOffsets": "286,55,102,149,196,241,328",
-                        "endColumns": "41,46,46,46,44,44,41",
-                        "endOffsets": "323,97,144,191,236,281,365"
+                        "startLines": "6",
+                        "startColumns": "4",
+                        "startOffsets": "159",
+                        "endColumns": "66",
+                        "endOffsets": "221"
                     },
                     "to": {
-                        "startLines": "77,94,95,96,97,98,99",
-                        "startColumns": "4,4,4,4,4,4,4",
-                        "startOffsets": "2609,3883,3930,3977,4024,4069,4114",
-                        "endColumns": "41,46,46,46,44,44,41",
-                        "endOffsets": "2646,3925,3972,4019,4064,4109,4151"
+                        "startLines": "219",
+                        "startColumns": "4",
+                        "startOffsets": "11206",
+                        "endColumns": "66",
+                        "endOffsets": "11268"
                     }
                 },
                 {
@@ -426,23 +460,6 @@
                     }
                 },
                 {
-                    "source": "D:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo_v1.1.3_repair_patch\\app\\src\\main\\res\\values\\themes.xml",
-                    "from": {
-                        "startLines": "2",
-                        "startColumns": "4",
-                        "startOffsets": "55",
-                        "endColumns": "90",
-                        "endOffsets": "141"
-                    },
-                    "to": {
-                        "startLines": "382",
-                        "startColumns": "4",
-                        "startOffsets": "23875",
-                        "endColumns": "89",
-                        "endOffsets": "23960"
-                    }
-                },
-                {
                     "source": "C:\\Users\\anngo\\.gradle\\caches\\9.2.1\\transforms\\99b80facb4527e96065bfbae92d3f08c\\workspace\\transformed\\customview-poolingcontainer-1.0.0\\res\\values\\values.xml",
                     "from": {
                         "startLines": "2,3",
@@ -474,23 +491,6 @@
                         "startOffsets": "2651,2709,2775,2838,4156,4227,14236,14741,14808,14887",
                         "endColumns": "57,65,62,61,70,71,67,66,78,68",
                         "endOffsets": "2704,2770,2833,2895,4222,4294,14299,14803,14882,14951"
-                    }
-                },
-                {
-                    "source": "D:\\Krisative\\Coding\\Pipo2doo App\\Pipo2doo_v1.1.3_repair_patch\\app\\build\\generated\\res\\processDebugGoogleServices\\values\\values.xml",
-                    "from": {
-                        "startLines": "2,3,4,5,6,7,8",
-                        "startColumns": "4,4,4,4,4,4,4",
-                        "startOffsets": "55,200,283,387,497,617,723",
-                        "endColumns": "144,82,103,109,119,105,74",
-                        "endOffsets": "195,278,382,492,612,718,793"
-                    },
-                    "to": {
-                        "startLines": "250,257,258,259,260,261,337",
-                        "startColumns": "4,4,4,4,4,4,4",
-                        "startOffsets": "14471,15038,15121,15225,15335,15455,20989",
-                        "endColumns": "144,82,103,109,119,105,74",
-                        "endOffsets": "14611,15116,15220,15330,15450,15556,21059"
                     }
                 }
             ]

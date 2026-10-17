@@ -7,7 +7,7 @@ import java.time.OffsetDateTime
 import java.util.UUID
 
 /** Firebase is retained ONLY as a disabled FCM transport, never for pairing or shared data. */
-object CloudRelease { const val ENABLED = false }
+object CloudRelease { const val ENABLED = true }
 class NoMembership: Exception("No active shared space. Create a space or join your partner's code.")
 
 /** Compatibility name for existing callers; all shared-data requests now use Supabase. */
@@ -79,6 +79,7 @@ class PipoFirebase private constructor(context: Context) {
     suspend fun deleteTask(id: String,version: Long)=delete(id,"task",version)
     suspend fun deleteList(id: String,version: Long)=delete(id,"list",version)
     suspend fun call(action: String,body: Map<String,Any?> = emptyMap()): Map<String,Any?> = when(action) {
+        "validatePoke" -> validatePoke(body["eventId"] as String)
         "regenerate"->issueCode()
         "profile"->{
             val uid=client.uid();val old=records(space()).firstOrNull {it.getString("kind")=="profile" && it.getString("created_by")==uid}
@@ -99,9 +100,115 @@ class PipoFirebase private constructor(context: Context) {
             write(UUID.randomUUID().toString(),"profile",mapOf("name" to p.myName,"avatar" to p.avatar,"photo" to ""),0)
         }
     }
-    suspend fun updateDevice(p: Preferences,force: Boolean=false) { /* FCM delivery is deliberately separate and unverified. */ }
-    suspend fun revokeDevice() {}
-    suspend fun poke(id: String,version: Long,nonce: String): Map<String,Any?> = error("Poke delivery is not available yet. Pairing does not enable Android push.")
+    private var pushKey = ""
+    private var pushAt = 0L
+    private val pushLock = kotlinx.coroutines.sync.Mutex()
+    private fun deviceId(): String {
+        val store=appContext.getSharedPreferences("pipo_push_installation",0)
+        return store.getString("id",null) ?: UUID.randomUUID().toString().also {
+            check(store.edit().putString("id",it).commit())
+        }
+    }
+    suspend fun updateDevice(p: Preferences,force: Boolean=false) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        pushLock.lock()
+        try {
+            val uid=client.uid()
+            val zone=java.time.ZoneId.systemDefault().id
+            val signature="$uid:${p.pokeOptIn}:$zone:${p.quietEnabled}:${p.quietStart}:${p.quietEnd}"
+            if(!force && signature==pushKey && System.currentTimeMillis()-pushAt<3_600_000L) return@withContext
+            PartnerPokeService.channel(appContext)
+            client.rpc("set_poke_preferences",JSONObject().put("p_opt_in",p.pokeOptIn).put("p_timezone",zone)
+                .put("p_quiet_enabled",p.quietEnabled).put("p_quiet_start",p.quietStart).put("p_quiet_end",p.quietEnd))
+            val messaging=com.google.firebase.messaging.FirebaseMessaging.getInstance()
+            if(p.pokeOptIn) {
+                messaging.isAutoInitEnabled=true
+                val token=com.google.android.gms.tasks.Tasks.await(messaging.token,15,java.util.concurrent.TimeUnit.SECONDS)
+                check(uid==client.uid()) {"Account changed. Retry notification setup."}
+                client.rpc("register_push_device",JSONObject().put("p_device",deviceId()).put("p_token",token))
+            } else {
+                client.rpc("register_push_device",JSONObject().put("p_device",deviceId()).put("p_token",JSONObject.NULL))
+                messaging.isAutoInitEnabled=false
+                PartnerPokeService.clear(appContext)
+            }
+            pushKey=signature;pushAt=System.currentTimeMillis()
+        } finally {pushLock.unlock()}
+    }
+    suspend fun revokeDevice() {
+        if(client.hasSession()) client.rpc("register_push_device",JSONObject().put("p_device",deviceId()).put("p_token",JSONObject.NULL))
+        pushKey="";pushAt=0
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().isAutoInitEnabled=false
+    }
+    suspend fun poke(id: String,version: Long,nonce: String): Map<String,Any?> {
+        UUID.fromString(id);UUID.fromString(nonce)
+        return map(obj(client.request("/functions/v1/partner-poke","POST",JSONObject().put("task_id",id).put("request_id",nonce))))
+    }
+    suspend fun validatePoke(event: String): Map<String,Any?> {
+        UUID.fromString(event)
+        check(PipoRepository.get(appContext).state.value.preferences.pokeOptIn) {"Pokes are disabled on this phone"}
+        val uid=client.uid()
+        val e=rows(client.request("/rest/v1/poke_events?id=eq.$event&select=*")).singleOrNull() ?: error("Poke is no longer available")
+        check(e.getString("recipient_id")==uid && e.getString("status") in listOf("sending","provider_accepted","unknown")) {"Poke unavailable"}
+        val expires=OffsetDateTime.parse(e.getString("expires_at")).toInstant().toEpochMilli()
+        check(expires>System.currentTimeMillis()) {"Poke expired"}
+        val tid=e.getString("task_id");UUID.fromString(tid)
+        val task=rows(client.request("/rest/v1/shared_records?id=eq.$tid&kind=eq.task&deleted_at=is.null&select=*")).singleOrNull() ?: error("Task unavailable")
+        check(task.getString("space_id")==e.getString("space_id") && task.getJSONObject("payload").optString("status")!="Done") {"Task is already complete"}
+        val assignee=task.optString("assigned_to").takeUnless {it=="null" || it.isBlank()}
+        check(assignee==null || assignee==uid) {"Task assignment changed"}
+        check(uid==client.uid()) {"Account changed"}
+        return mapOf("taskId" to tid,"expiresAt" to expires,"recipientUid" to uid,"senderUid" to e.getString("sender_id"))
+    }
+    suspend fun careSnapshot(): JSONObject {
+        val uid=client.uid();val sid=space()
+        val entries=client.request("/rest/v1/care_shares?space_id=eq.$sid&select=user_id,enabled,payload,version") as? JSONArray ?: error("Care response unavailable")
+        check(uid==client.uid()) {"Account changed"}
+        return JSONObject().put("uid",uid).put("spaceId",sid).put("entries",entries)
+    }
+    suspend fun saveCareShare(sid: String,enabled: Boolean,payload: JSONObject,version: Long): JSONObject {
+        check(sid==space()) {"Shared space changed. Reopen Care."}
+        return obj(client.rpc("save_care_share",JSONObject().put("p_space",sid).put("p_enabled",enabled).put("p_payload",payload).put("p_expected_version",version)))
+    }
+    suspend fun notifyLocket(id: String): String {
+        UUID.fromString(id)
+        return obj(client.request("/functions/v1/partner-locket","POST",JSONObject().put("record_id",id))).optString("status","unknown")
+    }
+    suspend fun validateLocket(id: String): String {
+        UUID.fromString(id)
+        val uid=client.uid()
+        val record=rows(client.request("/rest/v1/shared_records?id=eq.$id&kind=eq.appreciation&deleted_at=is.null&select=created_by,payload,updated_at")).singleOrNull() ?: error("Locket unavailable")
+        val payload=record.getJSONObject("payload")
+        check(record.getString("created_by")!=uid && payload.optString("kind")=="Locket" && payload.optString("picture").startsWith("cloud:")) {"Locket unavailable"}
+        val age=System.currentTimeMillis()-OffsetDateTime.parse(record.getString("updated_at")).toInstant().toEpochMilli()
+        check(age in -60_000L..86_400_000L && uid==client.uid()) {"Locket expired or account changed"}
+        return uid
+    }
+    suspend fun notifyPartnerNote(id: String): String {
+        UUID.fromString(id)
+        return obj(client.request("/functions/v1/partner-note","POST",JSONObject().put("record_id",id))).optString("status","unknown")
+    }
+    suspend fun validatePartnerNote(id: String): JSONObject {
+        UUID.fromString(id)
+        val uid=client.uid();val sid=space()
+        val record=rows(client.request("/rest/v1/shared_records?id=eq.$id&space_id=eq.$sid&kind=eq.appreciation&deleted_at=is.null&select=created_by,payload,updated_at")).singleOrNull() ?: error("Note unavailable")
+        val payload=record.getJSONObject("payload")
+        check(record.getString("created_by")!=uid && payload.optString("kind") in listOf("Message","Thank you","You're the best","Purr-fect","CareSupport","Heart")) {"Note unavailable"}
+        val at=OffsetDateTime.parse(record.getString("updated_at")).toInstant().toEpochMilli()
+        check(System.currentTimeMillis()-at in -60_000L..86_400_000L && uid==client.uid()) {"Note expired or account changed"}
+        return JSONObject().put("uid",uid).put("space",sid).put("sender",record.getString("created_by")).put("kind",payload.optString("kind")).put("message",payload.optString("message").take(500)).put("at",at)
+    }
+    suspend fun locketSender(id: String): String {
+        UUID.fromString(id)
+        return rows(client.request("/rest/v1/shared_records?id=eq.$id&kind=eq.appreciation&deleted_at=is.null&select=created_by")).single().getString("created_by")
+    }
+    suspend fun notificationPerson(sender: String): Pair<String,String> {
+        UUID.fromString(sender)
+        val uid=client.uid();val sid=space()
+        val members=rows(client.request("/rest/v1/space_members?space_id=eq.$sid&select=user_id"))
+        check(sender!=uid && members.any {it.getString("user_id")==sender} && members.any {it.getString("user_id")==uid}) {"Partner changed"}
+        val profile=rows(client.request("/rest/v1/shared_records?space_id=eq.$sid&kind=eq.profile&created_by=eq.$sender&deleted_at=is.null&select=payload")).firstOrNull()?.getJSONObject("payload")
+        check(uid==client.uid()) {"Account changed"}
+        return (profile?.optString("name")?.take(80)?.takeIf {it.isNotBlank()} ?: "Your partner") to (profile?.optString("photo") ?: "")
+    }
     private suspend fun scopedKey(photo: String): String {
         require(photo.startsWith("cloud:")) {"Invalid shared picture."}
         val key=photo.removePrefix("cloud:")

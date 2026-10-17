@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.PersonOutline
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
@@ -33,22 +34,15 @@ import java.io.File
 @Composable fun ProfilePhoto(photo: String, me: Boolean, modifier: Modifier = Modifier, preset: Int = -1) {
     val context = LocalContext.current
     val connection=ai.mwm.client.cloud.LocalPartnerConnection.current
-    val bitmap by produceState<android.graphics.Bitmap?>(null, photo, connection.uid, connection.generation, connection.online, connection.connected) {
-        value = withContext(Dispatchers.IO) { runCatching {
-            if(photo.startsWith("cloud:")) {if(!connection.connected || !connection.online)return@runCatching null;val bytes=ai.mwm.client.cloud.PipoFirebase.get(context).readPhoto(photo);return@runCatching BitmapFactory.decodeByteArray(bytes,0,bytes.size)}
-            if(photo.isBlank() || photo.startsWith("asset:")) null else {
-                val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                BitmapFactory.decodeFile(photo, options)
-                options.inSampleSize = (maxOf(options.outWidth, options.outHeight) / 512).coerceAtLeast(1)
-                options.inJustDecodeBounds = false
-                BitmapFactory.decodeFile(photo, options)
-            }
-        }.getOrNull() }
-    }
+    val image=rememberSharedImage(photo,512)
+    val bitmap=image.result.bitmap
+    val selectedPreset=if(me) preset else if(preset>=0) preset else connection.partnerAvatar
     Box(modifier.clip(CircleShape).background(if(me) AppTheme.colors.primary else AppTheme.colors.accent)) {
         if(bundledPicture(photo) != null) Image(painterResource(bundledPicture(photo)!!), "Sample profile photo", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        else if(bitmap != null) Image(bitmap!!.asImageBitmap(), "Profile photo", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        else if(preset >= 0) KittyAvatar(Modifier.fillMaxSize().padding(4.dp), variant = preset)
+        else if(bitmap != null) Image(bitmap.asImageBitmap(), "Profile photo", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        else if(image.result.loading) CircularProgressIndicator(Modifier.align(Alignment.Center).size(24.dp),strokeWidth=2.dp)
+        else if(image.result.failed) IconButton(image.retry,Modifier.align(Alignment.Center)) {Icon(Icons.Outlined.Refresh,"Retry profile picture")}
+        else if(selectedPreset >= 0) KittyAvatar(Modifier.fillMaxSize().padding(4.dp), variant = selectedPreset)
         else Icon(Icons.Outlined.PersonOutline, localized("Empty avatar", LocalAppLanguage.current), Modifier.fillMaxSize().padding(12.dp), tint = AppTheme.colors.textSecondary)
     }
 }
