@@ -1,0 +1,99 @@
+PIPO2DOO v1.2.0 — ACCOUNT BACKUP & REINSTALL RESTORE
+
+IMPORTANT: This ZIP contains source replacements, not an installable APK.
+Apply it to the current project after the previous Cute Chat / Pi Style patch.
+Do not uninstall the old app before the first v1.2.0 account backup finishes.
+
+1. INSTALL THE SOURCE CHANGES
+- Back up your Android Studio project folder first.
+- Close Android Studio or stop editing the project while copying.
+- Extract this ZIP into a temporary folder.
+- Copy its app folder into your project root and merge/replace the matching files.
+  Your project root contains settings.gradle.kts and gradlew.
+  Result: YOUR_PROJECT/app/build.gradle.kts and YOUR_PROJECT/app/src/main/...
+  Do not copy the app folder into YOUR_PROJECT/app/app.
+- backend/ contains reference SQL already deployed to your existing Supabase
+  project during preparation. You do not need to execute it again.
+- verification/ contains development tests; do not copy it into app/src.
+- Reopen Android Studio and click Sync Now.
+- Version settings are versionName = "1.2.0" and versionCode = 120.
+  If you have already released an APK with versionCode >=120, increase the code.
+- Build > Generate Signed Bundle/APK > APK. Use the SAME signing key and app ID
+  as the existing installation. Install this APK OVER the existing app.
+  Do not uninstall to bypass a signing mismatch; ask for migration help first.
+
+2. PRESERVE YOUR EXISTING DATA BEFORE ANY UNINSTALL
+- Open v1.2.0 with internet access and sign in using your existing account.
+- Open Us > Account backup > Back up now.
+- Wait until BOTH Settings and Care say "Saved to your account".
+- Check that the existing tasks, together date, personal info and partner are
+  still correct. Each partner must complete backup using their own account.
+- If a section says Not backed up, Waiting, Conflict or Not checked, do not
+  uninstall. Keep the original installation and resolve the message first.
+
+3. SAFELY TEST RESTORE WITHOUT DELETING YOUR ORIGINAL INSTALLATION
+- Install the same v1.2.0 APK on an emulator or spare phone.
+- Sign in using the SAME existing account; do not register another account.
+- Wait for account restoration and the shared-space refresh.
+- Check: tasks and due dates, lists/tags, together date, own name/photo,
+  private task notes, reminder choices, care logs and partner connection.
+- Compare with the original phone. Do not edit both phones during this test.
+- Re-enable Android notification permission on the new installation. Permission,
+  battery exemptions and Android channel overrides cannot be restored by an app.
+- Once this test succeeds, reinstalling with the same account can restore the
+  latest successfully uploaded data. Signing in requires your account credentials.
+
+WHAT IS SAVED
+- Existing shared tasks, due dates, lists, tags, Locket photos, chat and partner
+  membership remain in their existing Supabase tables/storage.
+- NEW private account backup: together date, personal preferences, own unshared
+  name/avatar/photo, private task notes, personal reminders, selected app sound,
+  and full care logs/settings. Care backup is separate from partner sharing.
+- Private backup is readable/writable only by its signed-in owner. Partners
+  cannot read one another's private backup through the client API.
+- Locally selected pictures are included in the private backup and recreated
+  in the new installation. Shared photos keep existing cloud references.
+- Passwords, access/refresh tokens, signing keys and Android encryption keys
+  are NOT uploaded. Reinstall requires signing in again.
+
+LIMITS AND SAFETY
+- Data must upload BEFORE uninstall. Offline or pending edits will be lost if
+  you uninstall first. Updating source files does not upload phone data.
+- Uninstalling a pre-v1.2.0 installation before backing up cannot recover data
+  that existed only on that phone.
+- Account backup needs a signed-in account. Anonymous/local demo workspaces
+  are not automatically merged into an account.
+- Backup and restore run while the app is open and signed in. They are not a
+  background backup service after the app closes.
+- Simultaneous edits from multiple phones are blocked on backup conflict to
+  prevent silent overwrites. Local data stays intact; do not uninstall on a
+  conflict. There is no automatic merge/conflict-resolution UI in this version.
+- Embedded private pictures are limited to 5 MB each, and each backup section
+  is capped at 18 MB on the client. A failed/oversized backup shows an error.
+- Health records remain encrypted on the phone. The private Supabase backup
+  uses authenticated HTTPS and owner-only database access; it is NOT end-to-end
+  encrypted. Partner sharing remains independently controlled by existing Care UI.
+- Deleting your ACCOUNT, closing/changing partner spaces, and deleting records
+  intentionally are different from uninstalling the app. Account deletion removes
+  its backup; changing partners retains the existing workspace isolation rules.
+- Android notification permission and system settings are device-specific.
+- Existing shared profile/Locket image access still requires active membership
+  in the same couple space; backup does not bypass partner access restrictions.
+
+VERIFICATION COMPLETED HERE
+- New Supabase table/RPC deployed with owner-only RLS and minimal grants.
+- Transactional SQL tests: own reads/writes, second-account isolation, anonymous
+  denial, owner reassignment denial, stale revisions, duplicate creation,
+  invalid section/payload rejection, and original data preserved on rejection.
+  Test fixtures rolled back; no real user data was replaced.
+- 19 behavioral tests executed against the ACTUAL AccountBackup.kt using Android
+  and backend test doubles: reinstall, date/profile/private-note/photo recovery,
+  space binding, second-account isolation, stable hashes, conflict protection,
+  offline status, edits during upload, retries, care recovery and JSON ordering.
+- 3 round-trip checks executed using actual care serializer/restore methods.
+- 7 modified/new Kotlin source files: zero syntax errors using Kotlin 2.3.20 PSI.
+- Core AccountBackup Kotlin compiled with Kotlin 2.3.20 against platform stubs.
+- Full Android Gradle build attempted but blocked: Gradle 9.2.1 distribution
+  cannot be downloaded in this environment. Compose type-checking, APK generation,
+  device rendering and real-device uninstall/reinstall have NOT been validated.
+  Build and test in Android Studio before publishing the release.

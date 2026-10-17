@@ -42,6 +42,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable private fun SettingsGroup(title: String, aside: String = "", content: @Composable ColumnScope.() -> Unit) {
     val c=AppTheme.colors
@@ -81,7 +82,7 @@ import kotlinx.coroutines.delay
 private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/60,minute%60)
 
 @OptIn(ExperimentalLayoutApi::class)
-@Composable fun SettingsScreen(state: PipoState, notificationsAllowed: Boolean, onPreferences: ((Preferences) -> Preferences) -> Unit, onEnable: () -> Unit, onTestReminder: () -> Unit, onTags: () -> Unit, onLeave: () -> Unit, onCare: () -> Unit = {}, onReset: () -> Unit = {}, onPair: () -> Unit = {}, onCheck: () -> Unit = {}) {
+@Composable fun SettingsScreen(state: PipoState, notificationsAllowed: Boolean, onPreferences: ((Preferences) -> Preferences) -> Unit, onEnable: () -> Unit, onTestReminder: () -> Unit, onTags: () -> Unit, onLeave: () -> Unit, onCare: () -> Unit = {}, onReset: () -> Unit = {}, onPair: () -> Unit = {}, onCheck: () -> Unit = {}, onBackup: () -> Unit = {}) {
     val context=LocalContext.current
     val connection=ai.mwm.client.cloud.LocalPartnerConnection.current
     val p=state.preferences
@@ -135,6 +136,18 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
                 if(connection.authenticated) PText("Signed in as ${connection.accountEmail.ifBlank {"your account"}}",style=MaterialTheme.typography.bodySmall,muted=true)
                 PText(connection.message,style=MaterialTheme.typography.bodySmall,muted=true)
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {OutlinedButton(onPair,enabled=!connection.busy) {PText(if(connection.paired) "Connection details" else "Pair with partner")};OutlinedButton(onCheck,enabled=!connection.busy) {PText("Check setup")}}
+            }
+        }}
+        item {SettingsGroup("Account backup","v1.2.0") {
+            SettingsStack {
+                val backup by ai.mwm.client.cloud.AccountBackup.status.collectAsState()
+                val owner=AccountScope.current(context)
+                PText("Restore after reinstall",style=MaterialTheme.typography.titleSmall)
+                PText("Sign in with the same account to restore your personal settings, pictures and care records. Account backup is separate from sharing with your partner.",style=MaterialTheme.typography.bodySmall,muted=true)
+                PText("Settings: "+(backup["$owner:main"] ?: "Not checked this session"),style=MaterialTheme.typography.bodySmall,muted=true)
+                PText("Care: "+(backup["$owner:care"] ?: "Not checked this session"),style=MaterialTheme.typography.bodySmall,muted=true)
+                OutlinedButton(onClick=onBackup,enabled=connection.authenticated && !connection.busy) {PText("Back up now")}
+                PText("Before uninstalling, wait for BOTH sections to say Saved to your account. Unsaved/offline changes cannot survive uninstalling. Health records are stored privately in Supabase and encrypted locally; this is not end-to-end encryption.",style=MaterialTheme.typography.bodySmall,muted=true)
             }
         }}
         item {SettingsGroup("Gentle reminders","Just for me") {

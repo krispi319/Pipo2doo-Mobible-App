@@ -1,24 +1,28 @@
-# Pipo2doo project state — 17 October 2026
+# Pipo2doo project state — v1.2.0
 
-Native Android Kotlin/Compose. Supabase handles pairing, shared records and image storage; Firebase is used only for FCM transport. Existing version label 1.1.6 is retained.
-
-## This patch
-- HomeScreen: floating chat shortcut, account/space-specific unread badge, chat deep links and correct routing ahead of Care.
-- AppreciationScreen: existing note feed extended into Our chat with Message/thank-you choices, draft retention, stable retry IDs and newest-message scroll.
-- PipoViewModel: result callback for message sends, account/partner guard and duplicate-ID protection.
-- ChatReadState: device-local ID markers, no message bodies.
-- PartnerSync: requests optional note push only after record save. Existing shared data remains network-first.
-- PipoFirebase: fresh authorized note/sender/profile reads. Notification data from FCM is IDs only.
-- PartnerPokeService: message channel, sender avatar and MessagingStyle, notification-to-chat routing; Poke and Locket gain avatar artwork. Account changes, sign-out/unpairing clear partner notifications and conversation shortcuts.
-- Reminders: app logo large icon and monochrome two-cat small icon.
-- Progress: original vector cat garden, selected range count and existing streak.
-- Settings: partner message opt-in/channel labels and avatar-sharing explanation.
-
-## Backend deployed
-New partner-note v1 ACTIVE with JWT verification enabled; claim_note_notification is service-role-only, private ledger RLS enabled, no client table access. Existing partner-poke v6 and partner-locket v4 are unchanged. Credentials remain server-side. No real push was sent as part of this change.
-
-## Validation and remaining work
-Source syntax checks, focused JVM tests, SQL rollback regressions and mocked sender tests passed. Android compile, actual rendered UI and two-phone FCM delivery remain unverified. See START_HERE.txt for exact install and test steps.
-
-## Previous work preserved
-Separate owner/partner care data, explicit sharing, support notes, reminders, small dual-photo Locket, task/tag fixes and prior Today/Care UI patch. This ZIP does not replace Today/Care files or credentials/build settings.
+- Android Kotlin / Jetpack Compose; Supabase Auth, database, storage, backend;
+  Firebase Cloud Messaging only for push.
+- Version name 1.2.0, internal version code 120; application ID unchanged.
+- Existing cute UI, tasks, scheduling, reminders, tags, locket, chat, partner
+  pairing, separate care ownership, and notification sounds retained.
+- New AccountBackup.kt coordinates two owner-private backup sections: main/care.
+  Versioned compare-and-swap writes prevent stale phone overwrites. Canonical
+  JSON hashes detect local changes. Fresh installations restore before upload.
+- Main restoration occurs after authenticated account activation and before
+  shared-space snapshot import. Care restoration occurs within CareViewModel's
+  mutation lock and is reloaded into its state before shared care refresh.
+- Main backup preserves prior-space marker so pairing with a different partner
+  still triggers existing date/reset/isolation rules. Care retains its marker.
+- New account_backups table / save_account_backup SECURITY INVOKER RPC deployed
+  to the existing project. Three owner-only policies. No anonymous access.
+- Private photos are content-hashed and embedded only in the owner's backup.
+- New Us > Account backup panel has per-section status and Back up now action.
+- Existing database advisor warnings concern earlier membership RPCs and auth
+  settings; no new warning identified for account_backups or its invoker RPC.
+- Tested: SQL isolation/CAS, 19 core backup behavior checks, 3 care round trips,
+  seven Kotlin files parsed. Full Android build/device upgrade tests outstanding.
+- Release acceptance: build signed APK with existing key; update in place first;
+  both backup sections saved; test fresh emulator restore using same account;
+  then publish signed APK as v1.2.0.
+- Phone data is NOT uploaded by this source patch; only the installed app can
+  perform the first private backup. Never advise uninstall before that upload.

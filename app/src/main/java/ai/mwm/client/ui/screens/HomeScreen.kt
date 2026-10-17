@@ -185,7 +185,7 @@ import kotlinx.coroutines.launch
                 tab == "Upcoming" -> UpcomingScreen(state, openTask, toggle, { id -> editId=id; editorOpen=true })
                 tab == "Lists" -> ListsScreen(state, { listId = it }, { editListId = null; listEditorOpen = true }, openTask, { vm?.saveList(it) }, toggle)
                 tab == "Progress" -> ProgressScreen(state, openTask) { thanksFor = ""; notesOpen = true }
-                tab == "Us" -> SettingsScreen(state, allowed, { vm?.preferences(it) }, notificationControl, { if(allowed) { vm?.testReminder(); scope.launch { snack.showSnackbar("Test task created. Complete it to clear its reminder.") } } else { requestIfNeeded(); scope.launch { snack.showSnackbar("Enable notifications, then create your test task.") } } }, { tagsOpen = true }, { vm?.leaveConnection(); careVm?.refresh(); tab = "Today" }, { tab="Care" }, {vm?.resetWorkspace()}, {pairingOpen=true}, {vm?.checkConnection()})
+                tab == "Us" -> SettingsScreen(state, allowed, { vm?.preferences(it) }, notificationControl, { if(allowed) { vm?.testReminder(); scope.launch { snack.showSnackbar("Test task created. Complete it to clear its reminder.") } } else { requestIfNeeded(); scope.launch { snack.showSnackbar("Enable notifications, then create your test task.") } } }, { tagsOpen = true }, { vm?.leaveConnection(); careVm?.refresh(); tab = "Today" }, { tab="Care" }, {vm?.resetWorkspace()}, {pairingOpen=true}, {vm?.checkConnection()}, {vm?.checkConnection();careVm?.refresh()})
                 else -> TodayScreen(state, openTask, toggle, { vm?.preferences(it) }, { remindersOpen = true }, { tab="Care" }, locketToOpen, {locketToOpen=null})
             }
         }

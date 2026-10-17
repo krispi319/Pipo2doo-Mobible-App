@@ -130,6 +130,7 @@ class PipoRepository private constructor(private val context: Context) {
             local.put("preferences",own).put("version",4)
         } else json
         check(prefs.edit().putString("state", persisted.toString()).commit()) { "Could not save changes" }
+        ai.mwm.client.cloud.AccountBackup.pending(context,"main")
         mutable.value = next
         TaskReminders.sync(context, next)
     }

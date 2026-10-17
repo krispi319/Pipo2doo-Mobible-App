@@ -44,6 +44,7 @@ object NotificationSounds {
         val manager=context.getSystemService(NotificationManager::class.java)
         val bases=listOf("pipo_ongoing_tasks","pipo_private_reminders","partner_pokes","partner_locket_photos","partner_messages")
         check(prefs(context).edit().putString("tone",key).commit()) {"Could not save notification sound."}
+        ai.mwm.client.cloud.AccountBackup.pending(context,"main")
         bases.forEach {base->
             val old=manager.getNotificationChannel(channelIdFor(base,previous))
             if(old!=null && manager.getNotificationChannel(channelId(context,base))==null) {

@@ -1,0 +1,10 @@
+app/build.gradle.kts
+app/src/main/java/ai/mwm/client/cloud/AccountBackup.kt
+app/src/main/java/ai/mwm/client/cloud/PartnerSync.kt
+app/src/main/java/ai/mwm/client/data/CareRepository.kt
+app/src/main/java/ai/mwm/client/data/PipoRepository.kt
+app/src/main/java/ai/mwm/client/ui/screens/HomeScreen.kt
+app/src/main/java/ai/mwm/client/ui/screens/SettingsScreens.kt
+app/src/main/java/ai/mwm/client/reminders/NotificationSounds.kt
+backend/supabase/account-backup/account_backup.sql
+backend/supabase/account-backup/account_backup_tests.sql

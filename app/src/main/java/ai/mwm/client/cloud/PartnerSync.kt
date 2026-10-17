@@ -144,6 +144,7 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
     private fun owner(r: Map<String,Any?>,uid: String)=when(r["assigneeUid"]){null->Owner.Together;uid->Owner.Me;else->Owner.You}
     private suspend fun refresh() {
         activateIdentity()
+        if(AccountBackup.syncMain(context)) repository.restoreLocal()
         val r=try {api.snapshot()} catch(e: NoMembership) {PartnerPokeService.clear(context);repository.restoreLocal();taskVersions=emptyMap();listVersions=emptyMap();tagVersions=emptyMap();mutable.value=mutable.value.copy(spaceId="",partnerUid="",partnerAvatar=-1,role="",partnerRole="",code="",expiresAt=0,online=true,authenticated=true,message="Signed in · Create a space or join your partner's code");return}
         val uid=r["uid"] as String;val partner=r["partnerUid"] as? String ?: "";val sid=r["spaceId"] as String;val generation=r["generation"] as String
         val role=r["role"] as String;val partnerRole=r["partnerRole"] as String
