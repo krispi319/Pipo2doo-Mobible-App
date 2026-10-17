@@ -14,8 +14,10 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
 import java.time.*
+import kotlinx.coroutines.delay
 import java.time.format.DateTimeFormatter
 
 @Composable fun TaskCalendarScreen(state: PipoState,onBack: ()->Unit,onOpen: (String)->Unit) {
@@ -24,26 +26,27 @@ import java.time.format.DateTimeFormatter
     var selected by rememberSaveable {mutableLongStateOf(today.toEpochDay())}
     var monthText by rememberSaveable {mutableStateOf(YearMonth.now().toString())}
     val month=YearMonth.parse(monthText)
-    val now=System.currentTimeMillis()
+    var now by remember {mutableLongStateOf(System.currentTimeMillis())}
+    LaunchedEffect(Unit) {while(true) {now=System.currentTimeMillis();delay(30_000)}}
     val completed=state.tasks.filter {completionDay(it)==selected}
     val missed=state.tasks.filter {it.day==selected && missedDeadline(it,now)}
     val planned=state.tasks.filter {it.day==selected && it !in missed && completionDay(it)!=selected}
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp,12.dp,16.dp,100.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-        item {Row(verticalAlignment=Alignment.CenterVertically) {IconButton(onBack) {Icon(Icons.Outlined.ArrowBack,"Back")};Column(Modifier.weight(1f)) {PText("Our calendar",style=MaterialTheme.typography.headlineSmall);PText("Finished days & little things we missed",style=MaterialTheme.typography.bodySmall,muted=true)}}}
-        item {Paper {
-            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {IconButton({monthText=month.minusMonths(1).toString();selected=month.minusMonths(1).atDay(1).toEpochDay()}) {Icon(Icons.Outlined.ChevronLeft,"Previous month")};PText(month.format(DateTimeFormatter.ofPattern("MMMM yyyy")),Modifier.weight(1f),MaterialTheme.typography.titleMedium);IconButton({monthText=month.plusMonths(1).toString();selected=month.plusMonths(1).atDay(1).toEpochDay()}) {Icon(Icons.Outlined.ChevronRight,"Next month")}}
+        item {Row(verticalAlignment=Alignment.CenterVertically) {OutlinedIconButton(onBack) {Icon(Icons.Outlined.ArrowBack,"Back")};Column(Modifier.weight(1f)) {PText("Our calendar",style=MaterialTheme.typography.headlineSmall);PText("Little wins, one day at a time",style=MaterialTheme.typography.bodySmall,muted=true)};PipoBrand(Modifier.size(42.dp))}}
+        item {Paper(color=c.primary.copy(alpha=.08f).compositeOver(c.surface)) {
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {OutlinedIconButton({monthText=month.minusMonths(1).toString();selected=month.minusMonths(1).atDay(1).toEpochDay()}) {Icon(Icons.Outlined.ChevronLeft,"Previous month")};PText(month.format(DateTimeFormatter.ofPattern("MMMM yyyy")),Modifier.weight(1f),MaterialTheme.typography.titleMedium);OutlinedIconButton({monthText=month.plusMonths(1).toString();selected=month.plusMonths(1).atDay(1).toEpochDay()}) {Icon(Icons.Outlined.ChevronRight,"Next month")}}
             Row(Modifier.fillMaxWidth()) {listOf("M","T","W","T","F","S","S").forEach {Box(Modifier.weight(1f),contentAlignment=Alignment.Center) {PText(it,style=MaterialTheme.typography.labelSmall,muted=true)}}}
             val first=month.atDay(1).dayOfWeek.value-1
             val cells=((first+month.lengthOfMonth()+6)/7)*7
             (0 until cells step 7).forEach {week->Row(Modifier.fillMaxWidth()) {
                 (week until week+7).forEach {cell->
                     val day=cell-first+1
-                    if(day !in 1..month.lengthOfMonth()) Spacer(Modifier.weight(1f).aspectRatio(1f))
+                    if(day !in 1..month.lengthOfMonth()) Spacer(Modifier.weight(1f).height(56.dp))
                     else {
                         val date=month.atDay(day);val epoch=date.toEpochDay()
                         val green=state.tasks.any {completionDay(it)==epoch}
                         val red=state.tasks.any {it.day==epoch && missedDeadline(it,now)}
-                        Column(Modifier.weight(1f).aspectRatio(1f).padding(2.dp).background(if(epoch==selected) c.primary.copy(alpha=.28f).compositeOver(c.surface) else c.surface,RoundedCornerShape(12.dp)).border(if(date==today) 1.dp else 0.dp,if(date==today)c.primary else c.surface,RoundedCornerShape(12.dp)).clickable {selected=epoch},horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
+                        Column(Modifier.weight(1f).heightIn(min=56.dp).padding(2.dp).background(if(epoch==selected) c.primary.copy(alpha=.28f).compositeOver(c.surface) else c.surface,RoundedCornerShape(12.dp)).border(if(date==today || epoch==selected) 1.5.dp else 1.dp,if(date==today || epoch==selected)c.primary else c.separator.copy(alpha=.5f),RoundedCornerShape(12.dp)).clickable {selected=epoch}.semantics {this.selected=epoch==selected;contentDescription=date.toString()+(if(green) ", completed tasks" else "")+(if(red) ", missed deadline" else "")},horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
                             PText(day.toString(),style=MaterialTheme.typography.bodyMedium)
                             Row(Modifier.height(8.dp),horizontalArrangement=Arrangement.spacedBy(3.dp)) {if(green) Box(Modifier.size(5.dp).background(c.success,CircleShape));if(red) Box(Modifier.size(5.dp).background(c.error,CircleShape))}
                         }
@@ -51,9 +54,14 @@ import java.time.format.DateTimeFormatter
                 }
             }}
             Row(horizontalArrangement=Arrangement.spacedBy(14.dp)) {Text("● Completed",color=c.success,style=MaterialTheme.typography.labelSmall);Text("● Missed deadline",color=c.error,style=MaterialTheme.typography.labelSmall)}
-            TextButton({monthText=YearMonth.now().toString();selected=today.toEpochDay()}) {PText("Today")}
+            OutlinedButton({monthText=YearMonth.now().toString();selected=today.toEpochDay()}) {Icon(Icons.Outlined.Today,null,Modifier.size(17.dp));Spacer(Modifier.width(5.dp));PText("Back to today")}
         }}
-        item {PText(dayText(selected),style=MaterialTheme.typography.titleMedium)}
+        item {Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+            listOf(Triple("Completed",completed.size,c.success),Triple("Missed",missed.size,c.error),Triple("Planned",planned.size,c.primary)).forEach {(title,count,tone)->
+                Surface(Modifier.weight(1f),shape=RoundedCornerShape(18.dp),color=tone.copy(alpha=.12f).compositeOver(c.surface),border=BorderStroke(1.dp,c.separator)) {Column(Modifier.padding(8.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(3.dp)) {Icon(when(title){"Completed"->Icons.Outlined.LocalFlorist;"Missed"->Icons.Outlined.FavoriteBorder;else->Icons.Outlined.EventNote},null,Modifier.size(22.dp),tint=tone);PText(count.toString(),style=MaterialTheme.typography.titleLarge);PText(title,style=MaterialTheme.typography.labelSmall)}}
+            }
+        }}
+        item {Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {Icon(Icons.Outlined.AutoAwesome,null,Modifier.size(19.dp));PText(dayText(selected),style=MaterialTheme.typography.titleMedium)}}
         if(completed.isNotEmpty()) item {PText("✓ Completed · ${completed.size}",style=MaterialTheme.typography.titleSmall)}
         items(completed,key={"done_${it.id}"}) {task->CalendarTaskRow(task,state,"Completed at "+Instant.ofEpochMilli(task.completedAt).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm")),false) {onOpen(task.id)}}
         if(missed.isNotEmpty()) item {Text("● Missed · ${missed.size}",color=c.error,style=MaterialTheme.typography.titleSmall)}

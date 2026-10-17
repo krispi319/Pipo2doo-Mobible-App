@@ -70,7 +70,7 @@ private val emojiLibrary=listOf(
                 item {PictureActions(pictures) {pictures=it}}
                 item {ListSheetGroup {
                     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {PText("Whose list",Modifier.weight(1f),MaterialTheme.typography.labelSmall,true);Badge(if(ai.mwm.client.cloud.LocalPartnerConnection.current.connected) "Shared space" else "Local mode",c.surface)}
-                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {listOf(Owner.Me,Owner.Together,Owner.You).forEach {value ->Surface(onClick={owner=value},modifier=Modifier.weight(1f),shape=CircleShape,color=if(owner==value) ownerColor(value) else c.surface,border=if(owner==value) null else BorderStroke(1.5.dp,c.separator)) {Column(Modifier.padding(6.dp,10.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(5.dp)) {Icon(if(value==Owner.Together) Icons.Outlined.PeopleOutline else Icons.Outlined.PersonOutline,null,Modifier.size(22.dp));Text(if(value==Owner.Me) "Me" else ownerName(value,preferences),style=MaterialTheme.typography.labelSmall,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)}}}}
+                    CompactOwnerPicker(owner,preferences) {owner=it}
                 }}
                 item {ListSheetGroup {
                     var menu by remember {mutableStateOf(false)}

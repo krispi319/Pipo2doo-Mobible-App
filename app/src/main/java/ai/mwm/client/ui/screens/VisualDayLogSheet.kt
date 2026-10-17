@@ -20,13 +20,13 @@ import androidx.compose.ui.unit.*
 @Composable internal fun VisualDayLogSheet(initial: DayLog,onClose: ()->Unit,onSave: (DayLog)->Unit,onDelete: ()->Unit) {
     var log by remember(initial.day) {mutableStateOf(initial)}
     val c=AppTheme.colors
-    ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),containerColor=c.surface) {
+    ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),sheetGesturesEnabled=false,dragHandle=null,containerColor=c.surface) {
         Column(Modifier.fillMaxWidth().fillMaxHeight(.92f).imePadding()) {
             Row(Modifier.fillMaxWidth().padding(horizontal=20.dp,vertical=4.dp),verticalAlignment=Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {PText("Day log",style=MaterialTheme.typography.titleLarge);PText(dayText(log.day),style=MaterialTheme.typography.bodySmall,muted=true)}
                 IconButton(onClose) {Icon(Icons.Outlined.Close,"Close day log")}
             }
-            LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
+            LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(12.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
                 item {Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                     PeriodMarker("Period start",true,log.start,{log=log.copy(start=it)},Modifier.weight(1f))
                     PeriodMarker("Period end",false,log.end,{log=log.copy(end=it)},Modifier.weight(1f))
@@ -52,31 +52,38 @@ import androidx.compose.ui.unit.*
     }
 }
 
-@Composable private fun PeriodMarker(label: String,start: Boolean,checked: Boolean,onChange: (Boolean)->Unit,modifier: Modifier) {
+@Composable private fun PeriodMarker(label:String,start:Boolean,checked:Boolean,onChange:(Boolean)->Unit,modifier:Modifier) {
     val c=AppTheme.colors
-    Surface(modifier,shape=RoundedCornerShape(20.dp),color=(if(checked)c.accent.copy(alpha=.18f).compositeOver(c.surface) else c.surfaceSunken),border=BorderStroke(1.dp,if(checked)c.accent else c.separator)) {
-        Column(Modifier.padding(14.dp,10.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
-            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {Icon(if(start) Icons.Outlined.WaterDrop else Icons.Outlined.CheckCircle,null,Modifier.size(22.dp));Spacer(Modifier.weight(1f));Switch(checked,onChange,modifier=Modifier.semantics {contentDescription=label})}
-            PText(label,style=MaterialTheme.typography.titleSmall)
-            PText("On this date",style=MaterialTheme.typography.labelSmall,muted=true)
+    Surface(onClick={onChange(!checked)},modifier=modifier.semantics {selected=checked;contentDescription=label;role=Role.Checkbox},shape=RoundedCornerShape(16.dp),color=if(checked)c.accent.copy(alpha=.18f).compositeOver(c.surface) else c.surfaceSunken,border=BorderStroke(1.dp,if(checked)c.accent else c.separator)) {
+        Row(Modifier.padding(10.dp,12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+            Icon(if(start)Icons.Outlined.WaterDrop else Icons.Outlined.CheckCircleOutline,null,Modifier.size(22.dp),tint=c.accent)
+            PText(label,Modifier.weight(1f),MaterialTheme.typography.labelLarge)
+            Icon(if(checked)Icons.Outlined.CheckCircle else Icons.Outlined.RadioButtonUnchecked,null,Modifier.size(18.dp),tint=if(checked)c.accent else c.textSecondary)
         }
     }
 }
 
-@Composable private fun VisualLogChoices(title: String,choices: List<Pair<String,String>>,selectedValues: Set<String>,multiple: Boolean,onSelect: (String)->Unit) {
+@Composable private fun VisualLogChoices(title:String,choices:List<Pair<String,String>>,selectedValues:Set<String>,multiple:Boolean,onSelect:(String)->Unit) {
     val c=AppTheme.colors
-    Paper {
-        Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {Icon(when(title){"Flow"->Icons.Outlined.WaterDrop;"Cramps"->Icons.Outlined.Healing;"Cravings"->Icons.Outlined.Restaurant;else->Icons.Outlined.Spa},null,Modifier.size(20.dp));PText(title,Modifier.weight(1f),MaterialTheme.typography.titleMedium);if(multiple) PText("Pick any",style=MaterialTheme.typography.labelSmall,muted=true)}
-        choices.chunked(3).forEach {row->
-            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                row.forEach {(label,symbol)->
-                    val chosen=label in selectedValues
-                    Surface(onClick={onSelect(label)},modifier=Modifier.weight(1f).fillMaxHeight().heightIn(min=92.dp).semantics {selected=chosen;contentDescription=label;role=if(multiple) Role.Checkbox else Role.RadioButton},shape=RoundedCornerShape(17.dp),color=if(chosen)c.secondary.copy(alpha=.22f).compositeOver(c.surface) else c.surfaceSunken,border=BorderStroke(if(chosen) 1.5.dp else 1.dp,if(chosen)c.secondary else c.separator)) {
-                        Column(Modifier.padding(6.dp,10.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(6.dp)) {Text(symbol,fontSize=22.sp);PText(label,style=MaterialTheme.typography.labelMedium,align=TextAlign.Center);Box(Modifier.size(14.dp)) {if(chosen) Icon(Icons.Outlined.Check,null,Modifier.size(13.dp))}}
+    Surface(shape=RoundedCornerShape(18.dp),color=c.surface,border=BorderStroke(1.dp,c.separator)) {
+        Column(Modifier.fillMaxWidth().padding(10.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)) {Icon(when(title){"Flow"->Icons.Outlined.WaterDrop;"Cramps"->Icons.Outlined.Healing;"Cravings"->Icons.Outlined.Restaurant;else->Icons.Outlined.Spa},null,Modifier.size(18.dp));PText(title,Modifier.weight(1f),MaterialTheme.typography.titleSmall);if(multiple)PText("Pick any",style=MaterialTheme.typography.labelSmall,muted=true)}
+            val columns=if(title=="Flow" || title=="Cramps")choices.size else 2
+            choices.chunked(columns).forEach {row->Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min),horizontalArrangement=Arrangement.spacedBy(5.dp)) {
+                row.forEach {(label,symbol)->val chosen=label in selectedValues
+                    Surface(onClick={onSelect(label)},modifier=Modifier.weight(1f).fillMaxHeight().heightIn(min=if(multiple)48.dp else 64.dp).semantics {selected=chosen;contentDescription=label;role=if(multiple)Role.Checkbox else Role.RadioButton},shape=RoundedCornerShape(13.dp),color=if(chosen)c.secondary.copy(alpha=.22f).compositeOver(c.surface) else c.surfaceSunken,border=BorderStroke(if(chosen)1.5.dp else 1.dp,if(chosen)c.secondary else c.separator)) {
+                        if(multiple) Row(Modifier.padding(7.dp,8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(5.dp)) {Text(symbol,fontSize=19.sp);PText(label,Modifier.weight(1f),MaterialTheme.typography.labelSmall);if(chosen)Icon(Icons.Outlined.Check,null,Modifier.size(13.dp))}
+                        else Column(Modifier.padding(3.dp,7.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                            Box(Modifier.height(24.dp),contentAlignment=Alignment.Center) {
+                                if(title=="Flow" && label !in listOf("None","Spotting")) Row {repeat(when(label){"Light"->1;"Medium"->2;else->3}) {Icon(Icons.Outlined.WaterDrop,null,Modifier.size(11.dp,19.dp),tint=c.accent)}}
+                                else Text(symbol,fontSize=20.sp)
+                            }
+                            PText(label,style=MaterialTheme.typography.labelSmall,align=TextAlign.Center)
+                        }
                     }
                 }
-                repeat(3-row.size) {Spacer(Modifier.weight(1f))}
-            }
+                repeat(columns-row.size) {Spacer(Modifier.weight(1f))}
+            }}
         }
     }
 }

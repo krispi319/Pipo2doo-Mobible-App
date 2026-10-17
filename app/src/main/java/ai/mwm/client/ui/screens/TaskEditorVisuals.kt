@@ -32,20 +32,11 @@ import androidx.compose.ui.unit.*
         TaskCaption(label); Spacer(Modifier.weight(1f)); action()
     }
 }
-@Composable internal fun TaskQuietAction(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val color = AppTheme.colors.primary
-    Box(modifier.heightIn(min = 36.dp).clickable(onClick = onClick).padding(horizontal = 4.dp, vertical = 8.dp).drawBehind {
-        val path = Path().apply {
-            moveTo(0f, size.height + 3.dp.toPx())
-            var x = 0f
-            while(x < size.width) {
-                quadraticTo(x + 2.dp.toPx(), size.height + 7.dp.toPx(), x + 4.dp.toPx(), size.height + 3.dp.toPx())
-                quadraticTo(x + 6.dp.toPx(), size.height - 1.dp.toPx(), x + 8.dp.toPx(), size.height + 3.dp.toPx())
-                x += 8.dp.toPx()
-            }
-        }
-        drawPath(path, color, style = Stroke(1.5.dp.toPx()))
-    }) { PText(label, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)) }
+@Composable internal fun TaskQuietAction(label:String,onClick:()->Unit,modifier:Modifier=Modifier) {
+    OutlinedButton(onClick,modifier.heightIn(min=44.dp),contentPadding=PaddingValues(horizontal=10.dp,vertical=6.dp)) {
+        Icon(when {label.contains("Cancel",true)->Icons.Outlined.Close;label.contains("New",true)->Icons.Outlined.Add;label.contains("notification",true)->Icons.Outlined.NotificationsNone;else->Icons.Outlined.Tune},null,Modifier.size(16.dp))
+        Spacer(Modifier.width(5.dp));PText(label,style=MaterialTheme.typography.labelLarge)
+    }
 }
 @Composable internal fun TaskChip(label: String, selected: Boolean = false, icon: ImageVector? = null, onClick: () -> Unit) {
     val c = AppTheme.colors

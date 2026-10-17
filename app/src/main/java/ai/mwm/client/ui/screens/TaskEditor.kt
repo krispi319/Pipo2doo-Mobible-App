@@ -91,15 +91,13 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
         if(state.lists.isNotEmpty() && state.lists.none { it.id == draft.listId }) draft = draft.copy(listId = state.lists.first().id)
     }
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(onDismissRequest = {if(!saving) onClose()}, sheetState = sheet, containerColor = c.surface, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp), dragHandle = {
-        Box(Modifier.padding(top = 10.dp).size(40.dp, 4.dp).background(c.separator, CircleShape))
-    }) {
+    ModalBottomSheet(onDismissRequest = {if(!saving) onClose()}, sheetState = sheet, sheetGesturesEnabled = false, containerColor = c.surface, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp), dragHandle = null) {
         Column(Modifier.fillMaxWidth().fillMaxHeight(.98f).imePadding()) {
             Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 20.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onClose, enabled = !saving, modifier = Modifier.size(48.dp)) { Icon(Icons.Outlined.Close, "Close without saving", Modifier.size(22.dp), tint = c.textPrimary) }
                 Spacer(Modifier.weight(1f)); Duo(22.dp); Spacer(Modifier.width(8.dp)); PText(if(task == null) "New task" else "Edit task", style = MaterialTheme.typography.titleMedium)
             }
-            LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(20.dp, 0.dp, 20.dp, 20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            LazyColumn(Modifier.weight(1f), state=rememberLazyListState(), overscrollEffect=null, contentPadding = PaddingValues(20.dp, 0.dp, 20.dp, 20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 item {
                     TaskCaption("What needs doing?")
                     BasicTextField(draft.title, { draft = draft.copy(title = it.take(80)) }, Modifier.fillMaxWidth().drawBehind { drawLine(c.primary, Offset(0f, size.height), Offset(size.width, size.height), 2.dp.toPx()) }.padding(2.dp, 4.dp, 2.dp, 8.dp), textStyle = MaterialTheme.typography.headlineMedium.copy(fontSize = 28.sp, lineHeight = 34.sp, letterSpacing = (-.3).sp, fontWeight = FontWeight.Bold, color = c.textPrimary), keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences), maxLines = 4, decorationBox = { inner ->

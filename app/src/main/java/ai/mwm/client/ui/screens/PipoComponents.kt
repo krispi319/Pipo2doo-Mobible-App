@@ -66,6 +66,10 @@ import androidx.compose.ui.unit.*
     }
 }
 @Composable fun Duo(diameter: Dp = 104.dp, myLabel: String = "", partnerLabel: String = "", middle: String = "", modifier: Modifier = Modifier) {
+    if(diameter<=32.dp && myLabel.isBlank() && partnerLabel.isBlank() && middle.isBlank()) {
+        PipoBrand(modifier.size(diameter * 1.25f))
+        return
+    }
     val colors = AppTheme.colors
     Box(modifier.size(diameter * 1.62f, diameter)) {
         Canvas(Modifier.fillMaxSize()) {
