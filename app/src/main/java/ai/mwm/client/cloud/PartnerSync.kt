@@ -215,6 +215,26 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
             if(locketNotice.isNotBlank()) mutable.value=mutable.value.copy(message=locketNotice)
         } catch(e: Exception){runCatching {refresh()};mutable.value=mutable.value.copy(message="Shared update interrupted. Refresh to review any saved changes. ${connectionError(e)}");throw e} finally {mutable.value=mutable.value.copy(busy=false)}
     }
+    suspend fun sendChatNote(note: Appreciation,expectedAccount: String,expectedPartner: String) = lock.withLock {
+        check(AccountScope.current(context)==expectedAccount && mutable.value.partnerUid==expectedPartner) {"Account or partner changed. Reopen chat."}
+        val c=mutable.value
+        if(!c.connected) {
+            check(!repository.isRemote) {"Shared chat is reconnecting. Please wait."}
+            repository.change {current->current.copy(notes=current.notes.filterNot {it.id==note.id}+note)}
+            return@withLock
+        }
+        check(c.paired && c.online) {"Reconnect to your partner before sending."}
+        val saved=api.saveChatNote(note,c.uid,c.spaceId)
+        check(AccountScope.current(context)==expectedAccount && mutable.value.spaceId==c.spaceId) {"Partner space changed."}
+        val current=repository.state.value
+        repository.importRemote(current.copy(notes=current.notes.filterNot {it.id==saved.id}+saved))
+        // A saved message is Sent before optional push delivery. Push failure never retracts it.
+        scope.launch(Dispatchers.IO) {
+            if(AccountScope.current(context)==expectedAccount && mutable.value.spaceId==c.spaceId) {
+                try {api.notifyPartnerNote(saved.id)} catch(e: CancellationException) {throw e} catch(_: Exception) { }
+            }
+        }
+    }
     suspend fun poke(task: Task): Map<String,Any?> = lock.withLock {
         check(mutable.value.paired && mutable.value.online) {"Connect your partner before sending a Poke."}
         check(!task.done && task.owner!=Owner.Me) {"Choose an unfinished task for your partner."}

@@ -306,14 +306,14 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
     fun sendChatNote(id: String,kind: String,message: String,taskTitle: String,picture: String,onResult: (String?)->Unit) {
         val account=AccountScope.current(getApplication())
         val target=connection.value.partnerUid
-        mutationWithResult(onResult) {
-            check(account==AccountScope.current(getApplication()) && target==connection.value.partnerUid) {"Account or partner changed. Reopen chat."}
-            require(kind in listOf("Message","Thank you","You're the best","Purr-fect")) {"Choose a message type."}
-            require(message.trim().length<=240 && (kind!="Message" || message.isNotBlank() || picture.isNotBlank())) {"Write a message or choose a picture."}
-            repository.change {current->
-                // The same ID is reused after an uncertain network result, avoiding duplicate messages.
-                if(current.notes.any {it.id==id}) current else current.copy(notes=current.notes+Appreciation(id=id,kind=kind,message=message.trim(),taskTitle=taskTitle,picture=picture))
-            }
+        viewModelScope.launch {
+            val failure=try {
+                require(kind in listOf("Message","Thank you","You're the best","Purr-fect")) {"Choose a message type."}
+                require(message.trim().length<=240 && (kind!="Message" || message.isNotBlank() || picture.isNotBlank())) {"Write a message or choose a picture."}
+                withContext(Dispatchers.IO) {sync.sendChatNote(Appreciation(id=id,kind=kind,message=message.trim(),taskTitle=taskTitle,picture=picture),account,target)}
+                null
+            } catch(e: CancellationException) {throw e} catch(e: Exception) {ai.mwm.client.cloud.connectionError(e)}
+            onResult(failure)
         }
     }
     fun thank(kind: String, message: String, taskTitle: String = "", picture: String = "") = act(after={event(if(connection.value.connected) "appreciation_shared" else "appreciation_saved_local")}) { repository.change { it.copy(notes = it.notes + Appreciation(kind = kind, message = message.trim(), taskTitle = taskTitle,picture=picture)) } }

@@ -52,6 +52,42 @@ class PipoFirebase private constructor(context: Context) {
         check(role in listOf("user_1","user_2") && (partner==null || partner.getString("member_role")!=role)){"Invalid member roles. Shared edits are blocked."}
         return mapOf("role" to role,"partnerRole" to (partner?.getString("member_role") ?: ""),"uid" to uid,"spaceId" to sid,"generation" to sid,"partnerUid" to (members.firstOrNull {it.getString("user_id")!=uid}?.getString("user_id") ?: ""),"tasks" to rs.filter {it.getString("kind")=="task"}.map(::payload),"lists" to rs.filter {it.getString("kind")=="list"}.map(::payload),"profiles" to rs.filter {it.getString("kind")=="profile"}.map(::payload),"notes" to rs.filter {it.getString("kind")=="appreciation"}.map(::payload),"tags" to rs.filter {it.getString("kind")=="tag"}.map(::payload))
     }
+    /** Chat refresh does not load tasks, profiles, backups, or notification registration. */
+    suspend fun chatSnapshot(expectedUid: String,expectedSpace: String): List<Appreciation> {
+        check(client.uid()==expectedUid && space()==expectedSpace) {"Account or partner space changed. Reopen chat."}
+        return rows(client.request("/rest/v1/shared_records?space_id=eq.$expectedSpace&kind=eq.appreciation&deleted_at=is.null&select=id,created_by,payload,updated_at")).map {r->chatNote(r,expectedUid)}.filter {it.kind!="Locket"}
+    }
+    private fun chatNote(r: JSONObject,uid: String): Appreciation {
+        val p=r.getJSONObject("payload")
+        return Appreciation(id=r.getString("id"),kind=p.getString("kind"),message=p.optString("message"),owner=if(r.getString("created_by")==uid) Owner.Me else Owner.You,
+            at=p.optLong("at",OffsetDateTime.parse(r.getString("updated_at")).toInstant().toEpochMilli()),taskTitle=p.optString("taskTitle"),picture=p.optString("picture"))
+    }
+    suspend fun chatReceipts(expectedUid: String,expectedSpace: String): Set<String> {
+        check(client.uid()==expectedUid) {"Account changed."}
+        return rows(client.request("/rest/v1/chat_read_receipts?space_id=eq.$expectedSpace&reader_id=neq.$expectedUid&select=message_id")).map {it.getString("message_id")}.toSet()
+    }
+    suspend fun markChatRead(expectedUid: String,expectedSpace: String,ids: Set<String>) {
+        check(client.uid()==expectedUid) {"Account changed."}
+        if(ids.isNotEmpty()) client.rpc("mark_chat_read",JSONObject().put("p_space",expectedSpace).put("p_ids",JSONArray(ids.take(200))))
+    }
+    suspend fun saveChatNote(note: Appreciation,expectedUid: String,expectedSpace: String): Appreciation {
+        UUID.fromString(note.id)
+        check(client.uid()==expectedUid && space()==expectedSpace) {"Account or partner changed. Reopen chat."}
+        fun path()="/rest/v1/shared_records?id=eq.${note.id}&space_id=eq.$expectedSpace&select=id,created_by,payload,updated_at,deleted_at"
+        val old=rows(client.request(path())).singleOrNull()
+        if(old!=null) {
+            check(old.getString("created_by")==expectedUid && old.isNull("deleted_at")) {"This message is no longer available."}
+            return chatNote(old,expectedUid) // uncertain retry keeps the original message, time and photo
+        }
+        val photo=if(note.picture.isBlank()) "" else preparePhoto(note.picture)
+        check(client.uid()==expectedUid && space()==expectedSpace) {"Partner changed while uploading. Reopen chat."}
+        client.rpc("mutate_shared_record",JSONObject().put("p_id",note.id).put("p_space",expectedSpace).put("p_kind","appreciation")
+            .put("p_parent",JSONObject.NULL).put("p_assigned",JSONObject.NULL)
+            .put("p_payload",JSONObject().put("kind",note.kind).put("message",note.message.trim()).put("taskTitle",note.taskTitle).put("picture",photo).put("at",note.at))
+            .put("p_expected_version",0).put("p_mutation",note.id).put("p_deleted",false))
+        val saved=rows(client.request(path())).singleOrNull() ?: error("Message confirmation is pending. Retry with the same message.")
+        return chatNote(saved,expectedUid)
+    }
     private suspend fun write(id: String,kind: String,payload: Map<String,Any?>,version: Long,parent: String?=null,assigned: String?=null,deleted: Boolean=false): Map<String,Any?> {
         UUID.fromString(id);val sid=space()
         val body=JSONObject().put("p_id",id).put("p_space",sid).put("p_kind",kind).put("p_parent",parent ?: JSONObject.NULL).put("p_assigned",assigned ?: JSONObject.NULL).put("p_payload",JSONObject(payload)).put("p_expected_version",version).put("p_mutation",UUID.randomUUID().toString()).put("p_deleted",deleted)

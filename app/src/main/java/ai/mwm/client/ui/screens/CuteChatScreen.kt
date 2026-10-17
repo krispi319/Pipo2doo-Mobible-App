@@ -2,6 +2,9 @@ package ai.mwm.client.ui.screens
 
 import ai.mwm.client.data.*
 import ai.mwm.client.cloud.LocalPartnerConnection
+import ai.mwm.client.cloud.PipoFirebase
+import ai.mwm.client.cloud.NoMembership
+import ai.mwm.client.cloud.SignInRequired
 import ai.mwm.client.ui.theme.AppTheme
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -16,6 +19,12 @@ import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.unit.*
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.distinctUntilChanged
 import java.time.*
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -31,18 +40,55 @@ private fun chatIcon(kind: String)=when(kind) {
 @Composable internal fun CuteChatScreen(state: PipoState,taskTitle: String,onBack: ()->Unit,onDeleteNote: (String)->Unit,onSend: (String,String,String,String,String,(String?)->Unit)->Unit) {
     val c=AppTheme.colors
     val connection=LocalPartnerConnection.current
+    val currentConnection by rememberUpdatedState(connection)
     val p=state.preferences
-    var kind by rememberSaveable(taskTitle) {mutableStateOf(if(taskTitle.isBlank()) "Message" else "Thank you")}
-    var message by rememberSaveable {mutableStateOf("")}
-    var picture by rememberSaveable {mutableStateOf("")}
-    var draftId by rememberSaveable {mutableStateOf(newId())}
+    val context=LocalContext.current
+    val lifecycle=LocalLifecycleOwner.current.lifecycle
+    var foreground by remember {mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))}
+    DisposableEffect(lifecycle) {
+        val observer=LifecycleEventObserver {_,_->foreground=lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)}
+        lifecycle.addObserver(observer)
+        onDispose {lifecycle.removeObserver(observer)}
+    }
+    var serverNotes by remember(connection.uid,connection.spaceId) {mutableStateOf<List<Appreciation>?>(null)}
+    var readIds by remember(connection.uid,connection.spaceId) {mutableStateOf(emptySet<String>())}
+    var acknowledged by remember(connection.uid,connection.spaceId) {mutableStateOf(emptySet<String>())}
+    var pending by remember(connection.uid,connection.spaceId) {mutableStateOf(emptyMap<String,ChatPending>())}
+    var refreshKey by remember {mutableIntStateOf(0)}
+    var pollTick by remember {mutableIntStateOf(0)}
+    var chatStatus by remember(connection.uid,connection.spaceId) {mutableStateOf("")}
+    var openPhoto by remember(connection.uid,connection.spaceId) {mutableStateOf<String?>(null)}
+    LaunchedEffect(connection.uid,connection.spaceId,connection.paired,foreground,refreshKey) {
+        if(!connection.paired || !foreground) return@LaunchedEffect
+        val api=PipoFirebase.get(context)
+        while(isActive) {
+            try {
+                val messages=withContext(Dispatchers.IO) {api.chatSnapshot(connection.uid,connection.spaceId)}
+                serverNotes=messages
+                pending=pending.filter { (id,value)->value.state=="Sending" || messages.none {it.id==id} }
+                chatStatus=""
+                try {
+                    readIds=withContext(Dispatchers.IO) {api.chatReceipts(connection.uid,connection.spaceId)}
+                } catch(e: CancellationException) {throw e} catch(_: Exception) {chatStatus="Read status is reconnecting…"}
+                pollTick++
+            } catch(e: CancellationException) {throw e} catch(e: Exception) {
+                if(e is NoMembership || e is SignInRequired || e is ai.mwm.client.cloud.SupabaseFailure && e.status in listOf(401,403)) {serverNotes=emptyList();readIds=emptySet();openPhoto=null}
+                chatStatus="Chat reconnecting…"
+            }
+            delay(if(chatStatus=="Chat reconnecting…") 3000 else 1500)
+        }
+    }
+    var kind by rememberSaveable(connection.uid,connection.spaceId,taskTitle) {mutableStateOf(if(taskTitle.isBlank()) "Message" else "Thank you")}
+    var message by rememberSaveable(connection.uid,connection.spaceId) {mutableStateOf("")}
+    var picture by rememberSaveable(connection.uid,connection.spaceId) {mutableStateOf("")}
+    var draftId by rememberSaveable(connection.uid,connection.spaceId) {mutableStateOf(newId())}
     var menu by remember {mutableStateOf(false)}
-    var sending by remember {mutableStateOf(false)}
-    var failure by remember {mutableStateOf<String?>(null)}
+    var sending by remember(connection.uid,connection.spaceId) {mutableStateOf(false)}
+    var failure by remember(connection.uid,connection.spaceId) {mutableStateOf<String?>(null)}
     val picker=rememberPhotoPicker {picture=it;draftId=newId()}
-    val notes=state.notes.filter {it.kind!="Locket"}.sortedBy {it.at}
+    val notes=mergeChatNotes((serverNotes ?: state.notes).filter {it.kind!="Locket"},pending)
     val listState=rememberLazyListState()
-    var firstScroll by remember {mutableStateOf(true)}
+    var firstScroll by remember(connection.uid,connection.spaceId) {mutableStateOf(true)}
     LaunchedEffect(notes.lastOrNull()?.id) {
         if(notes.isNotEmpty()) {
             val nearBottom=(listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0)>=notes.size-3
@@ -51,19 +97,44 @@ private fun chatIcon(kind: String)=when(kind) {
         }
     }
     val canSend=!sending && !connection.busy && (!connection.connected || connection.paired && connection.online) && (kind!="Message" || message.isNotBlank() || picture.isNotBlank())
-    fun send() {
-        if(sending || !canSend) return
+    fun submit(note: Appreciation) {
+        if(sending) return
         sending=true;failure=null
-        onSend(draftId,kind,message,taskTitle,picture) {error->
+        pending=pending+(note.id to ChatPending(note))
+        val account=connection.uid;val space=connection.spaceId
+        onSend(note.id,note.kind,note.message,note.taskTitle,note.picture) {error->
+            if(account!=currentConnection.uid || space!=currentConnection.spaceId) return@onSend
             sending=false
-            if(error==null) {message="";picture="";draftId=newId()} else failure=error
+            pending=pending+(note.id to ChatPending(note,if(error==null) "Sent" else "Failed",error))
+            if(error==null) {
+                if(draftId==note.id) {message="";picture="";draftId=newId()}
+                refreshKey++
+            } else failure=error
         }
     }
+    fun send() {
+        if(!canSend) return
+        submit(Appreciation(id=draftId,kind=kind,message=message.trim(),taskTitle=taskTitle,picture=picture))
+    }
+    val visibleIds by remember {
+        derivedStateOf {listState.layoutInfo.visibleItemsInfo.mapNotNull {it.key as? String}.toSet()}
+    }
+    LaunchedEffect(visibleIds,foreground,pollTick,connection.uid,connection.spaceId) {
+        if(!foreground || !connection.paired || serverNotes==null) return@LaunchedEffect
+        val incoming=serverNotes.orEmpty().filter {it.owner==Owner.You && !it.sample && it.id in visibleIds && it.id !in acknowledged}.map {it.id}.toSet()
+        if(incoming.isNotEmpty()) {
+            try {
+                withContext(Dispatchers.IO) {PipoFirebase.get(context).markChatRead(connection.uid,connection.spaceId,incoming)}
+                acknowledged=acknowledged+incoming
+            } catch(e: CancellationException) {throw e} catch(_: Exception) { /* Retry on the next successful refresh. */ }
+        }
+    }
+    openPhoto?.let {ChatPhotoViewer(it) {openPhoto=null}}
     Column(Modifier.fillMaxSize().imePadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal=12.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
             IconButton(onBack) {Icon(Icons.Outlined.ArrowBack,"Back")}
             ProfilePhoto(p.partnerPhoto,false,Modifier.size(40.dp))
-            Column(Modifier.weight(1f)) {Text(p.partnerName,style=MaterialTheme.typography.titleMedium,color=c.textPrimary,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis);PText(if(connection.paired) if(connection.online) "Our little chat ♡" else "Reconnecting…" else "Notes on this phone",style=MaterialTheme.typography.labelSmall,muted=true)}
+            Column(Modifier.weight(1f)) {Text(p.partnerName,style=MaterialTheme.typography.titleMedium,color=c.textPrimary,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis);PText(if(chatStatus.isNotBlank()) chatStatus else if(connection.paired) if(connection.online) "Our little chat ♡" else "Reconnecting…" else "Notes on this phone",style=MaterialTheme.typography.labelSmall,muted=true)}
             ApprovedCat(Modifier.size(46.dp,36.dp),"note")
         }
         HorizontalDivider(color=c.separator.copy(alpha=.5f))
@@ -77,14 +148,19 @@ private fun chatIcon(kind: String)=when(kind) {
                             Column(Modifier.fillMaxWidth().padding(14.dp,12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                                 if(note.kind!="Message") Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(7.dp)) {Icon(chatIcon(note.kind),null,Modifier.size(18.dp),tint=c.textSecondary);PText(if(note.kind=="Heart") "A little love" else note.kind,Modifier.weight(1f),MaterialTheme.typography.titleSmall)}
                                 if(note.message.isNotBlank()) PText(note.message,preserveContent=true)
-                                if(note.picture.isNotBlank()) LocalPicture(note.picture,Modifier.fillMaxWidth().height(172.dp).clip(RoundedCornerShape(14.dp)))
+                                if(note.picture.isNotBlank()) LocalPicture(note.picture,Modifier.fillMaxWidth().height(172.dp).clip(RoundedCornerShape(14.dp)).clickable(onClickLabel="Open picture") {openPhoto=note.picture})
                                 chatContext(note,state)?.let {label->Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)) {Icon(if(note.kind=="Heart") Icons.Outlined.Image else Icons.Outlined.AttachFile,null,Modifier.size(14.dp));PText(label,Modifier.weight(1f),MaterialTheme.typography.labelSmall,true,preserveContent=true)}}
                                 if(note.sample) TextButton({onDeleteNote(note.id)},contentPadding=PaddingValues(0.dp)) {PText("Delete example",style=MaterialTheme.typography.labelSmall)}
                             }
                         }
                         Row(Modifier.padding(horizontal=4.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(5.dp)) {
                             PText(Instant.ofEpochMilli(note.at).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm",Locale.getDefault())),style=MaterialTheme.typography.labelSmall,muted=true)
-                            if(mine && !note.sample) {Icon(Icons.Outlined.Check,null,Modifier.size(13.dp),tint=c.textSecondary);PText(if(connection.connected) "Shared" else "Saved here",style=MaterialTheme.typography.labelSmall,muted=true)}
+                            if(mine && !note.sample) {
+                                val delivery=chatDelivery(note,pending[note.id],readIds,connection.connected)
+                                Icon(when(delivery) {"Sending"->Icons.Outlined.Schedule;"Read"->Icons.Outlined.DoneAll;"Failed · Retry"->Icons.Outlined.ErrorOutline;else->Icons.Outlined.Check},delivery,Modifier.size(14.dp),tint=if(delivery=="Read") c.primary else c.textSecondary)
+                                PText(delivery,style=MaterialTheme.typography.labelSmall,muted=delivery!="Read")
+                                if(pending[note.id]?.state=="Failed") TextButton({submit(note)},enabled=!sending,contentPadding=PaddingValues(0.dp)) {PText("Retry",style=MaterialTheme.typography.labelSmall)}
+                            }
                         }
                     }
                 }
@@ -94,7 +170,7 @@ private fun chatIcon(kind: String)=when(kind) {
             Column(Modifier.fillMaxWidth().padding(14.dp,12.dp,14.dp,14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                 if(taskTitle.isNotBlank() && runCatching {java.util.UUID.fromString(taskTitle)}.isFailure) PText("For $taskTitle",style=MaterialTheme.typography.labelSmall,muted=true,preserveContent=true)
                 if(kind!="Message") PText(kind,Modifier.padding(start=4.dp),MaterialTheme.typography.labelSmall,true)
-                if(picture.isNotBlank()) Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {LocalPicture(picture,Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)));TextButton({picture="";draftId=newId()},enabled=!sending) {PText("Remove photo")}}
+                if(picture.isNotBlank()) Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {LocalPicture(picture,Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)).clickable {openPhoto=picture});TextButton({picture="";draftId=newId()},enabled=!sending) {PText("Remove photo")}}
                 Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     Box {
                         FilledTonalIconButton({menu=true},Modifier.size(48.dp),enabled=!sending,shape=CircleShape) {Icon(chatIcon(kind),"Choose message or thank-you style")}
@@ -104,7 +180,7 @@ private fun chatIcon(kind: String)=when(kind) {
                     FilledIconButton({send()},Modifier.size(48.dp),enabled=canSend,shape=CircleShape) {if(sending) CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp) else Icon(Icons.Outlined.Send,"Send ${if(kind=="Message") "message" else "thank-you"}",Modifier.size(20.dp))}
                 }
                 failure?.let {PText(it,Modifier.padding(horizontal=4.dp),MaterialTheme.typography.bodySmall)}
-                if(!connection.connected || !connection.paired || !connection.online) PText(if(!connection.connected) "Saved on this phone until you connect a partner." else if(!connection.paired) "Waiting for your partner to join." else "Offline · Your draft stays here.",Modifier.padding(horizontal=4.dp),MaterialTheme.typography.labelSmall,true)
+                if(!connection.connected || !connection.paired || !connection.online) PText(if(!connection.connected) "Saved only on this phone in local mode." else if(!connection.paired) "Waiting for your partner to join." else "Offline · Your draft stays here.",Modifier.padding(horizontal=4.dp),MaterialTheme.typography.labelSmall,true)
             }
         }
     }
