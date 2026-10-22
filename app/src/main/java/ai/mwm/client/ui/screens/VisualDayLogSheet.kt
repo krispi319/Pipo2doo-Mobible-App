@@ -26,29 +26,37 @@ import androidx.compose.ui.unit.*
                 Column(Modifier.weight(1f)) {PText("Day log",style=MaterialTheme.typography.titleLarge);PText(dayText(log.day),style=MaterialTheme.typography.bodySmall,muted=true)}
                 IconButton(onClose) {Icon(Icons.Outlined.Close,"Close day log")}
             }
-            LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(12.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
-                item {Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                    PeriodMarker("Period start",true,log.start,{log=log.copy(start=it)},Modifier.weight(1f))
-                    PeriodMarker("Period end",false,log.end,{log=log.copy(end=it)},Modifier.weight(1f))
-                }}
-                item {VisualLogChoices("Flow",listOf("None" to "○","Spotting" to "·","Light" to "💧","Medium" to "💧💧","Heavy" to "💧💧💧"),setOf(log.flow),false) {log=log.copy(flow=it)}}
-                item {VisualLogChoices("Cramps",listOf("None" to "☀️","Mild" to "🌤️","Moderate" to "🌧️","Severe" to "⚡"),setOf(log.cramps),false) {log=log.copy(cramps=it)}}
-                item {Paper {
-                    Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {Icon(Icons.Outlined.Mood,null,Modifier.size(20.dp));PText("Mood",style=MaterialTheme.typography.titleMedium)}
-                    val labels=listOf("Very low","Low","Okay","Good","Great")
-                    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min),horizontalArrangement=Arrangement.spacedBy(5.dp)) {labels.forEachIndexed {index,label->
-                        Surface(onClick={log=log.copy(mood=if(log.mood==index) null else index)},modifier=Modifier.weight(1f).fillMaxHeight().semantics {selected=log.mood==index;contentDescription=label+" mood"},shape=RoundedCornerShape(16.dp),color=if(log.mood==index)c.accent.copy(alpha=.2f).compositeOver(c.surface) else c.surfaceSunken,border=BorderStroke(1.dp,if(log.mood==index)c.accent else c.separator)) {
-                            Column(Modifier.padding(4.dp,10.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(7.dp)) {MoodFace(index,Modifier.size(26.dp));PText(label,style=MaterialTheme.typography.labelSmall,align=TextAlign.Center)}
-                        }
-                    }}
-                }}
-                item {VisualLogChoices("Cravings",listOf("Chocolate" to "🍫","Sweet" to "🧁","Salty" to "🥨","Spicy" to "🌶️","Fruit" to "🍓","Comfort food" to "🍜","No appetite" to "🍽️"),log.cravings,true) {value->log=log.copy(cravings=if(value in log.cravings)log.cravings-value else log.cravings+value)}}
-                item {VisualLogChoices("Symptoms",listOf("Back ache" to "🩹","Headache" to "🤕","Bloating" to "🫧","Fatigue" to "🪫","Tender breasts" to "🌸","Acne" to "🪞","Nausea" to "🌊","Poor sleep" to "🌙"),log.symptoms,true) {value->log=log.copy(symptoms=if(value in log.symptoms)log.symptoms-value else log.symptoms+value)}}
-                item {Paper {Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {Icon(Icons.Outlined.EditNote,null,Modifier.size(20.dp));PText("A little note",style=MaterialTheme.typography.titleMedium)};OutlinedTextField(log.note,{log=log.copy(note=it.take(1000))},Modifier.fillMaxWidth(),placeholder={PText("Energy, feelings, care that helps…")},minLines=3,maxLines=6,shape=RoundedCornerShape(16.dp));PText("${log.note.length} / 1000",style=MaterialTheme.typography.labelSmall,muted=true)}}
-                item {TextButton(onDelete) {Icon(Icons.Outlined.DeleteOutline,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp));PText("Delete day log")}}
+            LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(12.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                item {DayLogFields(log) {log=it}}
+                item {OutlinedButton(onDelete,Modifier.fillMaxWidth()) {Icon(Icons.Outlined.DeleteOutline,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp));PText("Delete day log")}}
             }
             Button({onSave(log)},Modifier.fillMaxWidth().padding(16.dp,10.dp).heightIn(min=48.dp),shape=CircleShape) {Icon(Icons.Outlined.Check,null,Modifier.size(20.dp));Spacer(Modifier.width(8.dp));PText("Save day log")}
         }
+    }
+}
+
+@Composable internal fun DayLogFields(log:DayLog,onChange:(DayLog)->Unit) {
+    val c=AppTheme.colors
+    Column(Modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+            PeriodMarker("Period start",true,log.start,{onChange(log.copy(start=it))},Modifier.weight(1f))
+            PeriodMarker("Period end",false,log.end,{onChange(log.copy(end=it))},Modifier.weight(1f))
+        }
+        VisualLogChoices("Flow",listOf("None" to "○","Spotting" to "·","Light" to "💧","Medium" to "💧💧","Heavy" to "💧💧💧"),setOf(log.flow),false) {onChange(log.copy(flow=it))}
+        VisualLogChoices("Cramps",listOf("None" to "☀️","Mild" to "🌤️","Moderate" to "🌧️","Severe" to "⚡"),setOf(log.cramps),false) {onChange(log.copy(cramps=it))}
+        Paper {
+            Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(7.dp)) {Icon(Icons.Outlined.Mood,null,Modifier.size(20.dp));PText("Mood",style=MaterialTheme.typography.titleSmall)}
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min),horizontalArrangement=Arrangement.spacedBy(5.dp)) {
+                listOf("Very low","Low","Okay","Good","Great").forEachIndexed {index,label->
+                    Surface(onClick={onChange(log.copy(mood=if(log.mood==index)null else index))},modifier=Modifier.weight(1f).fillMaxHeight().heightIn(min=64.dp).semantics {selected=log.mood==index;contentDescription=label+" mood"},shape=RoundedCornerShape(14.dp),color=if(log.mood==index)c.accent.copy(alpha=.2f).compositeOver(c.surface) else c.surfaceSunken,border=BorderStroke(1.dp,if(log.mood==index)c.accent else c.separator)) {
+                        Column(Modifier.padding(3.dp,8.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(5.dp)) {MoodFace(index,Modifier.size(25.dp));PText(label,style=MaterialTheme.typography.labelSmall,align=TextAlign.Center)}
+                    }
+                }
+            }
+        }
+        VisualLogChoices("Cravings",listOf("Chocolate" to "🍫","Sweet" to "🧁","Salty" to "🥨","Spicy" to "🌶️","Fruit" to "🍓","Comfort food" to "🍜","No appetite" to "🍽️"),log.cravings,true) {v->onChange(log.copy(cravings=if(v in log.cravings)log.cravings-v else log.cravings+v))}
+        VisualLogChoices("Symptoms",listOf("Back ache" to "🩹","Headache" to "🤕","Bloating" to "🫧","Fatigue" to "🪫","Tender breasts" to "🌸","Acne" to "🪞","Nausea" to "🌊","Poor sleep" to "🌙"),log.symptoms,true) {v->onChange(log.copy(symptoms=if(v in log.symptoms)log.symptoms-v else log.symptoms+v))}
+        Paper {Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(7.dp)) {Icon(Icons.Outlined.EditNote,null,Modifier.size(20.dp));PText("A little note",style=MaterialTheme.typography.titleSmall)};OutlinedTextField(log.note,{onChange(log.copy(note=it.take(1000)))},Modifier.fillMaxWidth(),placeholder={PText("Energy, feelings, care that helps…")},minLines=3,maxLines=6,shape=RoundedCornerShape(16.dp));PText("${log.note.length} / 1000",style=MaterialTheme.typography.labelSmall,muted=true)}
     }
 }
 

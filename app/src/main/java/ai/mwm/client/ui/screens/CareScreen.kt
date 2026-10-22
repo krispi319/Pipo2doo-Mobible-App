@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.geometry.Offset
@@ -32,7 +33,6 @@ private val moods=listOf("Very low","Low","Okay","Good","Great")
     var partnerView by remember {mutableStateOf(false)}
     var month by remember {mutableStateOf(YearMonth.now())}
     var selected by remember {mutableStateOf(LocalDate.now().toEpochDay())}
-    var draft by remember {mutableStateOf<DayLog?>(null)}
     var cycleSheet by remember {mutableStateOf(false)}
     var clear by remember {mutableStateOf(false)}
     var delete by remember {mutableStateOf(false)}
@@ -60,7 +60,7 @@ private val moods=listOf("Very low","Low","Okay","Good","Great")
                     ApprovedCat(Modifier.size(92.dp,84.dp),"care")
                 }
             }
-            item {Sticky(color=c.accent,rotation=-1f) {
+            item {Paper(color=c.accent.copy(alpha=.1f).compositeOver(c.surface)) {
                 PText("A little heads-up",style=MaterialTheme.typography.titleMedium)
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                     Column(Modifier.weight(1f)) {PText("Estimated end",style=MaterialTheme.typography.labelSmall,muted=true);PText(visible.starts.lastOrNull()?.let {dayText(it+visible.duration-1)} ?: "—",style=MaterialTheme.typography.titleMedium)}
@@ -68,48 +68,24 @@ private val moods=listOf("Very low","Low","Okay","Good","Great")
                 }
                 PText("Cycle · ${visible.estimateCycle} days    Period · ${visible.duration} days",style=MaterialTheme.typography.bodySmall,muted=true)
                 PText("Estimates may vary from your actual dates.",style=MaterialTheme.typography.bodySmall,muted=true)
-                if(!partnerView) Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                if(!partnerView) FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     Button({val today=LocalDate.now().toEpochDay();val current=state?.logs?.find {it.day==today} ?: DayLog(today);onSave(if(active==null) current.copy(start=true,end=false) else current.copy(end=true))}) {PText(if(active==null) "Start today" else "End today")}
-                    TextButton({cycleSheet=true}) {PText("Cycle settings")}
+                    OutlinedButton({cycleSheet=true},contentPadding=PaddingValues(horizontal=16.dp,vertical=10.dp)) {Icon(Icons.Outlined.Tune,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp));PText("Cycle settings")}
                 }
             }}
-            item {Paper {
-                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {PText("Cycle calendar",Modifier.weight(1f),MaterialTheme.typography.titleMedium);TextButton({month=YearMonth.now();selected=LocalDate.now().toEpochDay()}) {PText("Today")}}
-                Row(verticalAlignment=Alignment.CenterVertically) {IconButton({month=month.minusMonths(1)}) {Icon(Icons.Outlined.ChevronLeft,"Previous month")};PText(month.format(DateTimeFormatter.ofPattern("MMMM yyyy",Locale.getDefault())),Modifier.weight(1f),MaterialTheme.typography.titleMedium,align=androidx.compose.ui.text.style.TextAlign.Center);IconButton({month=month.plusMonths(1)}) {Icon(Icons.Outlined.ChevronRight,"Next month")}}
-                Row {DayOfWeek.entries.forEach {day->PText(day.getDisplayName(java.time.format.TextStyle.NARROW,Locale.getDefault()),Modifier.weight(1f),MaterialTheme.typography.labelSmall,muted=true,align=androidx.compose.ui.text.style.TextAlign.Center)}}
-                val first=month.atDay(1).minusDays((month.atDay(1).dayOfWeek.value-1).toLong())
-                repeat((month.atDay(1).dayOfWeek.value-1+month.lengthOfMonth()+6)/7) {week->Row {repeat(7) {i->
-                    val date=first.plusDays((week*7+i).toLong());val day=date.toEpochDay();val entry=visible.logs.find {it.day==day};val logged=entry?.let {it.start || it.flow!="None"}==true
-                    Surface(onClick={selected=day},modifier=Modifier.weight(1f).height(46.dp).padding(2.dp).semantics {contentDescription=dayText(day);this.selected=selected==day},shape=RoundedCornerShape(16.dp),color=if(logged) c.accent.copy(alpha=.45f) else if(visible.predicted(day)) c.accent.copy(alpha=.12f) else c.surface,border=if(selected==day) BorderStroke(1.dp,c.textPrimary) else null) {Box(contentAlignment=Alignment.Center) {PText(date.dayOfMonth.toString(),style=MaterialTheme.typography.bodySmall,muted=YearMonth.from(date)!=month)}}
-                }}}
-                PText("Filled · logged    Soft · estimated",style=MaterialTheme.typography.labelSmall,muted=true)
-                PText(dayText(selected),style=MaterialTheme.typography.titleSmall)
-                PText(log?.let {listOfNotNull(if(it.start) "Period start" else null,if(it.end) "Period end" else null,if(it.flow!="None") "${it.flow} flow" else null,if(it.cramps!="None") "${it.cramps} cramps" else null,it.mood?.let {m->moods[m]},it.cravings.joinToString().takeIf(String::isNotBlank),it.symptoms.joinToString().takeIf(String::isNotBlank)).joinToString(" · ").ifBlank {"Day note"}} ?: "No day log",style=MaterialTheme.typography.bodySmall,muted=true)
-                log?.note?.takeIf {it.isNotBlank()}?.let {PText(it,preserveContent=true)}
-                if(!partnerView) OutlinedButton({draft=log ?: DayLog(selected)},Modifier.fillMaxWidth()) {PText(if(log==null) "Add day log" else "Edit day log")}
-            }}
+            item {CycleCalendar(visible,month,selected,{month=it},{selected=it})}
+            if(partnerView) item {Paper {PText(dayText(selected),style=MaterialTheme.typography.titleSmall);PText(log?.let {listOfNotNull(if(it.start)"Period start" else null,if(it.end)"Period end" else null,it.flow.takeIf {v->v!="None"}?.let {v->"$v flow"},it.cramps.takeIf {v->v!="None"}?.let {v->"$v cramps"},it.mood?.let {m->moods.getOrNull(m)},it.cravings.joinToString().takeIf {v->v.isNotBlank()},it.symptoms.joinToString().takeIf {v->v.isNotBlank()}).joinToString(" · ").ifBlank {"Day note"}} ?: "No day log",style=MaterialTheme.typography.bodySmall,muted=true);log?.note?.takeIf {it.isNotBlank()}?.let {PText(it,preserveContent=true)}}}
             if(!partnerView && state!=null) {
-                item {Paper {PText("How are you feeling?",style=MaterialTheme.typography.titleSmall);Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {moods.forEachIndexed {index,label->Column(Modifier.weight(1f).clickable {val today=LocalDate.now().toEpochDay();draft=(state.logs.find {it.day==today} ?: DayLog(today)).copy(mood=index)},horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(6.dp)) {MoodFace(index,Modifier.size(30.dp));PText(label,style=MaterialTheme.typography.labelSmall)}}}}}
+                item(key="inline_${connection.uid}_${connection.spaceId}_$selected") {InlineDayLog(log ?: DayLog(selected),connection.uid+":"+connection.spaceId,error,onSave,{delete=true},exists=log!=null)}
                 item {Paper {
                     PText("Your reminders",style=MaterialTheme.typography.titleSmall)
                     listOf("Daily check-in","Before expected start","Expected end").forEachIndexed {i,label->
                         val enabled=when(i){0->state.checkIn;1->state.headsUp;else->state.endReminder};val minute=when(i){0->state.checkTime;1->state.headsTime;else->state.endTime}
-                        Row(verticalAlignment=Alignment.CenterVertically) {PText(label,Modifier.weight(1f),MaterialTheme.typography.bodyMedium);TextButton({pickTime(context,minute) {value->onUpdate {when(i){0->it.copy(checkTime=value);1->it.copy(headsTime=value);else->it.copy(endTime=value)}}}}) {PText(timeText(minute))};Switch(enabled,{value->onUpdate {when(i){0->it.copy(checkIn=value);1->it.copy(headsUp=value);else->it.copy(endReminder=value)}};if(value && !allowed) onEnable()})}
+                        Row(verticalAlignment=Alignment.CenterVertically) {PText(label,Modifier.weight(1f),MaterialTheme.typography.bodyMedium);OutlinedButton({pickTime(context,minute) {value->onUpdate {when(i){0->it.copy(checkTime=value);1->it.copy(headsTime=value);else->it.copy(endTime=value)}}}}) {PText(timeText(minute))};Switch(enabled,{value->onUpdate {when(i){0->it.copy(checkIn=value);1->it.copy(headsUp=value);else->it.copy(endReminder=value)}};if(value && !allowed) onEnable()})}
                     }
                     PText("Reminder settings are per phone. They don't change your partner's reminders.",style=MaterialTheme.typography.bodySmall,muted=true)
                 }}
-                item {TextButton({clear=true}) {PText("Clear my day logs")}}
-            }
-        }
-        if(!partnerView && state!=null) item {
-            Paper {
-                Row(verticalAlignment=Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {PText("Let $partner follow along",style=MaterialTheme.typography.titleSmall,preserveContent=true);PText("Includes period dates, mood, symptoms and your day notes. Only you can edit them.",style=MaterialTheme.typography.bodySmall,muted=true)}
-                    Switch(shared.enabled,onSharing,enabled=shared.online && !shared.busy && connection.paired)
-                }
-                PText(shared.status,style=MaterialTheme.typography.bodySmall,muted=true)
-                if(state.pendingShare) TextButton({onSharing(true)},enabled=shared.online && !shared.busy) {PText("Publish this phone's saved changes")}
-                if(shared.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                item {OutlinedButton({clear=true},Modifier.fillMaxWidth().heightIn(min=48.dp)) {Icon(Icons.Outlined.DeleteOutline,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp));PText("Clear my day logs")}}
             }
         }
         item {Paper {
@@ -123,9 +99,19 @@ private val moods=listOf("Very low","Low","Okay","Good","Great")
             supportError?.let {PText(it,style=MaterialTheme.typography.bodySmall)}
             Button({supportSending=true;supportError=null;onSupport(note.trim()) {failure->supportSending=false;if(failure==null) note="" else supportError=failure}},enabled=note.isNotBlank() && connection.paired && connection.online && !connection.busy && !supportSending,modifier=Modifier.fillMaxWidth()) {PText(if(supportSending) "Sending…" else "Send support")}
         }}
+        if(!partnerView && state!=null) item {
+            Paper {
+                Row(verticalAlignment=Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {PText("Let $partner follow along",style=MaterialTheme.typography.titleSmall,preserveContent=true);PText("Includes period dates, mood, symptoms and your day notes. Only you can edit them.",style=MaterialTheme.typography.bodySmall,muted=true)}
+                    Switch(shared.enabled,onSharing,enabled=shared.online && !shared.busy && connection.paired)
+                }
+                PText(shared.status,style=MaterialTheme.typography.bodySmall,muted=true)
+                if(state.pendingShare) OutlinedButton({onSharing(true)},enabled=shared.online && !shared.busy) {PText("Publish this phone's saved changes")}
+                if(shared.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            }
+        }
     }
-    draft?.let {initial->DayLogSheet(initial,{draft=null},{onSave(it);draft=null},{delete=true})}
-    if(delete) AlertDialog(onDismissRequest={delete=false},title={PText("Delete my day log?")},text={PText("This also removes it from your shared calendar when sharing is on.")},confirmButton={TextButton({draft?.let {onDelete(it.day)};draft=null;delete=false}) {PText("Delete")}},dismissButton={TextButton({delete=false}) {PText("Cancel")}})
+    if(delete) AlertDialog(onDismissRequest={delete=false},title={PText("Delete my day log?")},text={PText("This also removes it from your shared calendar when sharing is on.")},confirmButton={TextButton({onDelete(selected);delete=false}) {PText("Delete")}},dismissButton={TextButton({delete=false}) {PText("Cancel")}})
     if(clear) AlertDialog(onDismissRequest={clear=false},title={PText("Clear my day logs?")},text={PText("Your partner's records and support notes stay. If sharing is on, your shared copy will be cleared too.")},confirmButton={TextButton({onClear();clear=false}) {PText("Clear my logs")}},dismissButton={TextButton({clear=false}) {PText("Cancel")}})
     if(cycleSheet && state!=null) {
         var cycle by remember {mutableStateOf(state.cycle.toString())};var duration by remember {mutableStateOf(state.duration.toString())}

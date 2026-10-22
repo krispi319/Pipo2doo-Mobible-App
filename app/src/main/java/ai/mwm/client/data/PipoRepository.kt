@@ -235,6 +235,15 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
     fun toggle(task: Task) = status(task.id, if(task.done) TaskStatus.Todo else TaskStatus.Done)
     fun delete(id: String) = act { repository.deleteTask(id) }
     fun preferences(update: (Preferences) -> Preferences) = act { repository.updateOwnPreferences(update) }
+    fun setTogetherDate(day:Long,version:Long,onResult:(String?)->Unit) {
+        val account=AccountScope.current(getApplication())
+        viewModelScope.launch {
+            val failure=try {withContext(Dispatchers.IO) {sync.setTogetherDate(day,version,account)};null}
+                catch(e:CancellationException) {throw e} catch(e:Exception) {ai.mwm.client.cloud.connectionError(e)}
+            onResult(failure)
+        }
+    }
+
     fun resetWorkspace() = act {repository.change {it.copy(tasks=emptyList(),lists=emptyList(),tags=emptyList(),notes=if(it.preferences.keepResetHistory) it.notes else emptyList())};event("workspace_reset_local")}
     fun start() = act(after={event("onboarding_completed")}) { repository.change { it.copy(preferences = it.preferences.copy(started = true)) } }
     fun setCode(code: String) = act { repository.change { it.copy(preferences = it.preferences.copy(code = code)) } }

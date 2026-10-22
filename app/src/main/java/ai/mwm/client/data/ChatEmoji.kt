@@ -12,7 +12,7 @@ fun limitChatText(text:String,limit:Int=240):String {
     return text.substring(0,end.coerceAtLeast(0))
 }
 fun insertChatEmoji(text:String,start:Int,end:Int,emoji:String):EmojiInsertion? {
-    require(emoji in CHAT_EMOJIS)
+    require(CHAT_EMOJI_CHOICES.any {it.glyph==emoji})
     fun boundary(index:Int,forward:Boolean):Int {
         val i=index.coerceIn(0,text.length)
         return if(i>0 && i<text.length && text[i-1].isHighSurrogate() && text[i].isLowSurrogate()) i+(if(forward) 1 else -1) else i

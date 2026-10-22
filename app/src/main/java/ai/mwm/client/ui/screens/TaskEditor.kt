@@ -59,7 +59,7 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
     val context = LocalContext.current
     val c = AppTheme.colors
     val today = LocalDate.now().toEpochDay()
-    var draft by rememberSaveable(task?.id, stateSaver = DraftSaver) { mutableStateOf(task ?: Task(listId = defaultList ?: state.lists.firstOrNull()?.id ?: "home", status = initialStatus, day = today, minute = null, reminder = false, offset = 0)) }
+    var draft by rememberSaveable(task?.id, stateSaver = DraftSaver) { mutableStateOf(task ?: Task(listId = defaultList ?: state.lists.firstOrNull()?.id ?: "home", status = initialStatus, day = today, minute = null, reminder = true, offset = 0)) }
     var confirmClearNote by rememberSaveable { mutableStateOf(false) }
     var tagPicker by rememberSaveable { mutableStateOf(false) }
     var newTagName by rememberSaveable { mutableStateOf("") }
@@ -153,7 +153,7 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                                 Column(Modifier.weight(1f)) {
                                     PText(if(draft.reminder) "Gentle nudge" else "No nudge", style = MaterialTheme.typography.titleMedium)
-                                    PText("Optional · Off for new tasks", style = MaterialTheme.typography.bodySmall, muted = true)
+                                    PText("On for new tasks · You can turn it off", style = MaterialTheme.typography.bodySmall, muted = true)
                                 }
                                 // CSS-sized switch; Material's default switch is wider and taller.
                                 Box(Modifier.size(50.dp, 30.dp).background(if(draft.reminder) c.secondary else c.surface, CircleShape).semantics { contentDescription = "Gentle reminder" }.toggleable(value = draft.reminder, role = Role.Switch) { enabled -> draft = draft.copy(reminder = enabled); if(enabled) requestNotifications() }.padding(4.dp), contentAlignment = if(draft.reminder) Alignment.CenterEnd else Alignment.CenterStart) {

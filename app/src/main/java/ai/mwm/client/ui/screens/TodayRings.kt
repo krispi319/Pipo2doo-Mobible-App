@@ -3,6 +3,12 @@ package ai.mwm.client.ui.screens
 import ai.mwm.client.data.*
 import ai.mwm.client.ui.theme.AppTheme
 import androidx.compose.foundation.*
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.*
 import androidx.compose.material.icons.Icons
@@ -33,17 +39,19 @@ import kotlinx.coroutines.delay
                 val zone=if(owner==Owner.Me)clockZone(p.clockZone) else partnerClockZone(p)
                 val time=zone?.let {Instant.ofEpochMilli(tick).atZone(it)}
                 Surface(onClick={onFilter(owner.label)},modifier=Modifier.weight(1f).semantics {selected=filter==owner.label},shape=RoundedCornerShape(22.dp),color=color.copy(alpha=.08f).compositeOver(c.surface),border=BorderStroke(if(filter==owner.label)2.dp else 1.dp,if(filter==owner.label)color else c.separator)) {
-                    Column(Modifier.padding(8.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                    Column(Modifier.padding(10.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
                         Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(5.dp)) {
-                            Box(Modifier.size(64.dp)) {
+                            Box(Modifier.size(48.dp)) {
                                 ProfilePhoto(if(owner==Owner.Me)p.myPhoto else p.partnerPhoto,owner==Owner.Me,Modifier.fillMaxSize().padding(6.dp),if(owner==Owner.Me)p.avatar else -1)
                                 Canvas(Modifier.fillMaxSize()) {val inset=3.dp.toPx();drawCircle(c.surfaceSunken,size.width/2-inset,style=Stroke(3.dp.toPx()));drawArc(color,-90f,360f*progress,false,Offset(inset,inset),Size(size.width-2*inset,size.height-2*inset),style=Stroke(3.dp.toPx(),cap=StrokeCap.Round))}
                             }
-                            Surface(onClick={onClock(owner)},modifier=Modifier.weight(1f).semantics {contentDescription="Set ${ownerName(owner,p)} clock timezone"},shape=RoundedCornerShape(14.dp),color=c.surfaceElevated,border=BorderStroke(1.dp,c.separator)) {
-                                Column(Modifier.padding(3.dp,5.dp),horizontalAlignment=Alignment.CenterHorizontally) {
-                                    ClockFace(time,Modifier.size(30.dp))
-                                    Text(time?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: "--:--",style=MaterialTheme.typography.labelMedium,color=c.textPrimary,maxLines=1)
-                                    Icon(Icons.Outlined.ExpandMore,null,Modifier.size(12.dp),tint=c.textSecondary)
+                            Surface(onClick={onClock(owner)},modifier=Modifier.weight(1f).height(44.dp).semantics {contentDescription="Set ${ownerName(owner,p)} clock timezone"},shape=RoundedCornerShape(14.dp),color=c.surfaceElevated,border=BorderStroke(1.dp,c.separator)) {
+                                Box(Modifier.fillMaxSize().padding(horizontal=5.dp,vertical=8.dp),contentAlignment=Alignment.Center) {
+                                    BasicText(time?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: "--:--",
+                                        modifier=Modifier.fillMaxWidth(),
+                                        style=MaterialTheme.typography.titleLarge.copy(color=c.textPrimary,fontFamily=FontFamily.Monospace,fontWeight=FontWeight.SemiBold,textAlign=TextAlign.Center),
+                                        maxLines=1,softWrap=false,
+                                        autoSize=TextAutoSize.StepBased(minFontSize=9.sp,maxFontSize=20.sp,stepSize=1.sp))
                                 }
                             }
                         }

@@ -1,0 +1,4 @@
+Isolated Compose UI compile: PASS (21 files).
+Upcoming grouping checks: PASS (232).
+AAPT2 resource compile: PASS.
+Full Gradle APK and device visual checks: NOT RUN; see START_HERE.

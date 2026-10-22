@@ -21,7 +21,7 @@ data class Task(
     val id: String = newId(), val title: String = "", val owner: Owner = Owner.Together,
     val day: Long = LocalDate.now().toEpochDay(), val minute: Int? = null,
     val listId: String = "home", val note: String = "", val tags: List<String> = emptyList(),
-    val repeat: Repeat = Repeat.Once, val reminder: Boolean = false, val offset: Int = 0,
+    val repeat: Repeat = Repeat.Once, val reminder: Boolean = true, val offset: Int = 0,
     val status: TaskStatus = TaskStatus.Todo, val completedAt: Long = 0,
     val parentId: String = "", val events: List<TaskEvent> = emptyList(), val assigneeUid: String = ""
 ) {
@@ -90,7 +90,7 @@ internal fun legacyDemoState(): PipoState {
     val today = LocalDate.now().toEpochDay()
     val lists = listOf(SharedList("groceries", "Weekly groceries & Pip's food", "🛒", true), SharedList("trip", "Porto weekend packing", "🧳", true, Owner.You), SharedList("home", "Apartment fixes before the landlord visit", "🔧", owner=Owner.Me), SharedList("dates", "Movie night queue", "🎬"), SharedList("cat", "Pip's vet & vaccine stuff", "🐈", owner=Owner.Me), SharedList("garden", "Balcony plants", "🪴"), SharedList("gifts", "Gift ideas for Theo's mum", "🎁", owner=Owner.You), SharedList("recipes", "Cozy recipes to try", "🍜"), SharedList("travel", "Lisbon kayak day", "🛶"))
     val tags = listOf(Tag("home_tag", "Home"), Tag("errand", "Errands"), Tag("pet", "Pet care"), Tag("us", "Together time"))
-    fun task(title: String, owner: Owner, list: String, days: Long = 0, minute: Int? = null, done: Boolean = false, note: String = "", tag: String = "", repeat: Repeat = Repeat.Once, status: TaskStatus = TaskStatus.Todo) = Task(title = title, owner = owner, listId = list, day = today + days, minute = minute, status = if(done) TaskStatus.Done else status, completedAt = if(done) LocalDate.now().atTime(8, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() else 0, note = note, tags = if(tag.isEmpty()) emptyList() else listOf(tag), repeat = repeat, events = listOf(TaskEvent("Created this task")))
+    fun task(title: String, owner: Owner, list: String, days: Long = 0, minute: Int? = null, done: Boolean = false, note: String = "", tag: String = "", repeat: Repeat = Repeat.Once, status: TaskStatus = TaskStatus.Todo) = Task(title = title, owner = owner, listId = list, day = today + days, minute = minute, status = if(done) TaskStatus.Done else status, completedAt = if(done) LocalDate.now().atTime(8, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() else 0, note = note, tags = if(tag.isEmpty()) emptyList() else listOf(tag), repeat = repeat, reminder = false, events = listOf(TaskEvent("Created this task")))
     val tasks = listOf(
         task("20-minute stretch before dinner", Owner.Me, "home", minute = 1080, repeat = Repeat.Daily),
         task("Pick up cat food for Pipo & Mochi", Owner.Together, "cat", minute = 570, tag = "pet"),

@@ -53,7 +53,7 @@ import kotlinx.coroutines.launch
                 if(aside.isNotEmpty()) Badge(aside)
             }
             DashedRule(Modifier.padding(horizontal=12.dp))
-            content()
+            Column(Modifier.padding(6.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {content()}
         }
     }
 }
@@ -82,9 +82,10 @@ import kotlinx.coroutines.launch
 private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/60,minute%60)
 
 @OptIn(ExperimentalLayoutApi::class)
-@Composable fun SettingsScreen(state: PipoState, notificationsAllowed: Boolean, onPreferences: ((Preferences) -> Preferences) -> Unit, onEnable: () -> Unit, onTestReminder: () -> Unit, onTags: () -> Unit, onLeave: () -> Unit, onCare: () -> Unit = {}, onReset: () -> Unit = {}, onPair: () -> Unit = {}, onCheck: () -> Unit = {}, onBackup: () -> Unit = {}) {
+@Composable fun SettingsScreen(state: PipoState, notificationsAllowed: Boolean, onPreferences: ((Preferences) -> Preferences) -> Unit, onEnable: () -> Unit, onTestReminder: () -> Unit, onTags: () -> Unit, onLeave: () -> Unit, onCare: () -> Unit = {}, onReset: () -> Unit = {}, onPair: () -> Unit = {}, onCheck: () -> Unit = {}, onBackup: () -> Unit = {},onTogetherDate:(Long,Long,(String?)->Unit)->Unit={day,_,done->onPreferences {it.copy(togetherSince=day)};done(null)}) {
     val context=LocalContext.current
     val connection=ai.mwm.client.cloud.LocalPartnerConnection.current
+    val currentConnection by rememberUpdatedState(connection)
     val p=state.preferences
     val c=AppTheme.colors
     val pickMe=rememberPhotoPicker { photo -> onPreferences { it.copy(myPhoto=photo) } }
@@ -93,21 +94,35 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
     var savedName by rememberSaveable {mutableStateOf<String?>(null)}
     LaunchedEffect(connection.uid) {pendingName=null;savedName=null;myName=p.myName}
     LaunchedEffect(p.myName,pendingName) {if(pendingName!=null && pendingName==p.myName) {savedName=p.myName;pendingName=null}}
+    var dateSaving by remember(connection.uid,connection.spaceId) {mutableStateOf(false)}
+    var dateError by remember(connection.uid,connection.spaceId) {mutableStateOf<String?>(null)}
     var backupDetails by remember {mutableStateOf(false)}
     var reset by rememberSaveable {mutableStateOf(false)}
     var confirmLeave by rememberSaveable {mutableStateOf(false)}
     var languageOpen by rememberSaveable {mutableStateOf(false)}
     var preview by remember {mutableStateOf(false)}
     val date=LocalDate.ofEpochDay(p.togetherSince)
-    val days=java.time.temporal.ChronoUnit.DAYS.between(date,LocalDate.now()).coerceAtLeast(0)
+    val days=if(connection.connected && !connection.togetherDateKnown)null else java.time.temporal.ChronoUnit.DAYS.between(date,LocalDate.now()).coerceAtLeast(0)
     val manager=context.getSystemService(android.app.NotificationManager::class.java)
     // Read system channels when returning from Android settings, not illustrative mockup states.
     var soundRevision by remember {mutableIntStateOf(0)}
     val taskChannel=remember(soundRevision,notificationsAllowed) {manager.getNotificationChannel(ai.mwm.client.reminders.NotificationSounds.channelId(context,TaskReminders.CHANNEL))}
     val taskEnabled=notificationsAllowed && taskChannel!=null && taskChannel.importance!=android.app.NotificationManager.IMPORTANCE_NONE
     val permission=manager.areNotificationsEnabled() && (android.os.Build.VERSION.SDK_INT<33 || androidx.core.content.ContextCompat.checkSelfPermission(context,android.Manifest.permission.POST_NOTIFICATIONS)==android.content.pm.PackageManager.PERMISSION_GRANTED)
-    val setDate: () -> Unit = {
-        android.app.DatePickerDialog(context,{_,year,month,day->onPreferences {it.copy(togetherSince=LocalDate.of(year,month+1,day).toEpochDay())}},date.year,date.monthValue-1,date.dayOfMonth).apply {datePicker.maxDate=System.currentTimeMillis()}.show()
+    val setDate:()->Unit = {
+        if(!dateSaving && !connection.busy && (!connection.connected || connection.online)) {
+            val owner=connection.uid;val space=connection.spaceId;val version=connection.togetherDateVersion
+            android.app.DatePickerDialog(context,{_,year,month,day->
+                dateSaving=true;dateError=null
+                onTogetherDate(LocalDate.of(year,month+1,day).toEpochDay(),version,saveDate@{failure->
+                    if(owner!=currentConnection.uid || space!=currentConnection.spaceId)return@saveDate
+                    dateSaving=false;dateError=failure
+                })
+            },date.year,date.monthValue-1,date.dayOfMonth).apply {
+                datePicker.minDate=LocalDate.of(1900,1,1).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+                datePicker.maxDate=System.currentTimeMillis()
+            }.show()
+        }
     }
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp,12.dp,16.dp,104.dp),verticalArrangement=Arrangement.spacedBy(20.dp)) {
         item {Surface(shape=RoundedCornerShape(20.dp),color=c.surface,border=BorderStroke(1.dp,c.separator),shadowElevation=1.dp) {
@@ -117,7 +132,7 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
         }}
         item {Surface(shape=RoundedCornerShape(28.dp),color=c.surface,border=BorderStroke(1.dp,c.separator),shadowElevation=4.dp) {
             Column(Modifier.fillMaxWidth().padding(16.dp,20.dp,16.dp,16.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
-                Box(Modifier.align(Alignment.CenterHorizontally).width(224.dp).height(144.dp)) {
+                Box(Modifier.align(Alignment.CenterHorizontally).fillMaxWidth().height(152.dp)) {
                     SettingsOrbit(p,days,Modifier.align(Alignment.TopCenter))
                     FilledIconButton(pickMe,Modifier.align(Alignment.BottomStart).size(48.dp),colors=IconButtonDefaults.filledIconButtonColors(containerColor=c.surfaceElevated,contentColor=c.textPrimary)) {Icon(Icons.Outlined.Edit,"Change my photo",Modifier.size(18.dp))}
                     Box(Modifier.align(Alignment.BottomEnd).size(40.dp).background(c.surfaceElevated,CircleShape).border(1.dp,c.separator,CircleShape),contentAlignment=Alignment.Center) {Icon(Icons.Outlined.Lock,"Partner photo is read-only",Modifier.size(16.dp),tint=c.textSecondary)}
@@ -127,30 +142,53 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
                     Text("+",color=c.secondary,style=MaterialTheme.typography.titleLarge)
                     ProfileNameCard("You${if(connection.partnerRole.isBlank()) "" else " · ${ai.mwm.client.cloud.roleLabel(connection.partnerRole)}"}",p.partnerName,"Read-only",c.accent,Modifier.weight(1f),true)
                 }
-                Surface(onClick=setDate,modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),color=c.secondary.copy(alpha=.14f).compositeOver(c.surfaceSunken),border=BorderStroke(1.dp,c.secondary.copy(alpha=.45f))) {
-                    Row(Modifier.padding(10.dp),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
-                        Surface(shape=RoundedCornerShape(8.dp),color=c.surface) {Column(Modifier.width(46.dp),horizontalAlignment=Alignment.CenterHorizontally) {Box(Modifier.fillMaxWidth().background(c.secondary),contentAlignment=Alignment.Center) {PText(date.format(DateTimeFormatter.ofPattern("MMM",Locale.ENGLISH)).uppercase(),style=MaterialTheme.typography.labelSmall)};PText(date.dayOfMonth.toString(),style=MaterialTheme.typography.titleLarge)}}
-                        Column(Modifier.weight(1f)) {PText("Together since · Just for me",style=MaterialTheme.typography.labelSmall,muted=true);PText(date.format(DateTimeFormatter.ofPattern("d MMM yyyy",Locale.ENGLISH)),style=MaterialTheme.typography.titleMedium)}
-                        Surface(shape=CircleShape,color=c.surface,border=BorderStroke(1.dp,c.separator)) {PText("✎ Set date",Modifier.padding(12.dp,10.dp),MaterialTheme.typography.labelLarge)}
-                    }
-                }
                 if(connection.authenticated) PText("Signed in as ${connection.accountEmail.ifBlank {"your account"}}",style=MaterialTheme.typography.bodySmall,muted=true)
                 PText(connection.message,style=MaterialTheme.typography.bodySmall,muted=true)
-                Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {OutlinedButton(onPair,enabled=!connection.busy) {PText(if(connection.paired) "Connection details" else "Pair with partner")};OutlinedButton(onCheck,enabled=!connection.busy) {PText("Check setup")}}
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp,Alignment.CenterHorizontally),verticalAlignment=Alignment.CenterVertically) {OutlinedButton(onPair,Modifier.weight(1f).heightIn(min=48.dp),enabled=!connection.busy,contentPadding=PaddingValues(10.dp)) {PText(if(connection.paired) "Connection details" else "Pair with partner",align=TextAlign.Center)};OutlinedButton(onCheck,Modifier.weight(1f).heightIn(min=48.dp),enabled=!connection.busy,contentPadding=PaddingValues(10.dp)) {PText("Check setup",align=TextAlign.Center)}}
+                Surface(onClick=setDate,enabled=!dateSaving && !connection.busy && (!connection.connected || connection.online),modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),color=c.secondary.copy(alpha=.14f).compositeOver(c.surfaceSunken),border=BorderStroke(1.dp,c.secondary.copy(alpha=.45f))) {
+                    Row(Modifier.padding(10.dp),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
+                        Surface(shape=RoundedCornerShape(8.dp),color=c.surface) {Column(Modifier.width(46.dp),horizontalAlignment=Alignment.CenterHorizontally) {Box(Modifier.fillMaxWidth().background(c.secondary),contentAlignment=Alignment.Center) {PText(date.format(DateTimeFormatter.ofPattern("MMM",Locale.ENGLISH)).uppercase(),style=MaterialTheme.typography.labelSmall)};PText(date.dayOfMonth.toString(),style=MaterialTheme.typography.titleLarge)}}
+                        Column(Modifier.weight(1f)) {PText(if(connection.connected) "Together since · Shared" else "Together since · This phone",style=MaterialTheme.typography.labelSmall,muted=true);PText(if(days==null) "Choose our date" else date.format(DateTimeFormatter.ofPattern("d MMM yyyy",Locale.ENGLISH)),style=MaterialTheme.typography.titleMedium)}
+                        Surface(shape=CircleShape,color=c.surface,border=BorderStroke(1.dp,c.separator)) {PText(if(dateSaving)"Saving…" else "✎ Set date",Modifier.padding(12.dp,10.dp),MaterialTheme.typography.labelLarge)}
+                    }
+                }
+                dateError?.let {PText(it,style=MaterialTheme.typography.bodySmall)}
+                if(connection.connected && !connection.online) PText("Reconnect to change the shared date",style=MaterialTheme.typography.labelSmall,muted=true)
+
             }
         }}
-        item {SettingsGroup("Account backup") {
-            SettingsStack {
-                val backup by ai.mwm.client.cloud.AccountBackup.status.collectAsState()
-                val owner=AccountScope.current(context)
-                val main=backup["$owner:main"].orEmpty();val care=backup["$owner:care"].orEmpty()
-                val ready=main.startsWith("Saved to") && care.startsWith("Saved to")
-                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {Icon(if(ready) Icons.Outlined.CloudDone else Icons.Outlined.CloudUpload,null,Modifier.size(24.dp),tint=if(ready)c.success else c.textSecondary);PText(if(ready) "Backed up" else if(!connection.authenticated) "Sign in to back up" else "Backup needs attention",Modifier.weight(1f).padding(horizontal=10.dp),MaterialTheme.typography.bodyMedium);TextButton(onBackup,enabled=connection.authenticated && !connection.busy) {PText("Back up")}}
-                PText("Use the same account after reinstalling. Back up before deleting the app.",style=MaterialTheme.typography.labelSmall,muted=true)
-                if(!ready && connection.authenticated) TextButton({backupDetails=true}) {PText("View status",style=MaterialTheme.typography.labelSmall)}
+        item {
+            Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {PText("Device preferences",Modifier.weight(1f),MaterialTheme.typography.titleMedium);PText("Just for this device",style=MaterialTheme.typography.labelSmall,muted=true)}
+                Surface(Modifier.fillMaxWidth(),shape=RoundedCornerShape(28.dp),color=c.surfaceSunken,border=BorderStroke(1.dp,c.separator)) {
+                    Column(Modifier.padding(14.dp)) {
+                        BoxWithConstraints(Modifier.fillMaxWidth()) {
+                            val stacked=maxWidth<330.dp || androidx.compose.ui.platform.LocalDensity.current.fontScale>1.2f
+                            Row(Modifier.fillMaxWidth().padding(vertical=10.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                                PreferenceSymbol(Icons.Outlined.LightMode,c.secondary)
+                                Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(5.dp)) {
+                                    PText("Appearance",style=MaterialTheme.typography.titleSmall)
+                                    PText("A little light, a little dark. Your call.",style=MaterialTheme.typography.labelSmall,muted=true)
+                                    if(stacked) ThemeIconSlider(p.themeMode) {mode->onPreferences {it.copy(themeMode=mode)}}
+                                }
+                                if(!stacked) ThemeIconSlider(p.themeMode) {mode->onPreferences {it.copy(themeMode=mode)}}
+                            }
+                        }
+                        DashedRule(Modifier.padding(vertical=12.dp))
+                        DevicePreferenceRow(Icons.Outlined.Language,"App language","The words that feel like home.",c.primary,{languageOpen=true}) {
+                            Text(appLanguages.firstOrNull {it.code==p.language}?.name ?: "English",modifier=Modifier.weight(1f,false),style=MaterialTheme.typography.labelMedium,color=c.textSecondary,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            Icon(Icons.Outlined.ExpandMore,null,Modifier.size(20.dp),tint=c.textSecondary)
+                        }
+                        DashedRule(Modifier.padding(vertical=12.dp))
+                        DevicePreferenceRow(Icons.Outlined.LocalOffer,"Task tags","A little order for your everyday.",c.accent,onTags) {
+                            Surface(modifier=Modifier.weight(1f,false),shape=CircleShape,color=c.surface) {PText("${state.tags.size} tags",Modifier.padding(10.dp,6.dp),MaterialTheme.typography.labelMedium,true)}
+                            Icon(Icons.Outlined.ChevronRight,null,Modifier.size(20.dp),tint=c.textSecondary)
+                        }
+                    }
+                }
             }
-        }}
-        item {SettingsGroup("Our timezones") {TimezoneControls(p,onPreferences)}}
+        }
+        item {Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {PText("Our timezones",style=MaterialTheme.typography.titleMedium);TimezoneControls(p,onPreferences)}}
         item {SettingsGroup("Gentle reminders","Just for me") {
             SettingsStack {
                 PText("Default reminder time",style=MaterialTheme.typography.titleSmall)
@@ -251,10 +289,18 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
         item {Surface(shape=RoundedCornerShape(20.dp),color=c.surface,border=BorderStroke(1.dp,c.error.copy(alpha=.3f))) {
             Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {Duo(22.dp);Column(Modifier.weight(1f)) {PText("Leave shared space",style=MaterialTheme.typography.titleMedium);PText(if(connection.connected) "Leave your connected space. Future partner access ends." else "Exit local mode. Your tasks stay; reminders pause.",style=MaterialTheme.typography.bodySmall,muted=true)};OutlinedButton({confirmLeave=true},shape=CircleShape,border=BorderStroke(1.5.dp,c.error),colors=ButtonDefaults.outlinedButtonColors(contentColor=c.error)) {Text("Leave…")}}
         }}
-        // Preserve the existing device preferences and tag manager without altering any other screen.
-        item {SettingsGroup("Device preferences") {
-            SettingsStack {Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {PText("Theme",Modifier.weight(1f));ThemeIconSlider(p.themeMode) {mode->onPreferences {it.copy(themeMode=mode)}}};OutlinedButton({languageOpen=true}) {PText("App language · ${appLanguages.firstOrNull {it.code==p.language}?.name ?: "English"}")};OutlinedButton(onTags) {PText("Task tags · ${state.tags.size}")}}
+        item {SettingsGroup("Account backup") {
+            SettingsStack {
+                val backup by ai.mwm.client.cloud.AccountBackup.status.collectAsState()
+                val owner=AccountScope.current(context)
+                val main=backup["$owner:main"].orEmpty();val care=backup["$owner:care"].orEmpty()
+                val ready=main.startsWith("Saved to") && care.startsWith("Saved to")
+                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {Icon(if(ready) Icons.Outlined.CloudDone else Icons.Outlined.CloudUpload,null,Modifier.size(24.dp),tint=if(ready)c.success else c.textSecondary);PText(if(ready) "Backed up" else if(!connection.authenticated) "Sign in to back up" else "Backup needs attention",Modifier.weight(1f).padding(horizontal=10.dp),MaterialTheme.typography.bodyMedium);TextButton(onBackup,enabled=connection.authenticated && !connection.busy) {PText("Back up")}}
+                PText("Use the same account after reinstalling. Back up before deleting the app.",style=MaterialTheme.typography.labelSmall,muted=true)
+                if(!ready && connection.authenticated) TextButton({backupDetails=true}) {PText("View status",style=MaterialTheme.typography.labelSmall)}
+            }
         }}
+
     }
     if(backupDetails) {
         val backup by ai.mwm.client.cloud.AccountBackup.status.collectAsState()
@@ -272,41 +318,59 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
     }
 }
 
-@Composable private fun SettingsOrbit(p: Preferences,days: Long,modifier: Modifier = Modifier) {
+@Composable private fun SettingsOrbit(p:Preferences,days:Long?,modifier:Modifier=Modifier) {
     val c=AppTheme.colors
-    val lensInk=MaterialTheme.colorScheme.onSecondary
-    Box(modifier.size(214.dp,132.dp)) {
-        listOf(true,false).forEach {me->
-            Box(Modifier.align(if(me) Alignment.CenterStart else Alignment.CenterEnd).size(132.dp).border(4.dp,if(me) c.primary else c.accent,CircleShape).padding(4.dp).clip(CircleShape)) {
-                val photo=if(me) p.myPhoto else p.partnerPhoto
-                if(photo==if(me) "asset:profile_mina" else "asset:profile_partner") Image(painterResource(if(me) R.drawable.settings_demo_me else R.drawable.settings_demo_partner),"Sample ${if(me) "personal" else "partner"} portrait",Modifier.fillMaxSize(),contentScale=ContentScale.Crop)
-                else ProfilePhoto(photo,me,Modifier.fillMaxSize(),if(me) p.avatar else -1)
+    BoxWithConstraints(modifier.fillMaxWidth().height(132.dp)) {
+        val avatar=((maxWidth-104.dp)/2).coerceIn(56.dp,104.dp)
+        Row(Modifier.fillMaxSize(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
+            listOf(true,false).forEachIndexed {index,me->
+                if(index==1) Surface(Modifier.size(80.dp),shape=CircleShape,color=c.secondary.copy(alpha=.22f).compositeOver(c.surface),border=BorderStroke(1.5.dp,c.secondary)) {
+                    Column(Modifier.padding(7.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {Text(days?.toString() ?: "♡",color=c.textPrimary,fontSize=if((days ?: 0)>9999)18.sp else 23.sp,fontWeight=FontWeight.Bold,maxLines=1);PText(if(days==null)"Set our date" else "days together",style=MaterialTheme.typography.labelSmall,align=TextAlign.Center)}
+                }
+                Box(Modifier.size(avatar).border(3.dp,if(me)c.primary else c.accent,CircleShape).padding(4.dp).clip(CircleShape)) {
+                    val photo=if(me)p.myPhoto else p.partnerPhoto
+                    if(photo==if(me)"asset:profile_mina" else "asset:profile_partner") Image(painterResource(if(me)R.drawable.settings_demo_me else R.drawable.settings_demo_partner),"Sample portrait",Modifier.fillMaxSize(),contentScale=ContentScale.Crop)
+                    else ProfilePhoto(photo,me,Modifier.fillMaxSize(),if(me)p.avatar else -1)
+                }
             }
         }
-        Canvas(Modifier.fillMaxSize()) {
-            val a=Path().apply {addOval(Rect(-4.dp.toPx(),-4.dp.toPx(),136.dp.toPx(),136.dp.toPx()))}
-            val b=Path().apply {addOval(Rect(size.width-136.dp.toPx(),-4.dp.toPx(),size.width+4.dp.toPx(),136.dp.toPx()))}
-            drawPath(Path.combine(PathOperation.Intersect,a,b),c.secondary)
-        }
-        Column(Modifier.align(Alignment.Center).width(48.dp),horizontalAlignment=Alignment.CenterHorizontally) {
-            Text(days.toString(),color=lensInk,fontSize=19.sp,fontWeight=FontWeight.Bold,maxLines=1)
-            Text("┄",color=lensInk,fontSize=10.sp,lineHeight=12.sp)
-            Text("days\ntogether",color=lensInk,fontSize=10.sp,lineHeight=12.sp,fontWeight=FontWeight.SemiBold,textAlign=TextAlign.Center)
+    }
+}
+
+@Composable private fun PreferenceSymbol(icon:ImageVector,color:Color) {
+    val c=AppTheme.colors
+    Box(Modifier.size(36.dp).background(color.copy(alpha=.12f).compositeOver(c.surface),CircleShape).border(1.dp,color.copy(alpha=.6f),CircleShape),contentAlignment=Alignment.Center) {Icon(icon,null,Modifier.size(19.dp),tint=c.textPrimary)}
+}
+
+@Composable private fun DevicePreferenceRow(icon:ImageVector,title:String,subtitle:String,color:Color,onClick:()->Unit,end:@Composable RowScope.()->Unit) {
+    val c=AppTheme.colors
+    Surface(onClick=onClick,modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(16.dp),color=Color.Transparent) {
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(vertical=10.dp)) {
+            val stacked=maxWidth<270.dp || androidx.compose.ui.platform.LocalDensity.current.fontScale>1.25f
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                PreferenceSymbol(icon,color)
+                Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(5.dp)) {
+                    PText(title,style=MaterialTheme.typography.titleSmall)
+                    PText(subtitle,style=MaterialTheme.typography.labelSmall,muted=true)
+                    if(stacked) Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp),content=end)
+                }
+                if(!stacked) Row(Modifier.widthIn(max=100.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp),content=end)
+            }
         }
     }
 }
 
 @Composable private fun ProfileNameCard(role: String,name: String,tag: String,color: Color,modifier: Modifier,end: Boolean) {
     val c=AppTheme.colors
-    Surface(modifier,shape=RoundedCornerShape(if(end) 14.dp else 3.dp,if(end) 3.dp else 14.dp,14.dp,14.dp),color=color.copy(alpha=.12f).compositeOver(c.surface),border=BorderStroke(1.dp,color.copy(alpha=.35f))) {
-        Column(Modifier.padding(12.dp,8.dp),horizontalAlignment=if(end) Alignment.End else Alignment.Start,verticalArrangement=Arrangement.spacedBy(4.dp)) {PText(role,style=MaterialTheme.typography.labelSmall,muted=true);PText(name,style=MaterialTheme.typography.titleLarge);Badge(tag,color)}
+    Surface(modifier,shape=RoundedCornerShape(18.dp),color=color.copy(alpha=.12f).compositeOver(c.surface),border=BorderStroke(1.dp,color.copy(alpha=.35f))) {
+        Column(Modifier.padding(12.dp,8.dp),horizontalAlignment=if(end) Alignment.End else Alignment.Start,verticalArrangement=Arrangement.spacedBy(4.dp)) {PText(role,style=MaterialTheme.typography.labelSmall,muted=true);Text(name,style=MaterialTheme.typography.titleMedium,color=c.textPrimary,maxLines=2,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis);Badge(tag,color)}
     }
 }
 
 @Composable private fun ThemeIconSlider(mode: String, onChange: (String) -> Unit) {
-    val modes = listOf("Light", "System", "Night")
-    val labels = listOf("Light mode", "Use system", "Night mode")
-    val icons = listOf(Icons.Outlined.LightMode, Icons.Outlined.SettingsBrightness, Icons.Outlined.DarkMode)
+    val modes = listOf("Light", "Night", "System")
+    val labels = listOf("Light mode", "Night mode", "Use system")
+    val icons = listOf(Icons.Outlined.LightMode, Icons.Outlined.DarkMode, Icons.Outlined.DesktopWindows)
     val selected = modes.indexOf(mode).coerceAtLeast(0)
     val offset by animateDpAsState((selected * 48).dp, label="Theme slider")
     val language = LocalAppLanguage.current

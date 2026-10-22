@@ -10,7 +10,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /** No demo imports, no health serialization, no persistent partner-data cache. */
-data class PartnerConnection(val busy: Boolean=false, val spaceId: String="", val uid: String="", val partnerUid: String="", val generation: String="", val code: String="", val expiresAt: Long=0, val message: String="Local mode · Sign in to connect with your partner", val online: Boolean=false, val pokeCooldowns: Map<String,Long> = emptyMap(), val needsAuth: Boolean=false, val pairingMessage: String="", val retryAt: Long=0, val authenticated: Boolean=false, val role: String="", val partnerRole: String="", val selectedRole: String="", val accountEmail: String="", val partnerAvatar: Int = -1) {
+data class PartnerConnection(val busy: Boolean=false, val spaceId: String="", val uid: String="", val partnerUid: String="", val generation: String="", val code: String="", val expiresAt: Long=0, val message: String="Local mode · Sign in to connect with your partner", val online: Boolean=false, val pokeCooldowns: Map<String,Long> = emptyMap(), val needsAuth: Boolean=false, val pairingMessage: String="", val retryAt: Long=0, val authenticated: Boolean=false, val role: String="", val partnerRole: String="", val selectedRole: String="", val accountEmail: String="", val partnerAvatar: Int = -1,val togetherDateVersion:Long=0,val togetherDateKnown:Boolean=false) {
     val connected get() = spaceId.isNotBlank()
     val paired get() = connected && partnerUid.isNotBlank()
 }
@@ -145,7 +145,7 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
     private suspend fun refresh() {
         activateIdentity()
         if(AccountBackup.syncMain(context)) repository.restoreLocal()
-        val r=try {api.snapshot()} catch(e: NoMembership) {PartnerPokeService.clear(context);repository.restoreLocal();taskVersions=emptyMap();listVersions=emptyMap();tagVersions=emptyMap();mutable.value=mutable.value.copy(spaceId="",partnerUid="",partnerAvatar=-1,role="",partnerRole="",code="",expiresAt=0,online=true,authenticated=true,message="Signed in · Create a space or join your partner's code");return}
+        val r=try {api.snapshot()} catch(e: NoMembership) {PartnerPokeService.clear(context);repository.restoreLocal();taskVersions=emptyMap();listVersions=emptyMap();tagVersions=emptyMap();mutable.value=mutable.value.copy(spaceId="",partnerUid="",togetherDateKnown=false,togetherDateVersion=0,partnerAvatar=-1,role="",partnerRole="",code="",expiresAt=0,online=true,authenticated=true,message="Signed in · Create a space or join your partner's code");return}
         val uid=r["uid"] as String;val partner=r["partnerUid"] as? String ?: "";val sid=r["spaceId"] as String;val generation=r["generation"] as String
         val role=r["role"] as String;val partnerRole=r["partnerRole"] as String
         check(uid!=partner){"You and your partner must sign in with separate accounts."}
@@ -156,7 +156,8 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
         val tasks=ts.map {t->Task(id=t["id"] as String,title=t["title"] as String,owner=owner(t,uid),assigneeUid=t["assigneeUid"] as? String ?: "",day=n(t,"day"),minute=(t["minute"] as? Number)?.toInt(),listId=t["listId"] as String,note=repository.privateNote(t["id"] as String),tags=(t["tags"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),repeat=Repeat.valueOf(t["repeat"] as String),status=TaskStatus.valueOf(t["status"] as String),completedAt=n(t,"completedAt"),parentId=t["parentId"] as? String ?: "",reminder=repository.personalReminder(t["id"] as String).first,offset=repository.personalReminder(t["id"] as String).second)}
         val lists=ls.map {l->SharedList(id=l["id"] as String,name=l["name"] as String,emoji=l["emoji"] as String,pinned=l["pinned"]==true,owner=owner(l,uid),assigneeUid=l["assigneeUid"] as? String ?: "",pictures=(l["pictures"] as? List<*>)?.filterIsInstance<String>() ?: emptyList())}
         val notes=maps(r["notes"]).map {v->Appreciation(id=v["id"] as String,kind=v["kind"] as String,message=v["message"] as String,owner=if(v["sender"]==uid)Owner.Me else Owner.You,at=n(v,"at"),taskTitle=v["taskTitle"] as? String ?: "",picture=v["picture"] as? String ?: "",replyTo=v["replyTo"] as? String ?: "")}
-        val p=restoreSharedProfile(current.preferences,own,other,if(partner.isBlank()) "Waiting for partner" else roleLabel(partnerRole)).copy(started=true,code=mutable.value.code.ifBlank {"------"},codeExpiresAt=mutable.value.expiresAt)
+        val together=maps(listOfNotNull(r["togetherDate"])).singleOrNull()
+        val p=restoreSharedProfile(current.preferences,own,other,if(partner.isBlank()) "Waiting for partner" else roleLabel(partnerRole)).copy(started=true,code=mutable.value.code.ifBlank {"------"},codeExpiresAt=mutable.value.expiresAt,togetherSince=together?.let {n(it,"since_day")} ?: current.preferences.togetherSince)
         val profileNotice=try {api.ensureProfile(p);""} catch(e: CancellationException) {throw e} catch(_: Exception) {" · Profile update waiting to retry"}
         // Legacy task tags contained names rather than IDs; keep them readable until migrated.
         val savedTags=tagRows.map {Tag(it["id"] as String,it["name"] as String)}
@@ -166,7 +167,7 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
             if(error is CancellationException) throw error
             // Task synchronization stays available while push setup retries on the next refresh.
         }
-        mutable.value=mutable.value.copy(role=role,partnerRole=partnerRole,selectedRole=role,spaceId=sid,uid=uid,partnerUid=partner,generation=generation,partnerAvatar=(other?.get("avatar") as? Number)?.toInt() ?: -1,authenticated=true,online=true,message=(if(partner.isBlank()) "Space created · Waiting for your partner" else "Partner connected · Synced")+profileNotice,code=if(partner.isBlank())mutable.value.code else "",expiresAt=if(partner.isBlank())mutable.value.expiresAt else 0)
+        mutable.value=mutable.value.copy(togetherDateVersion=together?.let {n(it,"version")} ?: 0,togetherDateKnown=together!=null,role=role,partnerRole=partnerRole,selectedRole=role,spaceId=sid,uid=uid,partnerUid=partner,generation=generation,partnerAvatar=(other?.get("avatar") as? Number)?.toInt() ?: -1,authenticated=true,online=true,message=(if(partner.isBlank()) "Space created · Waiting for your partner" else "Partner connected · Synced")+profileNotice,code=if(partner.isBlank())mutable.value.code else "",expiresAt=if(partner.isBlank())mutable.value.expiresAt else 0)
     }
     /** Network-first edits: rejected/conflicting/offline writes never masquerade as synced. */
     suspend fun mutate(block: () -> Unit)=lock.withLock {
@@ -215,6 +216,28 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
             if(locketNotice.isNotBlank()) mutable.value=mutable.value.copy(message=locketNotice)
         } catch(e: Exception){runCatching {refresh()};mutable.value=mutable.value.copy(message="Shared update interrupted. Refresh to review any saved changes. ${connectionError(e)}");throw e} finally {mutable.value=mutable.value.copy(busy=false)}
     }
+    suspend fun setTogetherDate(day:Long,expectedVersion:Long,expectedAccount:String)=lock.withLock {
+        require(validTogetherDate(day)) {"Choose a date from 1900 through today."}
+        check(AccountScope.current(context)==expectedAccount) {"Account changed. Reopen settings."}
+        val c=mutable.value
+        check(!c.busy) {"Please wait for the current update."}
+        if(!c.connected) {
+            check(!repository.isRemote) {"Shared space is reconnecting. Try again when online."}
+            repository.updateOwnPreferences {it.copy(togetherSince=day)}
+            return@withLock
+        }
+        check(c.online) {"Reconnect before setting your shared date."}
+        mutable.value=c.copy(busy=true)
+        try {
+            val saved=api.saveTogetherDate(c.uid,c.spaceId,day,expectedVersion)
+            check(AccountScope.current(context)==expectedAccount && mutable.value.spaceId==c.spaceId) {"Partner changed. Reopen settings."}
+            repository.change {it.copy(preferences=it.preferences.copy(togetherSince=n(saved,"since_day")))}
+            mutable.value=mutable.value.copy(togetherDateKnown=true,togetherDateVersion=n(saved,"version"),message="Together date saved · Shared with your partner")
+        } catch(e:CancellationException) {throw e} catch(e:Exception) {
+            runCatching {refresh()}
+            throw e
+        } finally {mutable.value=mutable.value.copy(busy=false)}
+    }
     suspend fun sendChatNote(note: Appreciation,expectedAccount: String,expectedPartner: String) = lock.withLock {
         check(AccountScope.current(context)==expectedAccount && mutable.value.partnerUid==expectedPartner) {"Account or partner changed. Reopen chat."}
         val c=mutable.value
@@ -256,5 +279,5 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
             reply
         } finally {mutable.value=mutable.value.copy(busy=false)}
     }
-    fun leave(){ if(mutable.value.busy)return; if(!mutable.value.connected){repository.updateOwnPreferences {it.copy(started=false)};return};scope.launch {lock.withLock {try{api.leaveSpace();PartnerPokeService.clear(context);repository.restoreLocal();repository.updateOwnPreferences {it.copy(started=false)};mutable.value=mutable.value.copy(spaceId="",partnerUid="",partnerAvatar=-1,role="",partnerRole="",code="",expiresAt=0,retryAt=0,message="Space closed · Account-private data preserved");taskVersions=emptyMap();listVersions=emptyMap();tagVersions=emptyMap();pendingAction=null;runCatching {api.revokeDevice()}}catch(e: Exception){mutable.value=mutable.value.copy(message=connectionError(e))}}} }
+    fun leave(){ if(mutable.value.busy)return; if(!mutable.value.connected){repository.updateOwnPreferences {it.copy(started=false)};return};scope.launch {lock.withLock {try{api.leaveSpace();PartnerPokeService.clear(context);repository.restoreLocal();repository.updateOwnPreferences {it.copy(started=false)};mutable.value=mutable.value.copy(spaceId="",partnerUid="",togetherDateKnown=false,togetherDateVersion=0,partnerAvatar=-1,role="",partnerRole="",code="",expiresAt=0,retryAt=0,message="Space closed · Account-private data preserved");taskVersions=emptyMap();listVersions=emptyMap();tagVersions=emptyMap();pendingAction=null;runCatching {api.revokeDevice()}}catch(e: Exception){mutable.value=mutable.value.copy(message=connectionError(e))}}} }
 }

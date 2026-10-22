@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.Lifecycle
@@ -45,6 +46,7 @@ private fun chatIcon(kind: String)=when(kind) {
     val currentConnection by rememberUpdatedState(connection)
     val p=state.preferences
     val context=LocalContext.current
+    val keyboard=LocalSoftwareKeyboardController.current
     val lifecycle=LocalLifecycleOwner.current.lifecycle
     var foreground by remember {mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))}
     DisposableEffect(lifecycle) {
@@ -195,7 +197,10 @@ private fun chatIcon(kind: String)=when(kind) {
                                         Text(quoted?.message?.ifBlank {"Photo"} ?: "Original message unavailable",maxLines=2,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis,style=MaterialTheme.typography.bodySmall,color=c.textSecondary)
                                     }}
                                 }
-                                if(note.message.isNotBlank()) PText(note.message,preserveContent=true)
+                                if(note.message.isNotBlank()) {
+                                    if(CHAT_EMOJI_CHOICES.any {it.glyph==note.message.trim()}) FlatChatEmoji(note.message.trim(),Modifier.size(44.dp),note.message.trim())
+                                    else PText(note.message,preserveContent=true)
+                                }
                                 if(note.picture.isNotBlank()) LocalPicture(note.picture,Modifier.fillMaxWidth().height(172.dp).clip(RoundedCornerShape(14.dp)).clickable(onClickLabel="Open picture") {openPhoto=note.picture})
                                 chatContext(note,state)?.let {label->Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)) {Icon(if(note.kind=="Heart") Icons.Outlined.Image else Icons.Outlined.AttachFile,null,Modifier.size(14.dp));PText(label,Modifier.weight(1f),MaterialTheme.typography.labelSmall,true,preserveContent=true)}}
                                 if(note.sample) TextButton({onDeleteNote(note.id)},contentPadding=PaddingValues(0.dp)) {PText("Delete example",style=MaterialTheme.typography.labelSmall)}
@@ -206,13 +211,13 @@ private fun chatIcon(kind: String)=when(kind) {
                             noteReactions.forEach {(emoji,people)->
                                 val selected=people.any {it.userId==connection.uid}
                                 FilterChip(selected=selected,onClick={react(note.id,emoji)},enabled=!reactionBusy && connection.paired && connection.online,
-                                    label={Text(emoji+" "+people.size)},modifier=Modifier.heightIn(min=40.dp))
+                                    label={Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(4.dp)) {FlatChatEmoji(emoji,Modifier.size(18.dp),emoji);Text(people.size.toString())}},modifier=Modifier.heightIn(min=40.dp))
                             }
                         }
                         Row(Modifier.padding(horizontal=4.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(5.dp)) {
                             PText(Instant.ofEpochMilli(note.at).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm",Locale.getDefault())),style=MaterialTheme.typography.labelSmall,muted=true)
                             TextButton({replyTo=note.id;draftId=newId()},enabled=!sending && !note.sample && (!connection.connected || serverNotes.orEmpty().any {it.id==note.id}),contentPadding=PaddingValues(horizontal=4.dp)) {Icon(Icons.Outlined.Reply,null,Modifier.size(16.dp));Spacer(Modifier.width(3.dp));Text("Reply",style=MaterialTheme.typography.labelSmall)}
-                            IconButton({reactionTarget=note.id},Modifier.size(40.dp),enabled=!reactionBusy && connection.paired && connection.online && serverNotes.orEmpty().any {it.id==note.id} && !note.sample) {Icon(Icons.Outlined.AddReaction,"React to message",Modifier.size(18.dp),tint=c.textSecondary)}
+                            IconButton({keyboard?.hide();reactionTarget=note.id},Modifier.size(40.dp),enabled=!reactionBusy && connection.paired && connection.online && serverNotes.orEmpty().any {it.id==note.id} && !note.sample) {Icon(Icons.Outlined.AddReaction,"React to message",Modifier.size(18.dp),tint=c.textSecondary)}
                         }
                         if(mine && !note.sample) {
                             Row(Modifier.padding(horizontal=4.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(5.dp)) {
@@ -235,16 +240,16 @@ private fun chatIcon(kind: String)=when(kind) {
                 if(taskTitle.isNotBlank() && runCatching {java.util.UUID.fromString(taskTitle)}.isFailure) PText("For $taskTitle",style=MaterialTheme.typography.labelSmall,muted=true,preserveContent=true)
                 if(kind!="Message") PText(kind,Modifier.padding(start=4.dp),MaterialTheme.typography.labelSmall,true)
                 if(picture.isNotBlank()) Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {LocalPicture(picture,Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)).clickable {openPhoto=picture});TextButton({picture="";draftId=newId()},enabled=!sending) {PText("Remove photo")}}
-                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(5.dp)) {
                     Box {
-                        FilledTonalIconButton({menu=true},Modifier.size(48.dp),enabled=!sending,shape=CircleShape) {Icon(chatIcon(kind),"Choose message or thank-you style")}
+                        FilledTonalIconButton({menu=true},Modifier.size(40.dp),enabled=!sending,shape=CircleShape) {Icon(chatIcon(kind),"Choose message or thank-you style")}
                         DropdownMenu(menu,{menu=false}) {listOf("Message","Thank you","You're the best","Purr-fect").forEach {value->DropdownMenuItem(text={PText(value)},leadingIcon={Icon(chatIcon(value),null,Modifier.size(20.dp))},trailingIcon={if(kind==value) Icon(Icons.Outlined.Check,null,Modifier.size(18.dp))},onClick={kind=value;draftId=newId();menu=false})}}
                     }
-                    OutlinedTextField(messageDraft,{val text=limitChatText(it.text);messageDraft=it.copy(text=text,selection=TextRange(it.selection.start.coerceAtMost(text.length),it.selection.end.coerceAtMost(text.length)));draftId=newId()},Modifier.weight(1f),enabled=!sending,placeholder={PText(if(kind=="Message") "A little message…" else "Add a note…")},maxLines=4,shape=RoundedCornerShape(22.dp),trailingIcon={IconButton({emojiOpen=true},enabled=!sending) {Icon(Icons.Outlined.SentimentSatisfiedAlt,"Add emoji",Modifier.size(20.dp))}})
-                    FilledIconButton({send()},Modifier.size(48.dp),enabled=canSend,shape=CircleShape) {if(sending) CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp) else Icon(Icons.Outlined.Send,"Send ${if(kind=="Message") "message" else "thank-you"}",Modifier.size(20.dp))}
+                    OutlinedIconButton(picker,Modifier.size(40.dp),enabled=!sending) {Icon(Icons.Outlined.AddPhotoAlternate,"Add a picture",Modifier.size(20.dp))}
+                    OutlinedTextField(messageDraft,{val text=limitChatText(it.text);messageDraft=it.copy(text=text,selection=TextRange(it.selection.start.coerceAtMost(text.length),it.selection.end.coerceAtMost(text.length)));draftId=newId()},Modifier.weight(1f),enabled=!sending,placeholder={PText(if(kind=="Message") "A little message…" else "Add a note…")},maxLines=4,shape=RoundedCornerShape(22.dp),trailingIcon={IconButton({keyboard?.hide();emojiOpen=true},enabled=!sending) {Icon(Icons.Outlined.SentimentSatisfiedAlt,"Add emoji",Modifier.size(20.dp))}})
+                    FilledIconButton({send()},Modifier.size(40.dp),enabled=canSend,shape=CircleShape) {if(sending) CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp) else Icon(Icons.Outlined.Send,"Send ${if(kind=="Message") "message" else "thank-you"}",Modifier.size(20.dp))}
                 }
                 Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                    TextButton(picker,enabled=!sending,contentPadding=PaddingValues(horizontal=8.dp)) {Icon(Icons.Outlined.AddPhotoAlternate,null,Modifier.size(18.dp));Spacer(Modifier.width(5.dp));Text("Photo")}
                     Spacer(Modifier.weight(1f))
                     if(reactionBusy) PText("Saving reaction…",style=MaterialTheme.typography.labelSmall,muted=true)
                 }

@@ -45,6 +45,7 @@ class PipoFirebase private constructor(context: Context) {
         val active=rows(client.request("/rest/v1/partner_spaces?id=eq.$sid&closed_at=is.null&select=id"))
         if(active.isEmpty() || members.none {it.getString("user_id")==uid})throw NoMembership()
         val rs=records(sid)
+        val date=rows(client.request("/rest/v1/couple_dates?space_id=eq.$sid&select=since_day,version")).singleOrNull()
         fun payload(r: JSONObject): Map<String,Any?> {
             val value=r.getJSONObject("payload")
             val uploadTime=if(r.getString("kind")=="appreciation" && value.optString("kind")=="Locket") mapOf("at" to OffsetDateTime.parse(r.getString("updated_at")).toInstant().toEpochMilli()) else emptyMap()
@@ -54,7 +55,12 @@ class PipoFirebase private constructor(context: Context) {
         val partner=members.singleOrNull {it.getString("user_id")!=uid}
         val role=self.getString("member_role")
         check(role in listOf("user_1","user_2") && (partner==null || partner.getString("member_role")!=role)){"Invalid member roles. Shared edits are blocked."}
-        return mapOf("role" to role,"partnerRole" to (partner?.getString("member_role") ?: ""),"uid" to uid,"spaceId" to sid,"generation" to sid,"partnerUid" to (members.firstOrNull {it.getString("user_id")!=uid}?.getString("user_id") ?: ""),"tasks" to rs.filter {it.getString("kind")=="task"}.map(::payload),"lists" to rs.filter {it.getString("kind")=="list"}.map(::payload),"profiles" to rs.filter {it.getString("kind")=="profile"}.map(::payload),"notes" to rs.filter {it.getString("kind")=="appreciation"}.map(::payload),"tags" to rs.filter {it.getString("kind")=="tag"}.map(::payload))
+        return mapOf("togetherDate" to date?.let(::map),"role" to role,"partnerRole" to (partner?.getString("member_role") ?: ""),"uid" to uid,"spaceId" to sid,"generation" to sid,"partnerUid" to (members.firstOrNull {it.getString("user_id")!=uid}?.getString("user_id") ?: ""),"tasks" to rs.filter {it.getString("kind")=="task"}.map(::payload),"lists" to rs.filter {it.getString("kind")=="list"}.map(::payload),"profiles" to rs.filter {it.getString("kind")=="profile"}.map(::payload),"notes" to rs.filter {it.getString("kind")=="appreciation"}.map(::payload),"tags" to rs.filter {it.getString("kind")=="tag"}.map(::payload))
+    }
+    suspend fun saveTogetherDate(expectedUid:String,expectedSpace:String,day:Long,expectedVersion:Long):Map<String,Any?> {
+        require(validTogetherDate(day)) {"Choose a date from 1900 through today."}
+        check(client.uid()==expectedUid && space()==expectedSpace) {"Account or partner changed. Reopen settings."}
+        return map(obj(client.rpc("save_couple_date",JSONObject().put("p_space",expectedSpace).put("p_day",day).put("p_expected",expectedVersion))))
     }
     /** Chat refresh does not load tasks, profiles, backups, or notification registration. */
     suspend fun chatSnapshot(expectedUid: String,expectedSpace: String): List<Appreciation> {
