@@ -35,7 +35,7 @@ Download the **`.apk` file** from the release's **Assets** section. The automati
 ## 📱 Install on your phone
 
 1. Open the download link on your Android phone.
-2. Download **Pipo2doo-v1.1.0.apk**.
+2. Download **Pipo2doo-vx.x.x.apk**.
 3. Open the downloaded file.
 4. If Android asks, allow your browser or file manager to **install unknown apps**, then return to the installer. Wording varies by phone.
 5. Tap **Install**, then **Open**.
