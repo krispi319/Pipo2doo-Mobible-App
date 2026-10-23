@@ -1,0 +1,68 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Download project
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Check required files
+        shell: bash
+        run: |
+          required=(
+            gradlew
+            gradle/wrapper/gradle-wrapper.jar
+            mwm_private/app.properties
+            mwm_private/build_icon_generation.gradle.kts
+            mwm_private/build_screenshot_preview.gradle.kts
+            app/google-services.json
+          )
+          for file in "${required[@]}"; do
+            if [[ ! -f "$file" ]]; then
+              echo "::error::Missing required file: $file"
+              exit 1
+            fi
+          done
+
+      - name: Configure Android SDK
+        shell: bash
+        run: |
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-36.1" \
+            "build-tools;36.0.0" \
+            "platform-tools"
+
+      - name: Build test APK
+        shell: bash
+        run: |
+          bash ./gradlew :app:assembleDebug \
+            --no-daemon \
+            --stacktrace \
+            --max-workers=2 \
+            '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8'
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: Pipo2doo-test-APK
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
