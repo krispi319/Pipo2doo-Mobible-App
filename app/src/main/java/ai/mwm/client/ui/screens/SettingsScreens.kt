@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.*
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -83,6 +85,7 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable fun SettingsScreen(state: PipoState, notificationsAllowed: Boolean, onPreferences: ((Preferences) -> Preferences) -> Unit, onEnable: () -> Unit, onTestReminder: () -> Unit, onTags: () -> Unit, onLeave: () -> Unit, onCare: () -> Unit = {}, onReset: () -> Unit = {}, onPair: () -> Unit = {}, onCheck: () -> Unit = {}, onBackup: () -> Unit = {},onTogetherDate:(Long,Long,(String?)->Unit)->Unit={day,_,done->onPreferences {it.copy(togetherSince=day)};done(null)}) {
+    ApprovedDesign {
     val context=LocalContext.current
     val connection=ai.mwm.client.cloud.LocalPartnerConnection.current
     val currentConnection by rememberUpdatedState(connection)
@@ -130,31 +133,50 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
                 Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(6.dp)) {PText("Us & settings",style=MaterialTheme.typography.headlineLarge);Badge("${p.myName} & ${p.partnerName} · ${if(connection.paired) "Connected" else if(connection.connected) "Waiting" else "Local mode"}",c.secondary)};Duo(22.dp)
             }
         }}
-        item {Surface(shape=RoundedCornerShape(28.dp),color=c.surface,border=BorderStroke(1.dp,c.separator),shadowElevation=4.dp) {
-            Column(Modifier.fillMaxWidth().padding(16.dp,20.dp,16.dp,16.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
-                Box(Modifier.align(Alignment.CenterHorizontally).fillMaxWidth().height(152.dp)) {
-                    SettingsOrbit(p,days,Modifier.align(Alignment.TopCenter))
-                    FilledIconButton(pickMe,Modifier.align(Alignment.BottomStart).size(48.dp),colors=IconButtonDefaults.filledIconButtonColors(containerColor=c.surfaceElevated,contentColor=c.textPrimary)) {Icon(Icons.Outlined.Edit,"Change my photo",Modifier.size(18.dp))}
-                    Box(Modifier.align(Alignment.BottomEnd).size(40.dp).background(c.surfaceElevated,CircleShape).border(1.dp,c.separator,CircleShape),contentAlignment=Alignment.Center) {Icon(Icons.Outlined.Lock,"Partner photo is read-only",Modifier.size(16.dp),tint=c.textSecondary)}
-                }
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {
-                    ProfileNameCard("Me${if(connection.role.isBlank()) "" else " · ${ai.mwm.client.cloud.roleLabel(connection.role)}"}",p.myName,"You can edit",c.primary,Modifier.weight(1f),false)
-                    Text("+",color=c.secondary,style=MaterialTheme.typography.titleLarge)
-                    ProfileNameCard("You${if(connection.partnerRole.isBlank()) "" else " · ${ai.mwm.client.cloud.roleLabel(connection.partnerRole)}"}",p.partnerName,"Read-only",c.accent,Modifier.weight(1f),true)
-                }
+        item {Surface(shape=RoundedCornerShape(28.dp),color=c.secondary.copy(alpha=.1f).compositeOver(c.surface),border=BorderStroke(1.dp,c.separator),shadowElevation=1.dp) {
+            Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                SettingsOrbit(p,days,onEditPhoto=pickMe)
                 if(connection.authenticated) PText("Signed in as ${connection.accountEmail.ifBlank {"your account"}}",style=MaterialTheme.typography.bodySmall,muted=true)
                 PText(connection.message,style=MaterialTheme.typography.bodySmall,muted=true)
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp,Alignment.CenterHorizontally),verticalAlignment=Alignment.CenterVertically) {OutlinedButton(onPair,Modifier.weight(1f).heightIn(min=48.dp),enabled=!connection.busy,contentPadding=PaddingValues(10.dp)) {PText(if(connection.paired) "Connection details" else "Pair with partner",align=TextAlign.Center)};OutlinedButton(onCheck,Modifier.weight(1f).heightIn(min=48.dp),enabled=!connection.busy,contentPadding=PaddingValues(10.dp)) {PText("Check setup",align=TextAlign.Center)}}
-                Surface(onClick=setDate,enabled=!dateSaving && !connection.busy && (!connection.connected || connection.online),modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),color=c.secondary.copy(alpha=.14f).compositeOver(c.surfaceSunken),border=BorderStroke(1.dp,c.secondary.copy(alpha=.45f))) {
+                Surface(onClick=setDate,enabled=!dateSaving && !connection.busy && (!connection.connected || connection.online),modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),color=c.secondary.copy(alpha=.14f).compositeOver(c.surfaceSunken),border=BorderStroke(1.dp,c.separator)) {
                     Row(Modifier.padding(10.dp),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
                         Surface(shape=RoundedCornerShape(8.dp),color=c.surface) {Column(Modifier.width(46.dp),horizontalAlignment=Alignment.CenterHorizontally) {Box(Modifier.fillMaxWidth().background(c.secondary),contentAlignment=Alignment.Center) {PText(date.format(DateTimeFormatter.ofPattern("MMM",Locale.ENGLISH)).uppercase(),style=MaterialTheme.typography.labelSmall)};PText(date.dayOfMonth.toString(),style=MaterialTheme.typography.titleLarge)}}
                         Column(Modifier.weight(1f)) {PText(if(connection.connected) "Together since · Shared" else "Together since · This phone",style=MaterialTheme.typography.labelSmall,muted=true);PText(if(days==null) "Choose our date" else date.format(DateTimeFormatter.ofPattern("d MMM yyyy",Locale.ENGLISH)),style=MaterialTheme.typography.titleMedium)}
-                        Surface(shape=CircleShape,color=c.surface,border=BorderStroke(1.dp,c.separator)) {PText(if(dateSaving)"Saving…" else "✎ Set date",Modifier.padding(12.dp,10.dp),MaterialTheme.typography.labelLarge)}
+                        Surface(shape=CircleShape,color=c.surface,border=BorderStroke(1.dp,c.separator)) {PText(if(dateSaving)"Saving…" else "✎ Edit",Modifier.padding(12.dp,10.dp),MaterialTheme.typography.labelLarge)}
                     }
                 }
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp,Alignment.CenterHorizontally),verticalAlignment=Alignment.CenterVertically) {OutlinedButton(onPair,Modifier.weight(1f).heightIn(min=48.dp),enabled=!connection.busy,contentPadding=PaddingValues(10.dp)) {PText(if(connection.paired) "Connection details" else "Pair with partner",align=TextAlign.Center)};OutlinedButton(onCheck,Modifier.weight(1f).heightIn(min=48.dp),enabled=!connection.busy,contentPadding=PaddingValues(10.dp)) {PText("Check setup",align=TextAlign.Center)}}
                 dateError?.let {PText(it,style=MaterialTheme.typography.bodySmall)}
                 if(connection.connected && !connection.online) PText("Reconnect to change the shared date",style=MaterialTheme.typography.labelSmall,muted=true)
 
+            }
+        }}
+        item {SettingsGroup("My profile",if(connection.connected) "Shared with partner" else "Me") {
+            SettingsStack {
+                PText("Display name",style=MaterialTheme.typography.labelSmall,muted=true)
+                Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(myName,{myName=it.take(20);savedName=null;pendingName=null},Modifier.weight(1f).heightIn(min=48.dp).semantics {contentDescription="My name"},singleLine=true,textStyle=MaterialTheme.typography.titleMedium.copy(color=c.textPrimary),shape=RoundedCornerShape(14.dp))
+                    Button({val name=myName.trim();pendingName=name;savedName=null;onPreferences {it.copy(myName=name)}},enabled=myName.isNotBlank(),modifier=Modifier.heightIn(min=48.dp),shape=CircleShape,contentPadding=PaddingValues(horizontal=14.dp),colors=ButtonDefaults.buttonColors(containerColor=c.primary,contentColor=c.onPrimary)) {Icon(Icons.Outlined.Check,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp));Text("Save")}
+                }
+                savedName?.let {Text("✓ ${if(connection.connected && p.shareProfile) "Saved to shared space" else "Saved privately on this phone"} · \"$it\"",color=c.success,style=MaterialTheme.typography.labelMedium)}
+            }
+            DashedRule(Modifier.padding(horizontal=12.dp))
+            SettingsStack {
+                PText("Photo",style=MaterialTheme.typography.titleSmall)
+                PText("Pick a photo or a cat · Your partner sees your profile",style=MaterialTheme.typography.bodySmall,muted=true)
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    val labels=listOf("Photos","Sleepy","Curious","Loaf")
+                    labels.forEachIndexed {index,label->
+                        val preset=when(index) {1->0;2->1;else->3}
+                        val chosen=if(index==0) p.myPhoto.isNotBlank() else p.myPhoto.isBlank() && p.avatar==preset
+                        Surface(onClick=if(index==0) pickMe else { {onPreferences {it.copy(avatar=preset,myPhoto="")}} },modifier=Modifier.weight(1f).semantics {contentDescription=if(index==0) "Choose from photos" else "$label cat preset";selected=chosen},shape=RoundedCornerShape(14.dp),color=c.surface,border=BorderStroke(if(chosen) 2.dp else 1.dp,if(chosen) c.primary else c.separator)) {
+                            Column(Modifier.padding(4.dp,8.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                                Box(Modifier.size(44.dp).background((if(index==2) c.accent else if(index==3) c.secondary else c.primary).copy(alpha=.22f),CircleShape),contentAlignment=Alignment.Center) {if(index==0) Icon(Icons.Outlined.AddPhotoAlternate,null,Modifier.size(24.dp),tint=c.textPrimary) else CatDrawing(Modifier.size(36.dp),variant=preset);if(chosen) Icon(Icons.Outlined.CheckCircle,"Selected avatar",Modifier.align(Alignment.TopEnd).size(15.dp).background(c.surface,CircleShape),tint=c.textPrimary)}
+                                PText(if(index==0) "Photo" else label,style=MaterialTheme.typography.labelSmall,align=TextAlign.Center)
+                            }
+                        }
+                    }
+                }
             }
         }}
         item {
@@ -231,41 +253,13 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
             DashedRule(Modifier.padding(horizontal=12.dp))
             SettingsStack {NotificationSoundPicker {soundRevision++}}
             SettingsRow(Icons.Outlined.Settings,"Android channels","Sound, pop-up and badges") {Pill("Open settings ↗",onClick=onEnable)}
-            SettingsStack {OutlinedButton({context.startActivity(Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,context.packageName).putExtra(Settings.EXTRA_CHANNEL_ID,ai.mwm.client.reminders.NotificationSounds.channelId(context,TaskReminders.CHANNEL)))}) {PText("Task channel settings",style=MaterialTheme.typography.labelLarge)};OutlinedButton(onTestReminder) {PText("Test reminder",style=MaterialTheme.typography.labelLarge)}}
+            SettingsStack {OutlinedButton({context.startActivity(Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,context.packageName).putExtra(Settings.EXTRA_CHANNEL_ID,ai.mwm.client.reminders.NotificationSounds.channelId(context,TaskReminders.CHANNEL)))},modifier=Modifier.fillMaxWidth().heightIn(min=48.dp),contentPadding=PaddingValues(14.dp,12.dp)) {Icon(Icons.Outlined.Settings,null,Modifier.size(18.dp));Spacer(Modifier.width(8.dp));PText("Task channel settings",style=MaterialTheme.typography.labelLarge)};OutlinedButton(onTestReminder,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp),contentPadding=PaddingValues(14.dp,12.dp)) {Icon(Icons.Outlined.NotificationsActive,null,Modifier.size(18.dp));Spacer(Modifier.width(8.dp));PText("Test reminder",style=MaterialTheme.typography.labelLarge)}}
         }}
         item {SettingsGroup("Celebrations","Shared joy") {
             SettingsRow(Icons.Outlined.MusicNote,"Little purr sound","When a task is done") {Switch(p.sound,{value->onPreferences {it.copy(sound=value)}},Modifier.semantics {contentDescription="Little purr sound"})}
             DashedRule(Modifier.padding(horizontal=12.dp))
             SettingsRow(Icons.Outlined.Vibration,"Haptic tap","Soft buzz on check-off") {Switch(p.haptics,{value->onPreferences {it.copy(haptics=value)}},Modifier.semantics {contentDescription="Haptic tap"})}
             SettingsRow(Icons.Outlined.Celebration,"Two-cat confetti","Try a little celebration",paper=true) {Pill("▶ Preview",true,c.secondary) {celebrate(context,p);preview=true}}
-        }}
-        item {SettingsGroup("My profile",if(connection.connected) "Shared with partner" else "Me") {
-            SettingsStack {
-                PText("My name",style=MaterialTheme.typography.labelSmall,muted=true)
-                Row(verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                    BasicTextField(myName,{myName=it.take(20);savedName=null;pendingName=null},Modifier.weight(1f).heightIn(min=48.dp).drawBehind {drawLine(c.separator,Offset(0f,size.height),Offset(size.width,size.height),1.5.dp.toPx(),pathEffect=PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(),4.dp.toPx())))}.padding(vertical=12.dp).semantics {contentDescription="My name"},singleLine=true,textStyle=MaterialTheme.typography.titleMedium.copy(color=c.textPrimary),cursorBrush=SolidColor(c.primary))
-                    Button({val name=myName.trim();pendingName=name;savedName=null;onPreferences {it.copy(myName=name)}},enabled=myName.isNotBlank(),modifier=Modifier.heightIn(min=48.dp),shape=CircleShape,contentPadding=PaddingValues(horizontal=14.dp),colors=ButtonDefaults.buttonColors(containerColor=c.success,contentColor=c.surfaceElevated)) {Icon(Icons.Outlined.Check,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp));Text("Confirm")}
-                }
-                savedName?.let {Text("✓ ${if(connection.connected && p.shareProfile) "Saved to shared space" else "Saved privately on this phone"} · \"$it\"",color=c.success,style=MaterialTheme.typography.labelMedium)}
-            }
-            DashedRule(Modifier.padding(horizontal=12.dp))
-            SettingsStack {
-                PText("Photo",style=MaterialTheme.typography.titleSmall)
-                PText("Pick a photo or a cat · Your partner sees your profile",style=MaterialTheme.typography.bodySmall,muted=true)
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                    val labels=listOf("Photos","Sleepy","Curious","Loaf")
-                    labels.forEachIndexed {index,label->
-                        val preset=when(index) {1->0;2->1;else->3}
-                        val chosen=if(index==0) p.myPhoto.isNotBlank() else p.myPhoto.isBlank() && p.avatar==preset
-                        Surface(onClick=if(index==0) pickMe else { {onPreferences {it.copy(avatar=preset,myPhoto="")}} },modifier=Modifier.weight(1f).semantics {contentDescription=if(index==0) "Choose from photos" else "$label cat preset";selected=chosen},shape=RoundedCornerShape(14.dp),color=c.surface,border=BorderStroke(if(chosen) 2.dp else 1.dp,if(chosen) c.primary else c.separator)) {
-                            Column(Modifier.padding(4.dp,8.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                                Box(Modifier.size(44.dp).background((if(index==2) c.accent else if(index==3) c.secondary else c.primary).copy(alpha=.22f),CircleShape),contentAlignment=Alignment.Center) {if(index==0) Icon(Icons.Outlined.AddPhotoAlternate,null,Modifier.size(24.dp),tint=c.textPrimary) else CatDrawing(Modifier.size(36.dp),variant=preset)}
-                                PText(if(index==0 && chosen) "In use" else label,style=MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                    }
-                }
-            }
         }}
         item {Surface(onClick=onCare,modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(20.dp),color=c.surface,border=BorderStroke(1.dp,c.separator),shadowElevation=1.dp) {
             Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
@@ -317,21 +311,31 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
         AlertDialog(onDismissRequest={preview=false},title={PText("A little shared joy")},text={Column(horizontalAlignment=Alignment.CenterHorizontally) {Box(Modifier.fillMaxWidth().height(150.dp)) {Canvas(Modifier.fillMaxSize()) {for(i in 0..25) {val x=size.width*((i*37%100)/100f);val y=((i*13%100)/100f+progress)*size.height%size.height;drawCircle(listOf(c.primary,c.accent,c.secondary)[i%3],(3+i%4).dp.toPx(),Offset(x,y))}};CatDrawing(Modifier.align(Alignment.Center).size(190.dp,110.dp),double=true)};PText("Two cats, one little win.",style=MaterialTheme.typography.bodySmall,muted=true)}},confirmButton={OutlinedButton({preview=false}) {PText("Lovely")}})
     }
 }
+}
 
-@Composable private fun SettingsOrbit(p:Preferences,days:Long?,modifier:Modifier=Modifier) {
+@Composable private fun SettingsOrbit(p:Preferences,days:Long?,modifier:Modifier=Modifier,onEditPhoto:()->Unit={}) {
     val c=AppTheme.colors
-    BoxWithConstraints(modifier.fillMaxWidth().height(132.dp)) {
-        val avatar=((maxWidth-104.dp)/2).coerceIn(56.dp,104.dp)
-        Row(Modifier.fillMaxSize(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
-            listOf(true,false).forEachIndexed {index,me->
-                if(index==1) Surface(Modifier.size(80.dp),shape=CircleShape,color=c.secondary.copy(alpha=.22f).compositeOver(c.surface),border=BorderStroke(1.5.dp,c.secondary)) {
-                    Column(Modifier.padding(7.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {Text(days?.toString() ?: "♡",color=c.textPrimary,fontSize=if((days ?: 0)>9999)18.sp else 23.sp,fontWeight=FontWeight.Bold,maxLines=1);PText(if(days==null)"Set our date" else "days together",style=MaterialTheme.typography.labelSmall,align=TextAlign.Center)}
+    val connection=ai.mwm.client.cloud.LocalPartnerConnection.current
+    Row(modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+        listOf(true,false).forEachIndexed {index,me->
+            if(index==1) Column(Modifier.weight(.9f),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                Icon(Icons.Outlined.Favorite,null,Modifier.size(18.dp),tint=c.accent)
+                BasicText(days?.toString() ?: "♡",Modifier.fillMaxWidth(),style=MaterialTheme.typography.headlineSmall.copy(color=c.textPrimary,fontWeight=FontWeight.Bold,textAlign=TextAlign.Center),maxLines=1,softWrap=false,autoSize=TextAutoSize.StepBased(minFontSize=10.sp,maxFontSize=24.sp,stepSize=1.sp))
+                PText(if(days==null) "Set our date" else "days together",style=MaterialTheme.typography.labelSmall,muted=true,align=TextAlign.Center)
+            }
+            Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.size(72.dp).padding(bottom=4.dp)) {
+                    Box(Modifier.fillMaxSize().border(1.5.dp,c.separator,CircleShape).padding(3.dp).clip(CircleShape)) {
+                        val photo=if(me)p.myPhoto else p.partnerPhoto
+                        if(photo==if(me)"asset:profile_mina" else "asset:profile_partner") Image(painterResource(if(me)R.drawable.settings_demo_me else R.drawable.settings_demo_partner),"Sample portrait",Modifier.fillMaxSize(),contentScale=ContentScale.Crop)
+                        else ProfilePhoto(photo,me,Modifier.fillMaxSize(),if(me)p.avatar else -1)
+                    }
+                    if(me) OutlinedIconButton(onEditPhoto,Modifier.align(Alignment.BottomEnd).offset(x=4.dp,y=4.dp).size(36.dp),colors=IconButtonDefaults.outlinedIconButtonColors(containerColor=c.surface,contentColor=c.textPrimary),border=BorderStroke(1.dp,c.separator)) {Icon(Icons.Outlined.Edit,"Change my photo",Modifier.size(16.dp))}
+                    else Box(Modifier.align(Alignment.BottomEnd).offset(x=4.dp,y=4.dp).size(28.dp).background(c.surface,CircleShape).border(1.dp,c.separator,CircleShape),contentAlignment=Alignment.Center) {Icon(Icons.Outlined.Lock,"Partner photo is read-only",Modifier.size(13.dp),tint=c.textSecondary)}
                 }
-                Box(Modifier.size(avatar).border(3.dp,if(me)c.primary else c.accent,CircleShape).padding(4.dp).clip(CircleShape)) {
-                    val photo=if(me)p.myPhoto else p.partnerPhoto
-                    if(photo==if(me)"asset:profile_mina" else "asset:profile_partner") Image(painterResource(if(me)R.drawable.settings_demo_me else R.drawable.settings_demo_partner),"Sample portrait",Modifier.fillMaxSize(),contentScale=ContentScale.Crop)
-                    else ProfilePhoto(photo,me,Modifier.fillMaxSize(),if(me)p.avatar else -1)
-                }
+                Text(if(me)p.myName else p.partnerName,Modifier.fillMaxWidth(),style=MaterialTheme.typography.titleSmall,color=c.textPrimary,textAlign=TextAlign.Center,maxLines=2,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                val role=if(me)connection.role else connection.partnerRole
+                if(role.isNotBlank()) PText(ai.mwm.client.cloud.roleLabel(role),style=MaterialTheme.typography.labelSmall,muted=true,align=TextAlign.Center)
             }
         }
     }
@@ -363,7 +367,7 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
 @Composable private fun ProfileNameCard(role: String,name: String,tag: String,color: Color,modifier: Modifier,end: Boolean) {
     val c=AppTheme.colors
     Surface(modifier,shape=RoundedCornerShape(18.dp),color=color.copy(alpha=.12f).compositeOver(c.surface),border=BorderStroke(1.dp,color.copy(alpha=.35f))) {
-        Column(Modifier.padding(12.dp,8.dp),horizontalAlignment=if(end) Alignment.End else Alignment.Start,verticalArrangement=Arrangement.spacedBy(4.dp)) {PText(role,style=MaterialTheme.typography.labelSmall,muted=true);Text(name,style=MaterialTheme.typography.titleMedium,color=c.textPrimary,maxLines=2,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis);Badge(tag,color)}
+        Column(Modifier.padding(12.dp,8.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(4.dp)) {PText(role,style=MaterialTheme.typography.labelSmall,muted=true);Text(name,style=MaterialTheme.typography.titleMedium,color=c.textPrimary,maxLines=2,textAlign=TextAlign.Center,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis);Badge(tag,color)}
     }
 }
 

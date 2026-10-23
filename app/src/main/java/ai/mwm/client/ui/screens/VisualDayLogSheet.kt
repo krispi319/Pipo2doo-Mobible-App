@@ -35,10 +35,10 @@ import androidx.compose.ui.unit.*
     }
 }
 
-@Composable internal fun DayLogFields(log:DayLog,onChange:(DayLog)->Unit) {
+@Composable internal fun DayLogFields(log:DayLog,showPeriodControls:Boolean=true,onChange:(DayLog)->Unit) {
     val c=AppTheme.colors
     Column(Modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+        if(showPeriodControls) Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
             PeriodMarker("Period start",true,log.start,{onChange(log.copy(start=it))},Modifier.weight(1f))
             PeriodMarker("Period end",false,log.end,{onChange(log.copy(end=it))},Modifier.weight(1f))
         }

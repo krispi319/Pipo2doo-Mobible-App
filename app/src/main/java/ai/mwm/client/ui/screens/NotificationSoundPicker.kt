@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.dp
         }
         Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
             Box(Modifier.weight(1f)) {
-                OutlinedButton({menu=true},Modifier.fillMaxWidth(),shape=CircleShape) {PText(NotificationSounds.label(tone),Modifier.weight(1f));Icon(Icons.Outlined.ExpandMore,null)}
+                OutlinedButton({menu=true},Modifier.fillMaxWidth().heightIn(min=48.dp),shape=CircleShape,contentPadding=PaddingValues(14.dp,12.dp)) {PText(NotificationSounds.label(tone),Modifier.weight(1f));Icon(Icons.Outlined.ExpandMore,null)}
                 DropdownMenu(menu,{menu=false}) {NotificationSounds.choices.forEach {(key,label)->DropdownMenuItem(text={PText(label)},leadingIcon={Icon(if(key=="silent") Icons.Outlined.VolumeOff else Icons.Outlined.MusicNote,null,Modifier.size(20.dp))},trailingIcon={if(tone==key) Icon(Icons.Outlined.Check,null)},onClick={
                     menu=false
                     runCatching {NotificationSounds.stopPreview();NotificationSounds.select(context,key);tone=key;TaskReminders.createChannel(context);PartnerPokeService.channel(context);onChanged()}.onSuccess {error=null}.onFailure {error="Sound could not be changed. Try again."}

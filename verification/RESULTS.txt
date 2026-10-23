@@ -1,4 +1,7 @@
-Isolated Compose UI compile: PASS (21 files).
-Upcoming grouping checks: PASS (232).
-AAPT2 resource compile: PASS.
-Full Gradle APK and device visual checks: NOT RUN; see START_HERE.
+Isolated Compose UI compile: PASS
+Scope/callback preservation audit: PASS
+Task/calendar JUnit tests: 13 PASS
+Care saver round-trip checks: 2 PASS
+Representative contrast checks: 12 PASS
+Full Gradle build: BLOCKED by wrapper download
+Device rendering and interactions: NOT RUN

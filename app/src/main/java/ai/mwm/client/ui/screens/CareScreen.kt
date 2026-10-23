@@ -28,6 +28,7 @@ private val moods=listOf("Very low","Low","Okay","Good","Great")
 @OptIn(ExperimentalMaterial3Api::class,ExperimentalLayoutApi::class)
 @Composable fun CareScreen(state: CareState?, name: String,partner: String,error: String?,allowed: Boolean,onBack: ()->Unit,onSave: (DayLog)->Unit,onDelete: (Long)->Unit,onUpdate: ((CareState)->CareState)->Unit,onClear: ()->Unit,onEnable: ()->Unit,
     shared: CareConnection=CareConnection(),onSharing: (Boolean)->Unit={},onRefresh: ()->Unit={},support: List<Appreciation> = emptyList(),onSupport: (String,(String?)->Unit)->Unit={_,done->done("Connect your partner to send a note.")}) {
+    ApprovedDesign {
     val context=LocalContext.current
     val c=AppTheme.colors
     var partnerView by remember {mutableStateOf(false)}
@@ -69,11 +70,20 @@ private val moods=listOf("Very low","Low","Okay","Good","Great")
                 PText("Cycle · ${visible.estimateCycle} days    Period · ${visible.duration} days",style=MaterialTheme.typography.bodySmall,muted=true)
                 PText("Estimates may vary from your actual dates.",style=MaterialTheme.typography.bodySmall,muted=true)
                 if(!partnerView) FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                    Button({val today=LocalDate.now().toEpochDay();val current=state?.logs?.find {it.day==today} ?: DayLog(today);onSave(if(active==null) current.copy(start=true,end=false) else current.copy(end=true))}) {PText(if(active==null) "Start today" else "End today")}
                     OutlinedButton({cycleSheet=true},contentPadding=PaddingValues(horizontal=16.dp,vertical=10.dp)) {Icon(Icons.Outlined.Tune,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp));PText("Cycle settings")}
                 }
             }}
-            item {CycleCalendar(visible,month,selected,{month=it},{selected=it})}
+            item {Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                CycleCalendar(visible,month,selected,{month=it},{selected=it})
+                if(!partnerView) {
+                    val today=LocalDate.now().toEpochDay()
+                    val current=state?.logs?.find {it.day==today} ?: DayLog(today)
+                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton({onSave(current.copy(start=true,end=false))},Modifier.weight(1f).heightIn(min=48.dp),enabled=active==null,contentPadding=PaddingValues(12.dp,10.dp)) {Icon(Icons.Outlined.WaterDrop,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp));PText("Start today")}
+                        OutlinedButton({onSave(current.copy(end=true))},Modifier.weight(1f).heightIn(min=48.dp),enabled=active!=null,contentPadding=PaddingValues(12.dp,10.dp)) {Icon(Icons.Outlined.CheckCircleOutline,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp));PText("End today")}
+                    }
+                }
+            }}
             if(partnerView) item {Paper {PText(dayText(selected),style=MaterialTheme.typography.titleSmall);PText(log?.let {listOfNotNull(if(it.start)"Period start" else null,if(it.end)"Period end" else null,it.flow.takeIf {v->v!="None"}?.let {v->"$v flow"},it.cramps.takeIf {v->v!="None"}?.let {v->"$v cramps"},it.mood?.let {m->moods.getOrNull(m)},it.cravings.joinToString().takeIf {v->v.isNotBlank()},it.symptoms.joinToString().takeIf {v->v.isNotBlank()}).joinToString(" · ").ifBlank {"Day note"}} ?: "No day log",style=MaterialTheme.typography.bodySmall,muted=true);log?.note?.takeIf {it.isNotBlank()}?.let {PText(it,preserveContent=true)}}}
             if(!partnerView && state!=null) {
                 item(key="inline_${connection.uid}_${connection.spaceId}_$selected") {InlineDayLog(log ?: DayLog(selected),connection.uid+":"+connection.spaceId,error,onSave,{delete=true},exists=log!=null)}
@@ -117,6 +127,7 @@ private val moods=listOf("Very low","Low","Okay","Good","Great")
         var cycle by remember {mutableStateOf(state.cycle.toString())};var duration by remember {mutableStateOf(state.duration.toString())}
         AlertDialog(onDismissRequest={cycleSheet=false},title={PText("Cycle settings")},text={Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {OutlinedTextField(cycle,{cycle=it.filter(Char::isDigit).take(3)},label={PText("Cycle length · 10–120 days")});OutlinedTextField(duration,{duration=it.filter(Char::isDigit).take(2)},label={PText("Period length · 1–14 days")})}},confirmButton={TextButton({onUpdate {it.copy(cycle=cycle.toInt(),duration=duration.toInt())};cycleSheet=false},enabled=cycle.toIntOrNull() in 10..120 && duration.toIntOrNull() in 1..14) {PText("Save")}},dismissButton={TextButton({cycleSheet=false}) {PText("Cancel")}})
     }
+}
 }
 
 @Composable private fun DayLogSheet(initial: DayLog,onClose: ()->Unit,onSave: (DayLog)->Unit,onDelete: ()->Unit) {

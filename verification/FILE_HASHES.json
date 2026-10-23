@@ -1,0 +1,9 @@
+{
+  "app/src/main/java/ai/mwm/client/ui/screens/InlineDayLog.kt": "189e9f025bc905f0c2cdebd6402bc309d1d0e331eec4013d93511a0103a61f7f",
+  "app/src/main/java/ai/mwm/client/ui/screens/CareScreen.kt": "f211a41079175730c3ee330a41865f4fb006e4ffa58a843a90aae4666cbaa204",
+  "app/src/main/java/ai/mwm/client/ui/screens/ApprovedDesign.kt": "ae5c6f2a941571687564c6c91738243278c38a8b3197c69c2836c87f21b873e2",
+  "app/src/main/java/ai/mwm/client/ui/screens/NotificationSoundPicker.kt": "2b022b1b8d1b6a7527b66570c0eaa2d2845528adb78ff94bdd772622536838a2",
+  "app/src/main/java/ai/mwm/client/ui/screens/SettingsScreens.kt": "2bcfe0d6b52a062254061c8ac15e2fe90949ede6d34721c010001a5284127bf3",
+  "app/src/main/java/ai/mwm/client/ui/screens/UpcomingNotes.kt": "866ed68a7a833286e6cbd87ac49f729d01605d31d38a506e99895ad4b278211b",
+  "app/src/main/java/ai/mwm/client/ui/screens/VisualDayLogSheet.kt": "728889eec781502f4c584c0be61795d8e914b32fa1acfe2d92bc169278676726"
+}
