@@ -49,12 +49,13 @@ jobs:
             "platforms;android-36.1" \
             "build-tools;36.0.0" \
             "platform-tools"
-   - name: Install icon image tool
-     run: |
-       sudo apt-get update
-       sudo apt-get install -y webp
-       cwebp -version
-       
+
+      - name: Install icon image tool
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y webp
+          cwebp -version
+
       - name: Build test APK
         shell: bash
         run: |
