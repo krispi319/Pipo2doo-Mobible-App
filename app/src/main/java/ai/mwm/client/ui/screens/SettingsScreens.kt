@@ -398,7 +398,7 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
         item { BackBar("Notifications", onBack) }
         item { Header("Task reminders", "${active.size} showing · ${reminders.size} unfinished reminders") }
         item { Paper(Modifier.padding(16.dp), color = AppTheme.colors.surfaceSunken) { PText(if(allowed) "Ongoing reminders are enabled" else "Enable notifications to receive reminders", style = MaterialTheme.typography.titleMedium); PText(TaskReminders.LIMITS, style = MaterialTheme.typography.bodySmall, muted = true); OutlinedButton(onEnable) { PText(if(allowed) "Android notification settings" else "Enable notifications") } } }
-        items(reminders.sortedBy { it.reminderAt(state.preferences.defaultReminderTime) }, key = { it.id }) { task -> TaskRow(task, state, { onOpen(task.id) }, { onToggle(task) }, extra = { PText("${dayText(task.day)} · ${if(task.id in active) "Showing on phone" else "Scheduled or dismissed in Android"}", style = MaterialTheme.typography.bodySmall, muted = true) }) }
+        items(reminders.sortedBy { it.reminderAt(state.preferences.defaultReminderTime,clockZone(state.preferences.clockZone)) }, key = { it.id }) { task -> TaskRow(task, state, { onOpen(task.id) }, { onToggle(task) }, extra = { PText("${dayText(task.day)} · ${if(task.id in active) "Showing on phone" else "Scheduled or dismissed in Android"}", style = MaterialTheme.typography.bodySmall, muted = true) }) }
         if(reminders.isEmpty()) item { PText("No unfinished reminders. Turn on Ongoing reminder when adding or editing a task.", Modifier.padding(24.dp), muted = true) }
     }
 }

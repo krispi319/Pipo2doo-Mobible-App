@@ -38,26 +38,45 @@ import kotlinx.coroutines.delay
                 val done=owned.count {it.done};val progress=if(owned.isEmpty())0f else done.toFloat()/owned.size
                 val zone=if(owner==Owner.Me)clockZone(p.clockZone) else partnerClockZone(p)
                 val time=zone?.let {Instant.ofEpochMilli(tick).atZone(it)}
-                Surface(onClick={onFilter(owner.label)},modifier=Modifier.weight(1f).semantics {selected=filter==owner.label},shape=RoundedCornerShape(22.dp),color=color.copy(alpha=.08f).compositeOver(c.surface),border=BorderStroke(if(filter==owner.label)2.dp else 1.dp,if(filter==owner.label)color else c.separator)) {
-                    Column(Modifier.padding(10.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                        Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(5.dp)) {
-                            Box(Modifier.size(48.dp)) {
+                Surface(onClick={onFilter(owner.label)},modifier=Modifier.weight(1f).semantics {selected=filter==owner.label},shape=RoundedCornerShape(22.dp),color=color.copy(alpha=.08f).compositeOver(c.surface),border=BorderStroke(if(filter==owner.label)2.dp else 1.dp,c.separator)) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                        BoxWithConstraints(Modifier.fillMaxWidth()) {
+                            val stacked=maxWidth<150.dp || androidx.compose.ui.platform.LocalDensity.current.fontScale>1.25f
+                            if(stacked) Column(Modifier.fillMaxWidth(),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                            Box(Modifier.size(56.dp)) {
                                 ProfilePhoto(if(owner==Owner.Me)p.myPhoto else p.partnerPhoto,owner==Owner.Me,Modifier.fillMaxSize().padding(6.dp),if(owner==Owner.Me)p.avatar else -1)
                                 Canvas(Modifier.fillMaxSize()) {val inset=3.dp.toPx();drawCircle(c.surfaceSunken,size.width/2-inset,style=Stroke(3.dp.toPx()));drawArc(color,-90f,360f*progress,false,Offset(inset,inset),Size(size.width-2*inset,size.height-2*inset),style=Stroke(3.dp.toPx(),cap=StrokeCap.Round))}
                             }
-                            Surface(onClick={onClock(owner)},modifier=Modifier.weight(1f).height(44.dp).semantics {contentDescription="Set ${ownerName(owner,p)} clock timezone"},shape=RoundedCornerShape(14.dp),color=c.surfaceElevated,border=BorderStroke(1.dp,c.separator)) {
+                            Surface(onClick={onClock(owner)},modifier=Modifier.widthIn(max=96.dp).fillMaxWidth().height(48.dp).semantics {contentDescription="Set ${ownerName(owner,p)} clock timezone"},shape=RoundedCornerShape(14.dp),color=c.surfaceElevated,border=BorderStroke(1.dp,c.separator)) {
                                 Box(Modifier.fillMaxSize().padding(horizontal=5.dp,vertical=8.dp),contentAlignment=Alignment.Center) {
                                     BasicText(time?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: "--:--",
                                         modifier=Modifier.fillMaxWidth(),
                                         style=MaterialTheme.typography.titleLarge.copy(color=c.textPrimary,fontFamily=FontFamily.Monospace,fontWeight=FontWeight.SemiBold,textAlign=TextAlign.Center),
                                         maxLines=1,softWrap=false,
-                                        autoSize=TextAutoSize.StepBased(minFontSize=9.sp,maxFontSize=20.sp,stepSize=1.sp))
+                                        autoSize=TextAutoSize.StepBased(minFontSize=12.sp,maxFontSize=22.sp,stepSize=1.sp))
+                                }
+                            }
+                            } else Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp,Alignment.CenterHorizontally)) {
+                            Box(Modifier.size(56.dp)) {
+                                ProfilePhoto(if(owner==Owner.Me)p.myPhoto else p.partnerPhoto,owner==Owner.Me,Modifier.fillMaxSize().padding(6.dp),if(owner==Owner.Me)p.avatar else -1)
+                                Canvas(Modifier.fillMaxSize()) {val inset=3.dp.toPx();drawCircle(c.surfaceSunken,size.width/2-inset,style=Stroke(3.dp.toPx()));drawArc(color,-90f,360f*progress,false,Offset(inset,inset),Size(size.width-2*inset,size.height-2*inset),style=Stroke(3.dp.toPx(),cap=StrokeCap.Round))}
+                            }
+                                Box(Modifier.weight(1f),contentAlignment=Alignment.Center) {
+                            Surface(onClick={onClock(owner)},modifier=Modifier.widthIn(max=96.dp).fillMaxWidth().height(48.dp).semantics {contentDescription="Set ${ownerName(owner,p)} clock timezone"},shape=RoundedCornerShape(14.dp),color=c.surfaceElevated,border=BorderStroke(1.dp,c.separator)) {
+                                Box(Modifier.fillMaxSize().padding(horizontal=5.dp,vertical=8.dp),contentAlignment=Alignment.Center) {
+                                    BasicText(time?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: "--:--",
+                                        modifier=Modifier.fillMaxWidth(),
+                                        style=MaterialTheme.typography.titleLarge.copy(color=c.textPrimary,fontFamily=FontFamily.Monospace,fontWeight=FontWeight.SemiBold,textAlign=TextAlign.Center),
+                                        maxLines=1,softWrap=false,
+                                        autoSize=TextAutoSize.StepBased(minFontSize=12.sp,maxFontSize=22.sp,stepSize=1.sp))
+                                }
+                            }
                                 }
                             }
                         }
-                        Text(ownerName(owner,p),style=MaterialTheme.typography.titleSmall,color=c.textPrimary,maxLines=1,overflow=TextOverflow.Ellipsis)
-                        Text(zone?.id?.substringAfterLast('/')?.replace('_',' ') ?: "Set partner clock",style=MaterialTheme.typography.labelSmall,color=c.textSecondary,maxLines=1,overflow=TextOverflow.Ellipsis)
-                        Row(verticalAlignment=Alignment.CenterVertically) {Icon(Icons.Outlined.CheckCircleOutline,null,Modifier.size(14.dp),tint=color);Spacer(Modifier.width(4.dp));PText("$done/${owned.size} done",Modifier.weight(1f),MaterialTheme.typography.labelSmall);Icon(Icons.Outlined.ChevronRight,null,Modifier.size(14.dp),tint=c.textSecondary)}
+                        Text(ownerName(owner,p),style=MaterialTheme.typography.titleSmall,color=c.textPrimary,maxLines=2,overflow=TextOverflow.Ellipsis,textAlign=TextAlign.Center)
+                        Text(zone?.id?.substringAfterLast('/')?.replace('_',' ') ?: "Set partner clock",style=MaterialTheme.typography.labelSmall,color=c.textSecondary,maxLines=1,overflow=TextOverflow.Ellipsis,textAlign=TextAlign.Center)
+                        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.Center) {Icon(Icons.Outlined.CheckCircleOutline,null,Modifier.size(14.dp),tint=color);Spacer(Modifier.width(4.dp));PText("$done/${owned.size} done",style=MaterialTheme.typography.labelSmall);Spacer(Modifier.width(4.dp));Icon(Icons.Outlined.ChevronRight,null,Modifier.size(14.dp),tint=c.textSecondary)}
                     }
                 }
             }

@@ -22,15 +22,15 @@ import java.time.format.DateTimeFormatter
 
 @Composable fun TaskCalendarScreen(state: PipoState,onBack: ()->Unit,onOpen: (String)->Unit) {
     val c=AppTheme.colors
-    val today=LocalDate.now()
+    val today=LocalDate.now(clockZone(state.preferences.clockZone))
     var selected by rememberSaveable {mutableLongStateOf(today.toEpochDay())}
     var monthText by rememberSaveable {mutableStateOf(YearMonth.now().toString())}
     val month=YearMonth.parse(monthText)
     var now by remember {mutableLongStateOf(System.currentTimeMillis())}
     LaunchedEffect(Unit) {while(true) {now=System.currentTimeMillis();delay(30_000)}}
-    val completed=state.tasks.filter {completionDay(it)==selected}
-    val missed=state.tasks.filter {it.day==selected && missedDeadline(it,now)}
-    val planned=state.tasks.filter {it.day==selected && it !in missed && completionDay(it)!=selected}
+    val completed=state.tasks.filter {completionDay(it,clockZone(state.preferences.clockZone))==selected}
+    val missed=state.tasks.filter {it.day==selected && missedDeadline(it,now,clockZone(state.preferences.clockZone))}
+    val planned=state.tasks.filter {it.day==selected && it !in missed && completionDay(it,clockZone(state.preferences.clockZone))!=selected}
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp,12.dp,16.dp,100.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
         item {Row(verticalAlignment=Alignment.CenterVertically) {OutlinedIconButton(onBack) {Icon(Icons.Outlined.ArrowBack,"Back")};Column(Modifier.weight(1f)) {PText("Our calendar",style=MaterialTheme.typography.headlineSmall);PText("Little wins, one day at a time",style=MaterialTheme.typography.bodySmall,muted=true)};PipoBrand(Modifier.size(42.dp))}}
         item {Paper(color=c.primary.copy(alpha=.08f).compositeOver(c.surface)) {
@@ -44,8 +44,8 @@ import java.time.format.DateTimeFormatter
                     if(day !in 1..month.lengthOfMonth()) Spacer(Modifier.weight(1f).height(56.dp))
                     else {
                         val date=month.atDay(day);val epoch=date.toEpochDay()
-                        val green=state.tasks.any {completionDay(it)==epoch}
-                        val red=state.tasks.any {it.day==epoch && missedDeadline(it,now)}
+                        val green=state.tasks.any {completionDay(it,clockZone(state.preferences.clockZone))==epoch}
+                        val red=state.tasks.any {it.day==epoch && missedDeadline(it,now,clockZone(state.preferences.clockZone))}
                         Column(Modifier.weight(1f).heightIn(min=56.dp).padding(2.dp).background(if(epoch==selected) c.primary.copy(alpha=.28f).compositeOver(c.surface) else c.surface,RoundedCornerShape(12.dp)).border(if(date==today || epoch==selected) 1.5.dp else 1.dp,if(date==today || epoch==selected)c.primary else c.separator.copy(alpha=.5f),RoundedCornerShape(12.dp)).clickable {selected=epoch}.semantics {this.selected=epoch==selected;contentDescription=date.toString()+(if(green) ", completed tasks" else "")+(if(red) ", missed deadline" else "")},horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
                             PText(day.toString(),style=MaterialTheme.typography.bodyMedium)
                             Row(Modifier.height(8.dp),horizontalArrangement=Arrangement.spacedBy(3.dp)) {if(green) Box(Modifier.size(5.dp).background(c.success,CircleShape));if(red) Box(Modifier.size(5.dp).background(c.error,CircleShape))}
@@ -63,7 +63,7 @@ import java.time.format.DateTimeFormatter
         }}
         item {Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {Icon(Icons.Outlined.AutoAwesome,null,Modifier.size(19.dp));PText(dayText(selected),style=MaterialTheme.typography.titleMedium)}}
         if(completed.isNotEmpty()) item {PText("✓ Completed · ${completed.size}",style=MaterialTheme.typography.titleSmall)}
-        items(completed,key={"done_${it.id}"}) {task->CalendarTaskRow(task,state,"Completed at "+Instant.ofEpochMilli(task.completedAt).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm")),false) {onOpen(task.id)}}
+        items(completed,key={"done_${it.id}"}) {task->CalendarTaskRow(task,state,"Completed at "+Instant.ofEpochMilli(task.completedAt).atZone(clockZone(state.preferences.clockZone)).format(DateTimeFormatter.ofPattern("HH:mm")),false) {onOpen(task.id)}}
         if(missed.isNotEmpty()) item {Text("● Missed · ${missed.size}",color=c.error,style=MaterialTheme.typography.titleSmall)}
         items(missed,key={"missed_${it.id}"}) {task->CalendarTaskRow(task,state,if(task.done) "Completed after its deadline" else "Not completed by its deadline",true) {onOpen(task.id)}}
         if(planned.isNotEmpty()) item {PText("Scheduled · ${planned.size}",style=MaterialTheme.typography.titleSmall)}

@@ -1,0 +1,4 @@
+All 82 production Kotlin files compiled with real dependencies.
+Generated R-resource stand-in only.
+Compile exit: 0
+Full Gradle APK build and phone tests still required.

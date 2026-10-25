@@ -80,7 +80,7 @@ internal fun appColorsFrom(
     surface = colorScheme.surface,
     surfaceSecondary = colorScheme.surfaceVariant,
     surfaceElevated = colorScheme.surfaceVariant,
-    surfaceSunken = colorScheme.outlineVariant,
+    surfaceSunken = colorScheme.surfaceContainerLow,
     textPrimary = colorScheme.onBackground,
     textSecondary = colorScheme.onSurfaceVariant,
     textTertiary = textTertiary,

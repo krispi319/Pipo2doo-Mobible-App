@@ -21,22 +21,44 @@ import androidx.compose.ui.unit.dp
     val connection=ai.mwm.client.cloud.LocalPartnerConnection.current
     if(connection.connected) {SharedLocket(notes,locketRequest,onLocketOpened,preferences);return}
     val context=LocalContext.current
+    // Preserve the existing local picture, caption and heart keys verbatim.
     val prefs=remember {context.getSharedPreferences("pipo_locket",0)}
     var photo by remember {mutableStateOf(prefs.getString("photo","asset:demo_locket")!!)}
     var caption by remember {mutableStateOf(prefs.getString("caption","Pipo stole my keyboard again")!!)}
     var heart by remember {mutableStateOf(prefs.getBoolean("heart",false))}
+    var uploadedAt by remember {mutableLongStateOf(prefs.getLong("uploaded_at",0))}
     var locketOpen by remember {mutableStateOf(false)}
+    var partnerInfo by remember {mutableStateOf(false)}
     var draft by remember {mutableStateOf(caption)}
-    val picker=rememberPhotoPicker {photo=it;prefs.edit().putString("photo",it).apply()}
-    val c=AppTheme.colors
-    Surface(Modifier.fillMaxWidth().padding(start=44.dp,end=16.dp,top=8.dp,bottom=18.dp),shape=RoundedCornerShape(20.dp,4.dp,20.dp,20.dp),color=c.accent.copy(alpha=.14f).compositeOver(c.surface)) {
-        Row(Modifier.padding(8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-            IconButton({heart=!heart;prefs.edit().putBoolean("heart",heart).apply()}) {Icon(if(heart) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,if(heart) "Remove local heart" else "Save a local heart",tint=c.accent)}
-            Surface(onClick={draft=caption;locketOpen=true},modifier=Modifier.weight(1f),color=androidx.compose.ui.graphics.Color.Transparent) {Column {PText(if(photo.startsWith("asset:")) "Sample locket · Not received" else "My local locket",style=MaterialTheme.typography.labelSmall,muted=true);PText(caption,style=MaterialTheme.typography.titleSmall,preserveContent=true)}}
-            Surface(onClick={draft=caption;locketOpen=true},shape=CircleShape,color=c.accent,modifier=Modifier.size(64.dp)) {LocalPicture(photo,Modifier.padding(3.dp).clip(CircleShape))}
-        }
+    val openLocal:()->Unit={draft=caption;locketOpen=true}
+    val picker=rememberPhotoPicker {
+        photo=it;uploadedAt=System.currentTimeMillis()
+        prefs.edit().putString("photo",it).putLong("uploaded_at",uploadedAt).apply()
+        draft=caption;locketOpen=true
     }
-    if(locketOpen) AlertDialog(onDismissRequest={locketOpen=false},title={PText("Local locket")},text={Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {LocalPicture(photo,Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(14.dp)));OutlinedTextField(draft,{draft=it.take(120)},label={PText("Caption")});OutlinedButton(picker) {PText("Change picture")};PText("Photo and hearts stay on this phone. Nothing is delivered to a partner.",style=MaterialTheme.typography.bodySmall,muted=true)}},confirmButton={Button({caption=draft.trim();prefs.edit().putString("caption",caption).apply();locketOpen=false},enabled=draft.isNotBlank()) {PText("Save")}},dismissButton={OutlinedButton({locketOpen=false}) {PText("Cancel")}})
+    LaunchedEffect(locketRequest) {if(locketRequest!=null) {openLocal();onLocketOpened()}}
+    LocketCard(
+        preferences=preferences,
+        photos=if(photo.isBlank()) emptyList() else listOf(Appreciation(id="local_locket",kind="Locket",message=caption,picture=photo,owner=Owner.Me,at=uploadedAt)),
+        canAdd=true,onGallery=openLocal,onAdd=picker,
+        onPhoto={owner->if(owner==Owner.Me) openLocal() else partnerInfo=true}
+    )
+    if(locketOpen) AlertDialog(onDismissRequest={locketOpen=false},title={PText("Our locket")},text={
+        Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            LocalPicture(photo,Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(14.dp)))
+            if(photo.startsWith("asset:")) PText("Sample photo",style=MaterialTheme.typography.bodySmall,muted=true)
+            OutlinedTextField(draft,{draft=it.take(120)},label={PText("Caption")})
+            Row(verticalAlignment=Alignment.CenterVertically) {
+                IconButton({heart=!heart;prefs.edit().putBoolean("heart",heart).apply()}) {
+                    Icon(if(heart) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,if(heart) "Remove local heart" else "Save a local heart")
+                }
+                OutlinedButton(picker) {PText("Change picture")}
+            }
+            PText("Saved on this phone. Connect a partner to share pictures.",style=MaterialTheme.typography.bodySmall,muted=true)
+        }
+    },confirmButton={Button({caption=draft.trim();prefs.edit().putString("caption",caption).apply();locketOpen=false},enabled=draft.isNotBlank()) {PText("Save")}},dismissButton={OutlinedButton({locketOpen=false}) {PText("Cancel")}})
+    if(partnerInfo) AlertDialog(onDismissRequest={partnerInfo=false},title={PText("Your partner's space")},text={PText("Connect your partner in Us & settings to see their locket pictures here.")},confirmButton={OutlinedButton({partnerInfo=false}) {PText("Got it")}})
+
 }
 
 @Composable private fun SharedLocket(notes: List<Appreciation>, locketRequest: String?, onLocketOpened: () -> Unit, preferences: ai.mwm.client.data.Preferences) {
@@ -50,29 +72,8 @@ import androidx.compose.ui.unit.dp
     LaunchedEffect(locketRequest) {if(locketRequest!=null) {locketOpen=true;onLocketOpened()}}
     val picker=rememberPhotoPicker {draftPhoto=it;draftCaption="";compose=true}
     val c=AppTheme.colors
-    Surface(Modifier.fillMaxWidth().padding(horizontal=20.dp,vertical=8.dp),shape=RoundedCornerShape(24.dp),color=c.accent.copy(alpha=.08f).compositeOver(c.surface),border=androidx.compose.foundation.BorderStroke(1.dp,c.separator)) {
-        Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
-            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Outlined.FavoriteBorder,null,Modifier.size(18.dp),tint=c.textSecondary)
-                PText("Our locket",Modifier.weight(1f),MaterialTheme.typography.titleSmall)
-                IconButton({locketOpen=true},Modifier.size(40.dp)) {Icon(Icons.Outlined.Collections,"View memories",Modifier.size(20.dp))}
-                IconButton(picker,enabled=connection.paired && connection.online && !connection.busy,modifier=Modifier.size(40.dp)) {Icon(Icons.Outlined.AddPhotoAlternate,"Share a locket picture",Modifier.size(20.dp))}
-            }
-            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                listOf(Owner.Me,Owner.You).forEach {owner->
-                    val latest=photos.firstOrNull {it.owner==owner}
-                    Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(7.dp)) {
-                        Surface(onClick={locketOpen=true},modifier=Modifier.fillMaxWidth().height(96.dp),shape=RoundedCornerShape(20.dp),color=c.surface,border=androidx.compose.foundation.BorderStroke(2.dp,c.accent.copy(alpha=.35f))) {
-                            if(latest!=null) LocalPicture(latest.picture,Modifier.padding(4.dp).clip(RoundedCornerShape(15.dp)))
-                            else Box(contentAlignment=Alignment.Center) {Icon(Icons.Outlined.FavoriteBorder,"No photo yet",tint=c.accent)}
-                        }
-                        Text(if(owner==Owner.Me) preferences.myName else preferences.partnerName,style=MaterialTheme.typography.labelSmall,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis,color=c.textPrimary)
-                        latest?.let {PText(java.time.Instant.ofEpochMilli(it.at).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("d MMM · HH:mm")),style=MaterialTheme.typography.labelSmall,muted=true)}
-                    }
-                }
-            }
-        }
-    }
+    LocketCard(preferences,photos,connection.paired && connection.online && !connection.busy,
+        onGallery={locketOpen=true},onAdd=picker,onPhoto={locketOpen=true})
 
     if(locketOpen) AlertDialog(onDismissRequest={locketOpen=false},title={PText("Our locket")},text={
         LazyColumn(Modifier.fillMaxWidth().heightIn(max=460.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
@@ -94,4 +95,40 @@ import androidx.compose.ui.unit.dp
         }
     },confirmButton={OutlinedButton({locketOpen=false;picker()},enabled=connection.paired && connection.online && !connection.busy) {PText("Share my picture")}},dismissButton={TextButton({locketOpen=false}) {PText("Close")}})
     if(compose) AlertDialog(onDismissRequest={compose=false},title={PText("Share a locket")},text={Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {LocalPicture(draftPhoto,Modifier.fillMaxWidth().height(200.dp));OutlinedTextField(draftCaption,{draftCaption=it.take(120)},label={PText("Caption")});PText("Share this picture and caption with your partner.",style=MaterialTheme.typography.bodySmall,muted=true)}},confirmButton={Button({send("Locket",draftCaption.trim(),"",draftPhoto);compose=false},enabled=draftCaption.isNotBlank() && connection.online && !connection.busy) {PText("Share")}},dismissButton={OutlinedButton({compose=false}) {PText("Cancel")}})
+}
+
+
+/** One card geometry for local and paired modes; storage/sharing actions stay separate. */
+@Composable private fun LocketCard(
+    preferences: ai.mwm.client.data.Preferences,
+    photos: List<Appreciation>,
+    canAdd: Boolean,
+    onGallery: () -> Unit,
+    onAdd: () -> Unit,
+    onPhoto: (Owner) -> Unit
+) {
+    val c=AppTheme.colors
+    Surface(Modifier.fillMaxWidth().padding(horizontal=20.dp,vertical=8.dp),shape=RoundedCornerShape(24.dp),color=c.accent.copy(alpha=.08f).compositeOver(c.surface),border=androidx.compose.foundation.BorderStroke(1.dp,c.separator)) {
+        Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Outlined.FavoriteBorder,null,Modifier.size(18.dp),tint=c.textSecondary)
+                PText("Our locket",Modifier.weight(1f),MaterialTheme.typography.titleSmall)
+                IconButton(onGallery,Modifier.size(40.dp)) {Icon(Icons.Outlined.Collections,"View memories",Modifier.size(20.dp))}
+                IconButton(onAdd,enabled=canAdd,modifier=Modifier.size(40.dp)) {Icon(Icons.Outlined.AddPhotoAlternate,"Share a locket picture",Modifier.size(20.dp))}
+            }
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                listOf(Owner.Me,Owner.You).forEach {owner->
+                    val latest=photos.firstOrNull {it.owner==owner}
+                    Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(7.dp)) {
+                        Surface(onClick={onPhoto(owner)},modifier=Modifier.fillMaxWidth().height(96.dp),shape=RoundedCornerShape(20.dp),color=c.surface,border=androidx.compose.foundation.BorderStroke(2.dp,c.accent.copy(alpha=.35f))) {
+                            if(latest!=null) LocalPicture(latest.picture,Modifier.padding(4.dp).clip(RoundedCornerShape(15.dp)))
+                            else Box(contentAlignment=Alignment.Center) {Icon(Icons.Outlined.FavoriteBorder,"No photo yet",tint=c.accent)}
+                        }
+                        Text(if(owner==Owner.Me) preferences.myName else preferences.partnerName,style=MaterialTheme.typography.labelSmall,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis,color=c.textPrimary)
+                        latest?.takeIf {it.at>0}?.let {PText(java.time.Instant.ofEpochMilli(it.at).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("d MMM · HH:mm")),style=MaterialTheme.typography.labelSmall,muted=true)}
+                    }
+                }
+            }
+        }
+    }
 }

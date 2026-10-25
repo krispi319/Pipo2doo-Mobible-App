@@ -34,7 +34,16 @@ class PipoFirebase private constructor(context: Context) {
     suspend fun issueCode()=map(obj(client.rpc("issue_pair_code")))
     suspend fun joinSpace(code: String,role: String)=map(obj(client.rpc("redeem_pair_code_with_role",JSONObject().put("p_code",code).put("p_role",role))))
     suspend fun leaveSpace(): Map<String,Any?> {client.rpc("leave_partner_space");return emptyMap()}
-    private suspend fun records(sid: String)=rows(client.request("/rest/v1/shared_records?space_id=eq.$sid&deleted_at=is.null&select=*"))
+    private suspend fun records(sid: String): List<JSONObject> {
+        val all=mutableListOf<JSONObject>()
+        var offset=0
+        while(true) {
+            val page=rows(client.request("/rest/v1/shared_records?space_id=eq.$sid&deleted_at=is.null&select=*&order=id.asc&limit=500&offset=$offset"))
+            all.addAll(page)
+            if(page.isEmpty()) return all.distinctBy {it.getString("id")}
+            offset+=page.size
+        }
+    }
     private suspend fun space(): String {
         val uid=client.uid()
         return rows(client.request("/rest/v1/space_members?user_id=eq.$uid&select=space_id")).firstOrNull()?.getString("space_id") ?: throw NoMembership()
@@ -123,7 +132,8 @@ class PipoFirebase private constructor(context: Context) {
     }
     suspend fun saveTask(task: Task,uid: String,partner: String?,version: Long): Map<String,Any?> {
         check(uid==client.uid()) {"Account changed. Reopen this task."}
-        return write(task.id,"task",mapOf("title" to task.title,"listId" to task.listId,"day" to task.day,"minute" to task.minute,"repeat" to task.repeat.name,"status" to task.status.name,"tags" to task.tags,"parentId" to task.parentId,"completedAt" to task.completedAt),version,parent=task.parentId.ifBlank {task.listId}.takeIf {runCatching {UUID.fromString(it)}.isSuccess},assigned=assigned(task.owner,uid,partner))
+        val canonical = task.canonicalSchedule()
+        return write(task.id,"task",mapOf("seriesId" to task.seriesId,"scheduledAt" to canonical.scheduledAt,"scheduleZone" to canonical.scheduleZone,"title" to task.title,"listId" to task.listId,"day" to canonical.day,"minute" to canonical.minute,"repeat" to task.repeat.name,"status" to task.status.name,"tags" to task.tags,"parentId" to task.parentId,"completedAt" to task.completedAt),version,parent=task.parentId.ifBlank {task.listId}.takeIf {runCatching {UUID.fromString(it)}.isSuccess},assigned=assigned(task.owner,uid,partner))
     }
     private suspend fun delete(id: String,kind: String,version: Long): Map<String,Any?> {
         val r=records(space()).firstOrNull {it.getString("id")==id} ?: return emptyMap()
@@ -263,6 +273,27 @@ class PipoFirebase private constructor(context: Context) {
     suspend fun locketSender(id: String): String {
         UUID.fromString(id)
         return rows(client.request("/rest/v1/shared_records?id=eq.$id&kind=eq.appreciation&deleted_at=is.null&select=created_by")).single().getString("created_by")
+    }
+    suspend fun validateTaskNotification(event: String): JSONObject {
+        UUID.fromString(event)
+        return obj(client.rpc("validate_task_notification",JSONObject().put("p_event",event)))
+    }
+    suspend fun taskReminderSettings(sid: String): Map<String,Pair<Boolean,Int>> =
+        rows(client.rpc("read_task_reminders",JSONObject().put("p_space",sid))).associate {
+            it.getString("id") to (it.getBoolean("enabled") to it.getInt("offset"))
+        }
+    private var taskReminderSignature = ""
+    suspend fun syncTaskReminders(sid: String, tasks: List<Task>) {
+        val uid=client.uid()
+        val values=tasks.sortedBy {it.id}.map {JSONObject().put("id",it.id).put("enabled",it.reminder).put("offset",it.offset.coerceIn(0,43200))}
+        val signature=uid+":"+sid+":"+values.joinToString()
+        if(signature==taskReminderSignature) return
+        for(batch in values.chunked(500)) {
+            client.rpc("sync_task_reminders",JSONObject().put("p_space",sid).put("p_items",JSONArray(batch)))
+            check(uid==client.uid()) {"Account changed."}
+        }
+        check(uid==client.uid()) {"Account changed."}
+        taskReminderSignature=signature
     }
     suspend fun notificationPerson(sender: String): Pair<String,String> {
         UUID.fromString(sender)

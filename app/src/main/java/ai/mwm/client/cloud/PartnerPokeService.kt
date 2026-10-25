@@ -31,6 +31,7 @@ class PartnerPokeService: FirebaseMessagingService() {
     }
     override fun onMessageReceived(message: RemoteMessage) {
         channel(this)
+        if(message.data["type"]=="task_event") {TaskPushNotifications.receive(this,message.data["event_id"]);return}
         if(message.data["type"]=="partner_note") {receiveNote(message);return}
         if(message.data["type"]=="partner_locket") {receiveLocket(message);return}
         if(!CloudRelease.ENABLED || message.data["type"]!="partner_poke" || !allowed(this)) return
@@ -158,8 +159,9 @@ class PartnerPokeService: FirebaseMessagingService() {
         }
         fun allowed(context: Context, channelId: String=CHANNEL): Boolean { val manager=context.getSystemService(NotificationManager::class.java); return (Build.VERSION.SDK_INT<33 || androidx.core.content.ContextCompat.checkSelfPermission(context,android.Manifest.permission.POST_NOTIFICATIONS)==android.content.pm.PackageManager.PERMISSION_GRANTED) && NotificationManagerCompat.from(context).areNotificationsEnabled() && manager.getNotificationChannel(NotificationSounds.channelId(context,channelId))?.importance?.let {it!=NotificationManager.IMPORTANCE_NONE}==true }
         fun clear(context: Context) {
+            ai.mwm.client.data.TaskAlarmCache.clear(context)
             val manager=context.getSystemService(NotificationManager::class.java)
-            manager.activeNotifications.filter {it.tag=="partner_poke" || it.tag=="partner_locket" || it.tag=="partner_note"}.forEach {manager.cancel(it.tag,it.id)}
+            manager.activeNotifications.filter {it.tag=="task_event" || it.tag=="partner_poke" || it.tag=="partner_locket" || it.tag=="partner_note"}.forEach {manager.cancel(it.tag,it.id)}
             val shortcuts=androidx.core.content.pm.ShortcutManagerCompat.getDynamicShortcuts(context).map {it.id}.filter {it.startsWith("chat_")}
             if(shortcuts.isNotEmpty()) androidx.core.content.pm.ShortcutManagerCompat.removeLongLivedShortcuts(context,shortcuts)
         }

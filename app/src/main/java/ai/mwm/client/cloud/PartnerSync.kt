@@ -153,7 +153,12 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
         taskVersions=ts.associate {it["id"] as String to n(it,"version")};listVersions=ls.associate {it["id"] as String to n(it,"version")};tagVersions=tagRows.associate {it["id"] as String to n(it,"version")}
         repository.bindSharedSpace(sid)
         val current=repository.state.value
-        val tasks=ts.map {t->Task(id=t["id"] as String,title=t["title"] as String,owner=owner(t,uid),assigneeUid=t["assigneeUid"] as? String ?: "",day=n(t,"day"),minute=(t["minute"] as? Number)?.toInt(),listId=t["listId"] as String,note=repository.privateNote(t["id"] as String),tags=(t["tags"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),repeat=Repeat.valueOf(t["repeat"] as String),status=TaskStatus.valueOf(t["status"] as String),completedAt=n(t,"completedAt"),parentId=t["parentId"] as? String ?: "",reminder=repository.personalReminder(t["id"] as String).first,offset=repository.personalReminder(t["id"] as String).second)}
+        val savedReminders=try {api.taskReminderSettings(sid)} catch(e: CancellationException) {throw e} catch(_: Exception) {emptyMap()}
+        fun reminder(id: String, series: String): Pair<Boolean,Int> {
+            val inherited=savedReminders[id] ?: savedReminders[series] ?: if(series.isNotBlank()) repository.personalReminder(series) else (true to 0)
+            return repository.personalReminder(id,inherited.first,inherited.second)
+        }
+        val tasks=ts.map {t->Task(id=t["id"] as String,title=t["title"] as String,owner=owner(t,uid),assigneeUid=t["assigneeUid"] as? String ?: "",scheduledAt=n(t,"scheduledAt"),scheduleZone=t["scheduleZone"] as? String ?: "",day=n(t,"day"),minute=(t["minute"] as? Number)?.toInt(),listId=t["listId"] as String,note=repository.privateNote(t["id"] as String),tags=(t["tags"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),repeat=Repeat.valueOf(t["repeat"] as String),status=TaskStatus.valueOf(t["status"] as String),completedAt=n(t,"completedAt"),parentId=t["parentId"] as? String ?: "",seriesId=t["seriesId"] as? String ?: "",reminder=reminder(t["id"] as String,t["seriesId"] as? String ?: "").first,offset=reminder(t["id"] as String,t["seriesId"] as? String ?: "").second)}
         val lists=ls.map {l->SharedList(id=l["id"] as String,name=l["name"] as String,emoji=l["emoji"] as String,pinned=l["pinned"]==true,owner=owner(l,uid),assigneeUid=l["assigneeUid"] as? String ?: "",pictures=(l["pictures"] as? List<*>)?.filterIsInstance<String>() ?: emptyList())}
         val notes=maps(r["notes"]).map {v->Appreciation(id=v["id"] as String,kind=v["kind"] as String,message=v["message"] as String,owner=if(v["sender"]==uid)Owner.Me else Owner.You,at=n(v,"at"),taskTitle=v["taskTitle"] as? String ?: "",picture=v["picture"] as? String ?: "",replyTo=v["replyTo"] as? String ?: "")}
         val together=maps(listOfNotNull(r["togetherDate"])).singleOrNull()
@@ -163,6 +168,9 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
         val savedTags=tagRows.map {Tag(it["id"] as String,it["name"] as String)}
         val legacyTags=tasks.flatMap {it.tags}.distinct().filter {id -> savedTags.none {it.id==id} }.map {Tag(it,it)}
         repository.importRemote(current.copy(tasks=tasks,lists=lists,notes=notes,tags=savedTags+legacyTags,preferences=p))
+        try {api.syncTaskReminders(sid,tasks)} catch(e: CancellationException) {throw e} catch(_: Exception) {
+            // Task save and synchronization remain available while background-reminder setup retries.
+        }
         runCatching {api.updateDevice(p)}.onFailure { error ->
             if(error is CancellationException) throw error
             // Task synchronization stays available while push setup retries on the next refresh.
@@ -170,12 +178,12 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
         mutable.value=mutable.value.copy(togetherDateVersion=together?.let {n(it,"version")} ?: 0,togetherDateKnown=together!=null,role=role,partnerRole=partnerRole,selectedRole=role,spaceId=sid,uid=uid,partnerUid=partner,generation=generation,partnerAvatar=(other?.get("avatar") as? Number)?.toInt() ?: -1,authenticated=true,online=true,message=(if(partner.isBlank()) "Space created · Waiting for your partner" else "Partner connected · Synced")+profileNotice,code=if(partner.isBlank())mutable.value.code else "",expiresAt=if(partner.isBlank())mutable.value.expiresAt else 0)
     }
     /** Network-first edits: rejected/conflicting/offline writes never masquerade as synced. */
-    suspend fun mutate(block: () -> Unit)=lock.withLock {
+    suspend fun mutate(showBusy: Boolean = true, block: () -> Unit)=lock.withLock {
         check(!mutable.value.busy){"Please wait for the current account operation."}
         if(!mutable.value.connected){check(!repository.isRemote){"Shared space is still reconnecting. Wait for a fresh server response."};block();return@withLock}
         check(mutable.value.online){"Offline · Change not sent. Reconnect and try again."}
         val old=repository.state.value;val next=repository.preview(block);val c=mutable.value
-        mutable.value=c.copy(busy=true,message="Saving to shared space…")
+        if(showBusy) mutable.value=c.copy(busy=true,message="Saving to shared space…")
         try {
             require(next.preferences.partnerName==old.preferences.partnerName && next.preferences.partnerPhoto==old.preferences.partnerPhoto){"Only your partner can edit their profile."}
             requireSharedPermissions(old,next,c)
@@ -184,7 +192,7 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
             val renamedOrAdded=next.tags.filter {tag -> old.tags.find {it.id==tag.id}!=tag}
             // Legacy tags have non-UUID IDs: retain their name IDs until the user replaces them.
             for(tag in renamedOrAdded) api.saveTag(tag,tagVersions[tag.id] ?: 0)
-            fun sharedTask(t: Task)=t.copy(note="",reminder=false,offset=0,events=emptyList())
+            fun sharedTask(t: Task)=t.canonicalSchedule().copy(note="",reminder=false,offset=0,events=emptyList())
             for(t in next.tasks.filter {t->old.tasks.find {it.id==t.id}?.let {sharedTask(it)==sharedTask(t)}!=true}){api.saveTask(t,c.uid,c.partnerUid.ifBlank {null},taskVersions[t.id] ?: 0)}
             for(t in old.tasks.filter {before->next.tasks.none {it.id==before.id}}.sortedByDescending(::depth))api.deleteTask(t.id,taskVersions[t.id] ?: 0)
             for(l in old.lists.filter {before->next.lists.none {it.id==before.id}})api.deleteList(l.id,listVersions[l.id] ?: 0)
@@ -214,7 +222,7 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
             repository.change {it.copy(preferences=next.preferences,tasks=it.tasks.map {t->next.tasks.find {it.id==t.id}?.let {edit->t.copy(reminder=edit.reminder,offset=edit.offset)} ?: t},tags=it.tags)}
             refresh()
             if(locketNotice.isNotBlank()) mutable.value=mutable.value.copy(message=locketNotice)
-        } catch(e: Exception){runCatching {refresh()};mutable.value=mutable.value.copy(message="Shared update interrupted. Refresh to review any saved changes. ${connectionError(e)}");throw e} finally {mutable.value=mutable.value.copy(busy=false)}
+        } catch(e: Exception){runCatching {refresh()};mutable.value=mutable.value.copy(message="Shared update interrupted. Refresh to review any saved changes. ${connectionError(e)}");throw e} finally {if(showBusy) mutable.value=mutable.value.copy(busy=false)}
     }
     suspend fun setTogetherDate(day:Long,expectedVersion:Long,expectedAccount:String)=lock.withLock {
         require(validTogetherDate(day)) {"Choose a date from 1900 through today."}

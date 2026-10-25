@@ -20,6 +20,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.unit.*
 
 // Screen-specific geometry from the selected New Task HTML. Do not substitute
@@ -29,7 +31,7 @@ import androidx.compose.ui.unit.*
 }
 @Composable internal fun TaskSectionLabel(label: String, action: @Composable RowScope.() -> Unit = {}) {
     Row(Modifier.fillMaxWidth().heightIn(min = 24.dp).padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        TaskCaption(label); Spacer(Modifier.weight(1f)); action()
+        if(label == "When") PText(label, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 14.sp), muted = true) else TaskCaption(label); Spacer(Modifier.weight(1f)); action()
     }
 }
 @Composable internal fun TaskQuietAction(label:String,onClick:()->Unit,modifier:Modifier=Modifier) {
@@ -80,7 +82,15 @@ import androidx.compose.ui.unit.*
         Row(Modifier.padding(3.dp)) {
             labels.forEachIndexed { index, label ->
                 Surface(onClick = { onSelect(index) }, modifier = Modifier.weight(1f), shape = CircleShape, color = if(index == selected) AppTheme.colors.surface else Color.Transparent, shadowElevation = if(index == selected) 1.dp else 0.dp) {
-                    Box(Modifier.heightIn(min = 44.dp).padding(horizontal = 4.dp), contentAlignment = Alignment.Center) { PText(label, style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium), muted = index != selected) }
+                    Box(Modifier.heightIn(min = 44.dp).padding(horizontal = 4.dp, vertical = 4.dp), contentAlignment = Alignment.Center) {
+                        val repeatLabel = labels == Repeat.entries.map { it.label }
+                        if(repeatLabel) androidx.compose.foundation.text.BasicText(appDisplayText(label),
+                            style = MaterialTheme.typography.labelLarge.copy(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium,
+                                color = if(index == selected) AppTheme.colors.textPrimary else AppTheme.colors.textSecondary, textAlign = TextAlign.Center),
+                            maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis,
+                            autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 12.sp, stepSize = .5.sp))
+                        else PText(label, style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium), muted = index != selected)
+                    }
                 }
             }
         }

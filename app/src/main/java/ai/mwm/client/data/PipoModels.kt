@@ -23,18 +23,20 @@ data class Task(
     val listId: String = "home", val note: String = "", val tags: List<String> = emptyList(),
     val repeat: Repeat = Repeat.Once, val reminder: Boolean = true, val offset: Int = 0,
     val status: TaskStatus = TaskStatus.Todo, val completedAt: Long = 0,
-    val parentId: String = "", val events: List<TaskEvent> = emptyList(), val assigneeUid: String = ""
+    val parentId: String = "", val events: List<TaskEvent> = emptyList(), val assigneeUid: String = "",
+    val scheduledAt: Long = 0, val scheduleZone: String = "", val displayZone: String = "", val seriesId: String = ""
 ) {
     val done: Boolean get() = status == TaskStatus.Done
-    fun dueAt(zone: ZoneId = ZoneId.systemDefault()): Long = LocalDate.ofEpochDay(day)
+    fun dueAt(zone: ZoneId = ZoneId.systemDefault()): Long = if(scheduledAt > 0 && minute != null) scheduledAt else LocalDate.ofEpochDay(day)
         .atTime(LocalTime.of((minute ?: 540) / 60, (minute ?: 540) % 60)).atZone(zone).toInstant().toEpochMilli()
     fun reminderAt(defaultMinute: Int = 540, zone: ZoneId = ZoneId.systemDefault()): Long {
+        if(scheduledAt > 0 && minute != null && offset != -1) return scheduledAt - offset * 60_000L
         val dueMinute = minute ?: defaultMinute.coerceIn(0, 1439)
         val time = if(offset == -1) 540 else dueMinute
         val due = LocalDate.ofEpochDay(day).atTime(time / 60, time % 60).atZone(zone).toInstant().toEpochMilli()
         return if(offset == -1) due else due - offset * 60_000L
     }
-    val reminderKey: String get() = "$day:$minute:$offset"
+    val reminderKey: String get() = if(scheduledAt > 0 && minute != null) "$scheduledAt:$offset" else "$day:$minute:$offset"
 }
 data class SharedList(val id: String = newId(), val name: String, val emoji: String = "🧺", val pinned: Boolean = false, val owner: Owner = Owner.Together, val pictures: List<String> = emptyList(), val assigneeUid: String = "")
 data class Tag(val id: String = newId(), val name: String)
@@ -44,7 +46,7 @@ data class Preferences(
     val started: Boolean = false, val avatar: Int = -1, val quietEnabled: Boolean = true,
     val quietStart: Int = 1320, val quietEnd: Int = 450, val style: String = "Soft purr",
     val sound: Boolean = true, val haptics: Boolean = true,
-    val myPhoto: String = "", val partnerPhoto: String = "", val pokeOptIn: Boolean = false,
+    val myPhoto: String = "", val partnerPhoto: String = "", val pokeOptIn: Boolean = true,
     val themeMode: String = "System", val language: String = "en", val codeExpiresAt: Long = 0L,
     val togetherSince: Long = LocalDate.of(2023, 2, 14).toEpochDay(),
     val defaultReminderTime: Int = 750, val keepResetHistory: Boolean = true, val shareProfile: Boolean = true,
@@ -59,20 +61,31 @@ internal fun requireOwnPreferencesUpdate(current: Preferences, next: Preferences
     }
 }
 
-/** A partner's task must not schedule a personal reminder on this phone. */
-fun Task.isOwnReminder(): Boolean = reminder && !done && owner != Owner.You
+/** Both members may receive a reminder; editing permissions remain separate. */
+fun Task.isOwnReminder(): Boolean = reminder && !done
 
-data class PipoState(val tasks: List<Task> = emptyList(), val lists: List<SharedList> = emptyList(), val tags: List<Tag> = emptyList(), val notes: List<Appreciation> = emptyList(), val preferences: Preferences = Preferences())
+data class PipoState(val tasks: List<Task> = emptyList(), val lists: List<SharedList> = emptyList(), val tags: List<Tag> = emptyList(), val notes: List<Appreciation> = emptyList(), val preferences: Preferences = Preferences(), val skippedDaily: Set<String> = emptySet())
 
 /** One next occurrence only. An overdue task stays open until completed; missed days aren't duplicated. */
 fun nextOccurrence(task: Task, now: Long = System.currentTimeMillis()): Task? {
     if (task.repeat == Repeat.Once) return null
+    if(task.scheduledAt > 0 && task.minute != null) {
+        val anchor = clockZone(task.scheduleZone)
+        val view = clockZone(task.displayZone)
+        var nextTime = Instant.ofEpochMilli(task.scheduledAt).atZone(anchor).plusDays(task.repeat.days)
+        val today = Instant.ofEpochMilli(now).atZone(anchor).toLocalDate()
+        val behind = java.time.temporal.ChronoUnit.DAYS.between(nextTime.toLocalDate(), today)
+        if(behind > 0) nextTime = nextTime.plusDays(((behind + task.repeat.days - 1) / task.repeat.days) * task.repeat.days)
+        if(nextTime.toInstant().toEpochMilli() <= now) nextTime = nextTime.plusDays(task.repeat.days)
+        return task.copy(id = newId(), scheduledAt = nextTime.toInstant().toEpochMilli(), status = TaskStatus.Todo,
+            completedAt = 0, parentId = task.id, events = listOf(TaskEvent("Next ${task.repeat.label.lowercase(Locale.ENGLISH)} occurrence", now))).inTaskZone(view)
+    }
     var day = task.day + task.repeat.days
-    val today = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()
+    val today = Instant.ofEpochMilli(now).atZone(clockZone(task.displayZone)).toLocalDate().toEpochDay()
     if (day < today) day += ((today - day + task.repeat.days - 1) / task.repeat.days) * task.repeat.days
     var next = task.copy(id = newId(), day = day, status = TaskStatus.Todo, completedAt = 0, parentId = task.id,
         events = listOf(TaskEvent("Next ${task.repeat.label.lowercase(Locale.ENGLISH)} occurrence", now)))
-    if (next.dueAt() <= now) next = next.copy(day = next.day + task.repeat.days)
+    if (next.dueAt(clockZone(task.displayZone)) <= now) next = next.copy(day = next.day + task.repeat.days)
     return next
 }
 
@@ -80,7 +93,7 @@ fun seedState(): PipoState {
     val demo = legacyDemoState()
     return demo.copy(
         lists = demo.lists.map { it.copy(name = it.name.replace("Theo", "User 2"), pictures = when(it.id) { "trip" -> listOf("asset:demo_travel"); "home" -> listOf("asset:demo_tap"); "gifts" -> listOf("asset:demo_scarf"); "dates" -> listOf("asset:demo_movie"); "garden" -> listOf("asset:demo_balcony"); else -> emptyList() }) },
-        tasks = demo.tasks.map { it.copy(note = it.note.replace("Theo", "User 2")) },
+        tasks = demo.tasks.map { it.copy(note = it.note.replace("Theo", "User 2"), reminder = true) },
         preferences = Preferences(myPhoto = "asset:profile_mina", partnerPhoto = "asset:profile_partner")
     )
 }

@@ -11,6 +11,7 @@ import androidx.activity.compose.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
@@ -133,11 +134,7 @@ import kotlinx.coroutines.launch
     val toggle: (Task) -> Unit = { task ->
         vm?.toggle(task)
         if(!task.done && !connection.connected) celebrate(context, state.preferences)
-        scope.launch {
-            if(connection.connected){snack.showSnackbar("Updating shared task… Its status changes after server confirmation.");return@launch}
-            val result = snack.showSnackbar(localized(if(task.done) "Task reopened" else if(task.repeat == Repeat.Once) "Prrr… one little task done!" else "Task done. Its next ${task.repeat.label.lowercase()} occurrence is scheduled.", translationCode), actionLabel = localized("Undo", translationCode), duration = SnackbarDuration.Short)
-            if(result == SnackbarResult.ActionPerformed) vm?.status(task.id, if(task.done) TaskStatus.Done else TaskStatus.Todo)
-        }
+
     }
     val detail = state.tasks.find { it.id == taskId }
     val list = state.lists.find { it.id == listId }
@@ -165,11 +162,11 @@ import kotlinx.coroutines.launch
     }, floatingActionButton = {
         if(primary) Column(horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(12.dp)) {
             BadgedBox(badge={if(unreadNotes>0) androidx.compose.material3.Badge {Text(if(unreadNotes>99) "99+" else unreadNotes.toString())}}) {
-                SmallFloatingActionButton({thanksFor="";notesOpen=true},modifier=Modifier.size(48.dp),containerColor=AppTheme.colors.secondary,shape=CircleShape) {
+                SmallFloatingActionButton({thanksFor="";notesOpen=true},modifier=Modifier.size(48.dp).border(1.dp,AppTheme.colors.separator,CircleShape),containerColor=AppTheme.colors.secondary,shape=CircleShape) {
                     Icon(Icons.Outlined.ChatBubbleOutline,if(unreadNotes>0) "Open chat, $unreadNotes unread messages" else "Open chat")
                 }
             }
-            if(tab in listOf("Today","Upcoming")) FloatingActionButton({add()},containerColor=AppTheme.colors.primary,shape=CircleShape) {Icon(Icons.Outlined.Add,"Add a task")}
+            if(tab in listOf("Today","Upcoming")) FloatingActionButton({add()},modifier=Modifier.border(1.dp,AppTheme.colors.separator,CircleShape),containerColor=AppTheme.colors.primary,shape=CircleShape) {Icon(Icons.Outlined.Add,"Add a task")}
         }
     }) { padding ->
         Box(Modifier.fillMaxSize().mainTabSwipes(primary && !editorOpen && !tagsOpen && !listEditorOpen, tab) { tab = it }.background(Brush.radialGradient(listOf(AppTheme.colors.primary.copy(alpha = .035f), Color.Transparent), center = Offset.Zero, radius = 1100f)).padding(padding).then(if(!primary) Modifier.navigationBarsPadding() else Modifier)) {

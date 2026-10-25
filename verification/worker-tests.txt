@@ -1,0 +1,1 @@
+Worker tests: 4 authorization/configuration cases passed; unauthorized requests make no network calls.

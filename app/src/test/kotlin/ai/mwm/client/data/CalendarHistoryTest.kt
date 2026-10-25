@@ -17,7 +17,7 @@ class CalendarHistoryTest {
   assertTrue(missedDeadline(t,stamp(0)+86_400_000,zone))
  }
  @Test fun unknownDateDoesNotInventCompletionHistory() {assertNull(completionDay(Task(status=TaskStatus.Done,completedAt=0),zone))}
- @Test fun newTasksHaveNoNudge() {assertFalse(Task().reminder)}
+ @Test fun newTasksStartWithNudge() {assertTrue(Task().reminder);assertFalse(Task(reminder=false).reminder)}
  @Test fun partnerClockCanHaveLocalOverride() {
   val p=Preferences(partnerClockZone="Asia/Tokyo",partnerClockOverride="Europe/Berlin")
   assertEquals("Europe/Berlin",partnerClockZone(p)?.id)

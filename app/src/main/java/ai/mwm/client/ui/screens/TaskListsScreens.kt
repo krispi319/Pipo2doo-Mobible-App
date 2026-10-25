@@ -34,8 +34,8 @@ import java.util.Locale
 @OptIn(ExperimentalLayoutApi::class)
 @Composable fun TodayScreen(state: PipoState, onOpen: (String) -> Unit, onToggle: (Task) -> Unit, onPreferences: ((Preferences) -> Preferences) -> Unit = {}, onReminders: () -> Unit, onCare: () -> Unit = {}, locketRequest: String? = null, onLocketOpened: () -> Unit = {}) {
     var filter by rememberSaveable { mutableStateOf("All") }
-    val today = LocalDate.now().toEpochDay()
-    val tasks = state.tasks.filter { (!it.done && it.day <= today) || (it.done && it.completedAt > 0 && Instant.ofEpochMilli(it.completedAt).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay() == today) }
+    val today = currentTaskDay(state.preferences.clockZone)
+    val tasks = state.tasks.filter { (!it.done && it.day <= today) || (it.done && it.completedAt > 0 && Instant.ofEpochMilli(it.completedAt).atZone(clockZone(state.preferences.clockZone)).toLocalDate().toEpochDay() == today) }
     var clockTarget by rememberSaveable {mutableStateOf("")}
     val done = tasks.count { it.done }
     val colors = AppTheme.colors

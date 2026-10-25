@@ -1,0 +1,4 @@
+[{"result":"Daily generation, history, no duplicates, completion isolation, deletion, stopping, private grants and cron checks passed"}]
+[{"result":"Spring DST instant and canonical minute validation passed"}]
+[{"result":"Per-user reminder defaults inherited by newly generated dates"}]
+Daily recurrence SQL contracts passed in isolated PostgreSQL; production untouched.

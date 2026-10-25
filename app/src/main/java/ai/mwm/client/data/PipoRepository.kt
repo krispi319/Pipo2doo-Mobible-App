@@ -12,6 +12,11 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.channels.Channel
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -37,19 +42,20 @@ class PipoRepository private constructor(private val context: Context) {
             val root = JSONObject(raw)
             val p = root.optJSONObject("preferences") ?: JSONObject()
             PipoState(
+                skippedDaily = root.optJSONArray("skippedDaily")?.strings()?.toSet() ?: emptySet(),
                 tasks = root.optJSONArray("tasks")?.objects()?.map { t -> Task(
                     id = t.getString("id"), title = t.optString("title"), owner = enumValue(t.optString("owner"), Owner.Together),
                     day = t.optLong("day", java.time.LocalDate.now().toEpochDay()), minute = t.optInt("minute", -1).takeIf { it in 0..1439 },
                     listId = t.optString("listId", "home"), note = t.optString("note"), tags = t.optJSONArray("tags")?.strings() ?: emptyList(),
-                    repeat = enumValue(t.optString("repeat"), Repeat.Once), reminder = t.optBoolean("reminder"), offset = t.optInt("offset"),
-                    status = enumValue(t.optString("status"), TaskStatus.Todo), completedAt = t.optLong("completedAt"), parentId = t.optString("parentId"),
+                    repeat = enumValue(t.optString("repeat"), Repeat.Once), reminder = t.optBoolean("reminder", true), offset = t.optInt("offset"),
+                    status = enumValue(t.optString("status"), TaskStatus.Todo), completedAt = t.optLong("completedAt"), parentId = t.optString("parentId"), seriesId = t.optString("seriesId"), scheduledAt = t.optLong("scheduledAt"), scheduleZone = t.optString("scheduleZone"),
                     events = t.optJSONArray("events")?.objects()?.map { TaskEvent(it.optString("text"), it.optLong("at"), enumValue(it.optString("owner"), Owner.Me)) } ?: emptyList()
                 ) } ?: emptyList(),
                 lists = root.optJSONArray("lists")?.objects()?.map { SharedList(it.getString("id"), it.getString("name"), it.optString("emoji", "🧺"), it.optBoolean("pinned"), enumValue(it.optString("owner"), Owner.Together), it.optJSONArray("pictures")?.strings() ?: emptyList()) } ?: emptyList(),
                 tags = root.optJSONArray("tags")?.objects()?.map { Tag(it.getString("id"), it.getString("name")) } ?: emptyList(),
                 notes = root.optJSONArray("notes")?.objects()?.map { Appreciation(it.getString("id"), it.getString("kind"), it.optString("message"), enumValue(it.optString("owner"), Owner.Me), it.optLong("at"), it.optString("taskTitle"), it.optBoolean("sample", it.optString("id").startsWith("sample_") || it.optString("message") in listOf("You even got the oat milk I like.", "Pipo's litter box has never smelled so innocent.")), it.optString("picture"),it.optString("replyTo")) } ?: emptyList(),
-                preferences = Preferences(p.optString("myName", "User 1"), p.optString("partnerName", "User 2"), p.optString("code", "K4T9PB"), p.optBoolean("started"), p.optInt("avatar", -1).let { if(root.optInt("version") < 4 && it == 0 && p.optString("myPhoto").isBlank()) -1 else it }, p.optBoolean("quietEnabled", true), p.optInt("quietStart", 1320), p.optInt("quietEnd", 450), p.optString("style", "Soft purr"), p.optBoolean("sound", true), p.optBoolean("haptics", true), p.optString("myPhoto"), p.optString("partnerPhoto"), p.optBoolean("pokeOptIn"), p.optString("themeMode", "System"), p.optString("language", "en"), p.optLong("codeExpiresAt"), p.optLong("togetherSince", java.time.LocalDate.of(2023,2,14).toEpochDay()), p.optInt("defaultReminderTime",750).coerceIn(0,1439), p.optBoolean("keepResetHistory",true), true,p.optString("clockZone"),"",p.optString("partnerClockOverride"),p.optString("listLayout","Wide"))
-            )
+                preferences = Preferences(p.optString("myName", "User 1"), p.optString("partnerName", "User 2"), p.optString("code", "K4T9PB"), p.optBoolean("started"), p.optInt("avatar", -1).let { if(root.optInt("version") < 4 && it == 0 && p.optString("myPhoto").isBlank()) -1 else it }, p.optBoolean("quietEnabled", true), p.optInt("quietStart", 1320), p.optInt("quietEnd", 450), p.optString("style", "Soft purr"), p.optBoolean("sound", true), p.optBoolean("haptics", true), p.optString("myPhoto"), p.optString("partnerPhoto"), p.optBoolean("pokeOptIn", true), p.optString("themeMode", "System"), p.optString("language", "en"), p.optLong("codeExpiresAt"), p.optLong("togetherSince", java.time.LocalDate.of(2023,2,14).toEpochDay()), p.optInt("defaultReminderTime",750).coerceIn(0,1439), p.optBoolean("keepResetHistory",true), true,p.optString("clockZone"),"",p.optString("partnerClockOverride"),p.optString("listLayout","Wide"))
+            ).inTaskZone()
         }.getOrElse { if(AccountScope.current(context)=="local") seedState() else PipoState(preferences=Preferences(myName="Me",partnerName="Partner")) }
     }
     private val remoteMarker=java.io.File(context.noBackupFilesDir,"pipo_partner_session")
@@ -62,6 +68,8 @@ class PipoRepository private constructor(private val context: Context) {
         return try { block(); requireNotNull(staged) } finally { staged = null }
     }
     @Synchronized internal fun activateAccount(uid: String) {
+        val targetScope=if(uid.isBlank()) "local" else AccountScope.key(uid)
+        if(AccountScope.current(context)!=targetScope) TaskAlarmCache.clear(context)
         val changed=synchronized(CareRepository.get(context)) {AccountScope.activate(context,uid)}
         if(changed) {
             remoteMarker.delete(); remote=false
@@ -101,22 +109,24 @@ class PipoRepository private constructor(private val context: Context) {
         tasks.forEach {values.put(it.id,JSONObject().put("enabled",it.reminder).put("offset",it.offset))}
         check(prefs.edit().putString("personal_reminders",values.toString()).commit())
     }
-    internal fun personalReminder(id: String): Pair<Boolean,Int> {
+    internal fun personalReminder(id: String, defaultEnabled: Boolean = true, defaultOffset: Int = 0): Pair<Boolean,Int> {
         val item=runCatching {JSONObject(prefs.getString("personal_reminders","{}") ?: "{}").optJSONObject(id)}.getOrNull()
-        return (item?.optBoolean("enabled") ?: false) to (item?.optInt("offset") ?: 0)
+        return (item?.optBoolean("enabled", defaultEnabled) ?: defaultEnabled) to (item?.optInt("offset") ?: defaultOffset)
     }
-    @Synchronized internal fun importRemote(next: PipoState) { remoteMarker.writeText("active"); remote = true; mutable.value = next; TaskReminders.sync(context,next) }
+    @Synchronized internal fun importRemote(next: PipoState) { remoteMarker.writeText("active"); remote = true; mutable.value = next.inTaskZone(); TaskReminders.sync(context,mutable.value) }
     @Synchronized internal fun restoreLocal() { remoteMarker.delete(); remote=false; mutable.value=load(); TaskReminders.sync(context,mutable.value) }
     @Synchronized internal fun change(transform: (PipoState) -> PipoState) {
         val current = staged ?: mutable.value
-        val next = transform(current)
+        val transformed = transform(current).inTaskZone()
+        val next = if(remote) transformed else transformed.withDailyOccurrences()
         requireOwnPreferencesUpdate(current.preferences, next.preferences)
         if(staged != null) { staged=next; return }
         val p = next.preferences
-        val json = JSONObject().put("version", 4).put("tasks", JSONArray(next.tasks.map { t -> JSONObject()
+        val json = JSONObject().put("version", 4).put("skippedDaily",JSONArray(next.skippedDaily.toList())).put("tasks", JSONArray(next.tasks.map { t -> JSONObject()
             .put("id", t.id).put("title", t.title).put("owner", t.owner.name).put("day", t.day).put("minute", t.minute ?: -1)
             .put("listId", t.listId).put("note", t.note).put("tags", JSONArray(t.tags)).put("repeat", t.repeat.name)
             .put("reminder", t.reminder).put("offset", t.offset).put("status", t.status.name).put("completedAt", t.completedAt).put("parentId", t.parentId)
+            .put("seriesId",t.seriesId).put("scheduledAt",t.scheduledAt).put("scheduleZone",t.scheduleZone)
             .put("events", JSONArray(t.events.map { JSONObject().put("text", it.text).put("at", it.at).put("owner", it.owner.name) })) }))
             .put("lists", JSONArray(next.lists.map { JSONObject().put("id", it.id).put("name", it.name).put("emoji", it.emoji).put("pinned", it.pinned).put("owner", it.owner.name).put("pictures", JSONArray(it.pictures)) }))
             .put("tags", JSONArray(next.tags.map { JSONObject().put("id", it.id).put("name", it.name) }))
@@ -139,11 +149,14 @@ class PipoRepository private constructor(private val context: Context) {
     fun updateOwnPreferences(transform: (Preferences) -> Preferences) = change { current ->
         current.copy(preferences = transform(current.preferences))
     }
+    @Synchronized internal fun refreshDaily() {
+        if(!remote && mutable.value.withDailyOccurrences()!=mutable.value) change {it}
+    }
     fun saveTask(task: Task) = change { s ->
         val old = s.tasks.find { it.id == task.id }
-        val saved = task.copy(title = task.title.trim(), note = task.note.trim(), completedAt = if(task.done) { if(old?.done == true) old.completedAt else System.currentTimeMillis() } else 0L, events = (old?.events ?: emptyList()) + TaskEvent(if(old == null) "Created this task" else "Edited this task"))
+        val saved = task.withSavedSchedule(old, clockZone(s.preferences.clockZone)).copy(title = task.title.trim(), note = task.note.trim(), completedAt = if(task.done) { if(old?.done == true) old.completedAt else System.currentTimeMillis() } else 0L, events = (old?.events ?: emptyList()) + TaskEvent(if(old == null) "Created this task" else "Edited this task"))
         val tasks = if(old == null) s.tasks + saved else s.tasks.map { if(it.id == saved.id) saved else it }
-        val next = if(saved.done && old?.done != true) nextOccurrence(saved) else null
+        val next = if(saved.done && old?.done != true && saved.repeat==Repeat.Weekly) nextOccurrence(saved) else null
         s.copy(tasks = tasks + if(next != null && tasks.none { it.parentId == saved.id }) listOf(next) else emptyList())
     }
     fun setStatus(id: String, status: TaskStatus) = change { s ->
@@ -151,12 +164,12 @@ class PipoRepository private constructor(private val context: Context) {
         if(task.status == status) return@change s
         if(status == TaskStatus.Done) {
             val done = task.copy(status = status, completedAt = System.currentTimeMillis(), events = task.events + TaskEvent("Ticked it off", owner = task.owner))
-            val next = nextOccurrence(task)
+            val next = if(task.repeat==Repeat.Weekly) nextOccurrence(task) else null
             s.copy(tasks = s.tasks.map { if(it.id == id) done else it } + if(next != null && s.tasks.none { it.parentId == id }) listOf(next) else emptyList())
         } else {
             // Undo removes only an untouched next occurrence, never a completed occurrence.
-            val tasks = if(task.done) s.tasks.filterNot { child ->
-                child.parentId == id && child.status == TaskStatus.Todo && child.events.size == 1 &&
+            val tasks = if(task.done && task.repeat==Repeat.Weekly) s.tasks.filterNot { child ->
+                child.seriesId.isBlank() && child.parentId == id && child.status == TaskStatus.Todo && child.events.size == 1 &&
                     child.events.first().text.startsWith("Next ") && s.tasks.none { it.parentId == child.id }
             } else s.tasks
             s.copy(tasks = tasks.map { if(it.id == id) it.copy(status = status, completedAt = 0, events = it.events + TaskEvent(if(task.done) "Reopened this task" else "Started this task")) else it })
@@ -165,7 +178,7 @@ class PipoRepository private constructor(private val context: Context) {
     fun deleteTask(id: String) = change { state ->
         val deleted = state.tasks.find { it.id == id } ?: return@change state
         // Keep future occurrences and their history editable after deleting an ancestor.
-        state.copy(tasks = state.tasks.filterNot { it.id == id }.map {
+        state.copy(skippedDaily=if(deleted.seriesId.isNotBlank()) state.skippedDaily+deleted.id else state.skippedDaily, tasks = state.tasks.filterNot { it.id == id }.map {
             if(it.parentId == id) it.copy(parentId = deleted.parentId) else it
         })
     }
@@ -177,11 +190,64 @@ class PipoRepository private constructor(private val context: Context) {
 
 class PipoViewModel(app: Application) : AndroidViewModel(app) {
     private val repository = PipoRepository.get(app)
-    val state = repository.state
     private val errorState = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = errorState
     private val sync = ai.mwm.client.cloud.PartnerSync(app, repository, viewModelScope)
     val connection = sync.state
+    private val statusOutbox=TaskStatusOutbox(app)
+    private val statusWake=Channel<Unit>(Channel.CONFLATED)
+    private fun statusScope(account: String, c: ai.mwm.client.cloud.PartnerConnection): String = when {
+        c.connected -> "$account:space:${c.spaceId}"
+        repository.isRemote -> ""
+        else -> "$account:local"
+    }
+    private fun currentStatusScope()=statusScope(AccountScope.current(getApplication()),connection.value)
+    val state: StateFlow<PipoState> = combine(repository.state,statusOutbox.updates,connection,AccountScope.changes) {confirmed,pending,c,account ->
+        withPendingTaskStatuses(confirmed,pending,statusScope(account,c))
+    }.stateIn(viewModelScope,SharingStarted.Eagerly,repository.state.value)
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            while(true) {
+                runCatching {repository.refreshDaily()}.onFailure {errorState.value="Daily task dates could not be saved. ${it.message}"}
+                kotlinx.coroutines.delay(60_000)
+            }
+        }
+        viewModelScope.launch {
+            combine(connection,AccountScope.changes) {c,account -> Triple(statusScope(account,c),c.online,c.busy)}.collect { (scope,online,busy) ->
+                try {statusOutbox.activate(scope)} catch(e: Exception) {errorState.value="Pending task updates could not be loaded. ${e.message}"}
+                if(scope.isNotBlank() && !busy && (online || !connection.value.connected)) statusWake.trySend(Unit)
+            }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            for(signal in statusWake) {
+                while(true) {
+                    val scope=currentStatusScope()
+                    val operation=statusOutbox.first(scope) ?: break
+                    val c=connection.value
+                    if(c.busy || (c.connected && !c.online)) break
+                    val account=AccountScope.current(getApplication())
+                    try {
+                        statusOutbox.flush(scope)
+                        sync.mutate(showBusy=false) {
+                            check(account==AccountScope.current(getApplication()) && scope==currentStatusScope()) {"Account or partner changed. Pending task update was not applied."}
+                            check(repository.state.value.tasks.any {it.id==operation.taskId}) {"This task is no longer available."}
+                            repository.setStatus(operation.taskId,operation.status)
+                        }
+                        if(operation.status==TaskStatus.Done) event("task_completed")
+                        statusOutbox.acknowledge(scope,operation.id)
+                    } catch(e: CancellationException) {throw e}
+                    catch(e: Exception) {
+                        // Remove only this failed intent; keep later taps and all other tasks queued.
+                        runCatching {statusOutbox.acknowledge(scope,operation.id)}.onFailure {
+                            if(scope==currentStatusScope()) errorState.value="Could not store the task update result. Reopen the app to retry."
+                        }
+                        if(scope==currentStatusScope()) errorState.value="Task update could not be confirmed. "+ai.mwm.client.cloud.connectionError(e)
+                        if(statusOutbox.first(scope)?.id==operation.id) break
+                    }
+                }
+            }
+        }
+    }
     private fun act(after: () -> Unit = {}, block: () -> Unit) {
         val account=AccountScope.current(getApplication())
         viewModelScope.launch(Dispatchers.IO) { runCatching {
@@ -231,7 +297,18 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
             onResult(failure)
         }
     }
-    fun status(id: String, value: TaskStatus) = act(after={if(value == TaskStatus.Done) event("task_completed")}) { repository.setStatus(id, value) }
+    fun status(id: String, value: TaskStatus) {
+        val task=repository.state.value.tasks.find {it.id==id} ?: return
+        val c=connection.value
+        if(!ai.mwm.client.cloud.canEditTask(task,repository.state.value,c) || currentStatusScope().isBlank()) {
+            errorState.value="This task cannot be changed right now. Check its assignment and connection."
+            return
+        }
+        try {
+            statusOutbox.enqueue(currentStatusScope(),id,value)
+            statusWake.trySend(Unit)
+        } catch(e: Exception) {errorState.value="Could not save the task update. "+(e.message ?: "Please retry.")}
+    }
     fun toggle(task: Task) = status(task.id, if(task.done) TaskStatus.Todo else TaskStatus.Done)
     fun delete(id: String) = act { repository.deleteTask(id) }
     fun preferences(update: (Preferences) -> Preferences) = act { repository.updateOwnPreferences(update) }

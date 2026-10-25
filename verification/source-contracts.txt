@@ -1,0 +1,3 @@
+Layout geometry/style unchanged. Today/Plan only replace the date expression with a midnight ticker.
+TaskEditor differs only in seriesId draft save/restore.
+MemberPermissions.kt byte-identical to v1.3.10.

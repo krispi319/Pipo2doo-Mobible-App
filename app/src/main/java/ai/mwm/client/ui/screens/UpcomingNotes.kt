@@ -28,7 +28,7 @@ import java.time.format.DateTimeFormatter
 @OptIn(ExperimentalLayoutApi::class)
 @Composable internal fun UpcomingNotes(state:PipoState,onOpen:(String)->Unit,onToggle:(Task)->Unit,onEdit:(String)->Unit,onCalendar:()->Unit) {
     ApprovedDesign {
-    val c=AppTheme.colors;val today=LocalDate.now().toEpochDay()
+    val c=AppTheme.colors;val today=currentTaskDay(state.preferences.clockZone)
     var selected by rememberSaveable {mutableStateOf<Long?>(null)}
     val open=state.tasks.filterNot {it.done}.sortedWith(compareBy<Task> {it.day}.thenBy {it.minute ?: 1440}.thenBy {it.id})
     val groups=upcomingSections(open,today)

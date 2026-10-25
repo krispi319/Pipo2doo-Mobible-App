@@ -25,15 +25,22 @@ import androidx.compose.ui.text.style.*
 import androidx.compose.ui.unit.*
 
 @Composable fun PText(text: String, modifier: Modifier = Modifier, style: TextStyle = MaterialTheme.typography.bodyMedium, muted: Boolean = false, align: TextAlign? = null, decoration: TextDecoration? = null, preserveContent: Boolean = false) {
-    Text(if(preserveContent) text else appDisplayText(text), modifier, color = if(muted) AppTheme.colors.textSecondary else AppTheme.colors.textPrimary, style = style, textAlign = align, textDecoration = decoration)
+    val localInk=LocalContentColor.current
+    val scheme=MaterialTheme.colorScheme
+    val fillInk=localInk==scheme.onPrimary || localInk==scheme.onSecondary || localInk==scheme.onTertiary
+    Text(if(preserveContent) text else appDisplayText(text), modifier, color = if(muted) AppTheme.colors.textSecondary else if(fillInk)localInk else AppTheme.colors.textPrimary, style = style, textAlign = align, textDecoration = decoration)
 }
 @Composable fun ownerColor(owner: Owner): Color = when(owner) { Owner.Me -> AppTheme.colors.primary; Owner.You -> AppTheme.colors.accent; Owner.Together -> AppTheme.colors.secondary }
 @Composable fun Pill(label: String, selected: Boolean = false, color: Color = AppTheme.colors.primary, onClick: () -> Unit) {
-    Surface(onClick = onClick, shape = CircleShape, color = if(selected) color else AppTheme.colors.surface,
-        border = if(selected) null else BorderStroke(1.5.dp, AppTheme.colors.separator),
+    val c=AppTheme.colors
+    val fill=if(selected) color.compositeOver(c.surface) else c.surface
+    fun contrast(ink:Color):Float {val a=ink.luminance();val b=fill.luminance();return (maxOf(a,b)+.05f)/(minOf(a,b)+.05f)}
+    val ink=listOf(c.textPrimary,c.onPrimary).maxBy {contrast(it)}
+    Surface(onClick = onClick, shape = CircleShape, color = fill,
+        border = BorderStroke(if(selected) 2.dp else 1.dp, c.separator),
         modifier = Modifier.heightIn(min = 36.dp).semantics { this.selected = selected }) {
         Box(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
-            PText(label, style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium))
+            Text(appDisplayText(label),color=ink, style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium))
         }
     }
 }
@@ -175,7 +182,7 @@ fun ownerName(owner: Owner, p: Preferences): String = when(owner) { Owner.Me -> 
                         Badge(ownerName(task.owner, state.preferences), color)
                         Row(Modifier.padding(horizontal = 6.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             Icon(Icons.Outlined.Schedule, null, Modifier.size(14.dp), tint = colors.textSecondary)
-                            PText(if(task.done && task.completedAt > 0) "Done ${java.time.Instant.ofEpochMilli(task.completedAt).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("h:mm a", java.util.Locale.getDefault()))}" else timeText(task.minute), style = MaterialTheme.typography.bodySmall, muted = true)
+                            PText(if(task.done && task.completedAt > 0) "Done ${java.time.Instant.ofEpochMilli(task.completedAt).atZone(clockZone(state.preferences.clockZone)).format(java.time.format.DateTimeFormatter.ofPattern("h:mm a", java.util.Locale.getDefault()))}" else timeText(task.minute), style = MaterialTheme.typography.bodySmall, muted = true)
                         }
                         Badge(task.repeat.label, colors.secondary)
                         task.tags.mapNotNull { id -> state.tags.find { it.id == id } }.forEach { tag -> Surface(Modifier.padding(end = 5.dp), color = colors.surfaceSunken, shape = CircleShape) { PText(tag.name, Modifier.padding(8.dp, 3.dp), MaterialTheme.typography.bodySmall, true) } }

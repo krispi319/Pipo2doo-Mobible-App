@@ -43,7 +43,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 
-private val DraftSaver = listSaver<Task, Any>(save = { listOf(it.id, it.title, it.owner.name, it.day, it.minute ?: -1, it.listId, it.note, org.json.JSONArray(it.tags).toString(), it.repeat.name, it.reminder, it.offset, it.status.name, it.completedAt, it.parentId, it.assigneeUid) }, restore = { Task(id = it[0] as String, title = it[1] as String, owner = Owner.valueOf(it[2] as String), day = it[3] as Long, minute = (it[4] as Int).takeIf { m -> m >= 0 }, listId = it[5] as String, note = it[6] as String, tags = runCatching { org.json.JSONArray(it[7] as String).let { a -> (0 until a.length()).map { index -> a.getString(index) } } }.getOrElse { _ -> (it[7] as String).split(",").filter(String::isNotEmpty) }, repeat = Repeat.valueOf(it[8] as String), reminder = it[9] as Boolean, offset = it[10] as Int, status = TaskStatus.valueOf(it[11] as String), completedAt = it[12] as Long, parentId = it[13] as String, assigneeUid = it.getOrNull(14) as? String ?: "") })
+private val DraftSaver = listSaver<Task, Any>(save = { listOf(it.id, it.title, it.owner.name, it.day, it.minute ?: -1, it.listId, it.note, org.json.JSONArray(it.tags).toString(), it.repeat.name, it.reminder, it.offset, it.status.name, it.completedAt, it.parentId, it.assigneeUid, it.scheduledAt, it.scheduleZone, it.displayZone, it.seriesId) }, restore = { Task(id = it[0] as String, title = it[1] as String, owner = Owner.valueOf(it[2] as String), day = it[3] as Long, minute = (it[4] as Int).takeIf { m -> m >= 0 }, listId = it[5] as String, note = it[6] as String, tags = runCatching { org.json.JSONArray(it[7] as String).let { a -> (0 until a.length()).map { index -> a.getString(index) } } }.getOrElse { _ -> (it[7] as String).split(",").filter(String::isNotEmpty) }, repeat = Repeat.valueOf(it[8] as String), reminder = it[9] as Boolean, offset = it[10] as Int, status = TaskStatus.valueOf(it[11] as String), completedAt = it[12] as Long, parentId = it[13] as String, assigneeUid = it.getOrNull(14) as? String ?: "", scheduledAt = it.getOrNull(15) as? Long ?: 0L, scheduleZone = it.getOrNull(16) as? String ?: "", displayZone = it.getOrNull(17) as? String ?: "", seriesId = it.getOrNull(18) as? String ?: "") })
 
 fun pickDay(context: android.content.Context, day: Long, onSelect: (Long) -> Unit) {
     val date = LocalDate.ofEpochDay(day)
@@ -58,7 +58,7 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
 @Composable fun TaskEditor(task: Task?, state: PipoState, defaultList: String?, onClose: () -> Unit, onSave: (Task, (String?) -> Unit) -> Unit, onSaveTag: (Tag, (String?) -> Unit) -> Unit, onManageTags: () -> Unit, onNewList: () -> Unit, requestNotifications: () -> Unit, initialStatus: TaskStatus = TaskStatus.Todo) {
     val context = LocalContext.current
     val c = AppTheme.colors
-    val today = LocalDate.now().toEpochDay()
+    val today = LocalDate.now(clockZone(state.preferences.clockZone)).toEpochDay()
     var draft by rememberSaveable(task?.id, stateSaver = DraftSaver) { mutableStateOf(task ?: Task(listId = defaultList ?: state.lists.firstOrNull()?.id ?: "home", status = initialStatus, day = today, minute = null, reminder = true, offset = 0)) }
     var confirmClearNote by rememberSaveable { mutableStateOf(false) }
     var tagPicker by rememberSaveable { mutableStateOf(false) }
@@ -78,7 +78,7 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
         draft = draft.copy(offset = offset.coerceIn(0, 43200))
     }
     fun updateTime(minute: Int?) {
-        draft = draft.copy(minute = minute)
+        draft = draft.copy(minute = minute).withSavedSchedule(null, clockZone(state.preferences.clockZone))
         if(customReminder) updateCustom()
     }
     fun openDueTime() {
@@ -156,7 +156,7 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
                                     PText("On for new tasks · You can turn it off", style = MaterialTheme.typography.bodySmall, muted = true)
                                 }
                                 // CSS-sized switch; Material's default switch is wider and taller.
-                                Box(Modifier.size(50.dp, 30.dp).background(if(draft.reminder) c.secondary else c.surface, CircleShape).semantics { contentDescription = "Gentle reminder" }.toggleable(value = draft.reminder, role = Role.Switch) { enabled -> draft = draft.copy(reminder = enabled); if(enabled) requestNotifications() }.padding(4.dp), contentAlignment = if(draft.reminder) Alignment.CenterEnd else Alignment.CenterStart) {
+                                Box(Modifier.size(50.dp, 30.dp).background(if(draft.reminder) c.secondary else c.surface, CircleShape).border(1.5.dp,c.separator,CircleShape).semantics { contentDescription = "Gentle reminder" }.toggleable(value = draft.reminder, role = Role.Switch) { enabled -> draft = draft.copy(reminder = enabled); if(enabled) requestNotifications() }.padding(4.dp), contentAlignment = if(draft.reminder) Alignment.CenterEnd else Alignment.CenterStart) {
                                     Box(Modifier.size(22.dp).background(c.surfaceElevated, CircleShape))
                                 }
                             }
@@ -199,18 +199,18 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
                                         }
                                     }
                                 }
-                                val fire = java.time.Instant.ofEpochMilli(draft.reminderAt(state.preferences.defaultReminderTime)).atZone(java.time.ZoneId.systemDefault())
+                                val fire = java.time.Instant.ofEpochMilli(draft.withSavedSchedule(task, clockZone(state.preferences.clockZone)).reminderAt(state.preferences.defaultReminderTime, clockZone(state.preferences.clockZone))).atZone(clockZone(state.preferences.clockZone))
                                 Row(Modifier.fillMaxWidth().padding(top = 12.dp).drawBehind { drawLine(c.separator, Offset.Zero, Offset(size.width, 0f), 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx()))) }.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Icon(Icons.Outlined.NotificationsNone, null, Modifier.size(18.dp), tint = c.textPrimary)
-                                    PText("Nudge at ${fire.format(DateTimeFormatter.ofPattern("h:mm a, EEE d MMM", Locale.ENGLISH))} · Quiet hours may delay delivery", style = MaterialTheme.typography.bodyMedium)
+                                    PText("Nudge at ${fire.format(DateTimeFormatter.ofPattern("h:mm a, EEE d MMM", Locale.ENGLISH))} · ${fire.zone.id}", style = MaterialTheme.typography.bodyMedium)
                                 }
                                 val allowed = TaskReminders.allowed(context)
                                 Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Box(Modifier.size(8.dp).background(if(allowed) c.success else c.warning, CircleShape))
-                                    PText(if(allowed) "Android notifications allowed · Partner isn't pinged" else "Android notifications off", style = MaterialTheme.typography.bodySmall, muted = true)
+                                    PText(if(allowed) "Android notifications allowed · Shared task reminders on both phones" else "Android notifications off", style = MaterialTheme.typography.bodySmall, muted = true)
                                 }
                                 if(!allowed) TaskQuietAction("Enable notifications", requestNotifications)
-                                if(draft.owner == Owner.You) PText("Partner tasks do not send a reminder on this phone.", style = MaterialTheme.typography.bodySmall, muted = true)
+                                if(state.preferences.quietEnabled) PText("Task reminders arrive silently during your quiet hours.", style = MaterialTheme.typography.bodySmall, muted = true)
                             }
                         }
                     }
