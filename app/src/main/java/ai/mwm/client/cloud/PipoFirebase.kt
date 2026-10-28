@@ -5,6 +5,8 @@ import android.content.Context
 import org.json.*
 import java.time.OffsetDateTime
 import java.util.UUID
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 /** Firebase is retained ONLY as a disabled FCM transport, never for pairing or shared data. */
 object CloudRelease { const val ENABLED = true }
@@ -50,11 +52,15 @@ class PipoFirebase private constructor(context: Context) {
     }
     suspend fun snapshot(): Map<String,Any?> {
         val uid=client.uid();val sid=space()
-        val members=rows(client.request("/rest/v1/space_members?space_id=eq.$sid&select=user_id,member_role"))
-        val active=rows(client.request("/rest/v1/partner_spaces?id=eq.$sid&closed_at=is.null&select=id"))
+        val snapshot=coroutineScope {
+            val members=async {rows(client.request("/rest/v1/space_members?space_id=eq.$sid&select=user_id,member_role"))}
+            val active=async {rows(client.request("/rest/v1/partner_spaces?id=eq.$sid&closed_at=is.null&select=id"))}
+            val rs=async {records(sid)}
+            val date=async {rows(client.request("/rest/v1/couple_dates?space_id=eq.$sid&select=since_day,version")).singleOrNull()}
+            listOf(members.await(),active.await(),rs.await(),listOfNotNull(date.await()))
+        }
+        val members=snapshot[0];val active=snapshot[1];val rs=snapshot[2];val date=snapshot[3].singleOrNull()
         if(active.isEmpty() || members.none {it.getString("user_id")==uid})throw NoMembership()
-        val rs=records(sid)
-        val date=rows(client.request("/rest/v1/couple_dates?space_id=eq.$sid&select=since_day,version")).singleOrNull()
         fun payload(r: JSONObject): Map<String,Any?> {
             val value=r.getJSONObject("payload")
             val uploadTime=if(r.getString("kind")=="appreciation" && value.optString("kind")=="Locket") mapOf("at" to OffsetDateTime.parse(r.getString("updated_at")).toInstant().toEpochMilli()) else emptyMap()

@@ -19,16 +19,16 @@ import java.util.UUID
 object TaskPushNotifications {
     private const val CHANNEL = "task_assignments"
     private val lock = Any()
-    fun receive(context: Context, event: String?) {
-        if(!CloudRelease.ENABLED || event == null || runCatching {UUID.fromString(event)}.isFailure) return
+    fun receive(context: Context, event: String?):Boolean {
+        if(!CloudRelease.ENABLED || event == null || runCatching {UUID.fromString(event)}.isFailure) return true
         val account = AccountScope.current(context)
         try {
             val data = runBlocking {withTimeout(12_000) {PipoFirebase.get(context).validateTaskNotification(event)}}
-            if(account != AccountScope.current(context) || AccountScope.key(data.getString("uid")) != account) return
+            if(account != AccountScope.current(context) || AccountScope.key(data.getString("uid")) != account) return true
             val repository = PipoRepository.get(context)
             val current = TaskAlarmCache.forAlarm(context, repository.state.value, repository.isRemote)
             val p = current.preferences
-            if(!p.pokeOptIn) return
+            if(!p.pokeOptIn) return true
             val payload = data.getJSONObject("payload")
             val uid = data.getString("uid")
             val assigned = data.optString("assignedTo").takeUnless {it == "null" || it.isBlank()}
@@ -41,25 +41,25 @@ object TaskPushNotifications {
             if(data.getString("kind") == "sync") {
                 val remaining=current.tasks.filterNot {it.id==task.id}
                 if(account == AccountScope.current(context)) TaskReminders.sync(context,current.copy(tasks=remaining+if(data.optBoolean("deleted") || task.done) emptyList() else listOf(task)))
-                return
+                return true
             }
             if(data.getString("kind") != "due" && account == AccountScope.current(context)) {
                 TaskReminders.sync(context,current.copy(tasks=current.tasks.filterNot {it.id==task.id}+if(task.done) emptyList() else listOf(task)))
             }
             if(data.getString("kind") == "due") {
-                if(task.done || !task.reminder) return
+                if(task.done || !task.reminder) return true
                 // Shares TaskReminders' delivery key with the local alarm: one visible reminder, no double sound.
                 if(account == AccountScope.current(context)) TaskReminders.sync(context,current.copy(tasks=current.tasks.filterNot {it.id==task.id}+task))
-                return
+                return true
             }
             NotificationSounds.ensure(context,CHANNEL,"Task assignments",NotificationManager.IMPORTANCE_HIGH,"New and reassigned tasks in your couple workspace")
-            if(!PartnerPokeService.allowed(context,CHANNEL)) return
+            if(!PartnerPokeService.allowed(context,CHANNEL)) return true
             val actor = data.optString("actor").takeUnless {it == "null" || it.isBlank()}
-            val person = if(actor != null && actor != uid) runCatching {runBlocking {withTimeout(5000) {NotificationArtwork.partner(context,actor)}}}.getOrNull() else null
+            val person = if(actor != null && actor != uid) runCatching {runBlocking {withTimeout(5000) {NotificationArtwork.partner(context,actor)}}}.getOrElse {NotificationArtwork.fallbackPartner(context)} else null
             synchronized(lock) {
-                if(account != AccountScope.current(context)) return
+                if(account != AccountScope.current(context)) return true
                 val seen = context.getSharedPreferences("task_events_$account",0)
-                if(seen.contains(event)) return
+                if(seen.contains(event)) return true
                 val intent = Intent(context,MainActivity::class.java).setAction("ai.mwm.client.OPEN_TASK")
                     .setData(Uri.parse("pipo2doo://task/${task.id}")).putExtra("task_id",task.id).putExtra("account_scope",account)
                 val pending = PendingIntent.getActivity(context,event.hashCode(),intent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -75,9 +75,10 @@ object TaskPushNotifications {
                 builder.setSilent(quiet)
                 val edit=seen.edit();val cutoff=System.currentTimeMillis()-86_400_000L
                 seen.all.forEach {(key,value)->if(value is Long && value<cutoff) edit.remove(key)}
-                if(!edit.putLong(event,System.currentTimeMillis()).commit()) return
+                if(!edit.putLong(event,System.currentTimeMillis()).commit()) return true
                 context.getSystemService(NotificationManager::class.java).notify("task_event",event.hashCode(),builder.build())
             }
-        } catch(_: Exception) { /* No fresh membership confirmation: no private notification. */ }
+        } catch(e: Exception) {return !transientPushFailure(e)}
+        return true
     }
 }

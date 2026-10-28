@@ -115,6 +115,16 @@ class PipoRepository private constructor(private val context: Context) {
     }
     @Synchronized internal fun importRemote(next: PipoState) { remoteMarker.writeText("active"); remote = true; mutable.value = next.inTaskZone(); TaskReminders.sync(context,mutable.value) }
     @Synchronized internal fun restoreLocal() { remoteMarker.delete(); remote=false; mutable.value=load(); TaskReminders.sync(context,mutable.value) }
+    /** Backup restores account settings, never local task rows over a live shared snapshot. */
+    @Synchronized internal fun restoreAccountSettings() {
+        if(!remote){restoreLocal();return}
+        val saved=load().preferences
+        val current=mutable.value.preferences
+        change {it.copy(preferences=saved.copy(started=current.started,myName=current.myName,myPhoto=current.myPhoto,
+            avatar=current.avatar,partnerName=current.partnerName,partnerPhoto=current.partnerPhoto,
+            clockZone=current.clockZone,partnerClockZone=current.partnerClockZone,code=current.code,
+            codeExpiresAt=current.codeExpiresAt,togetherSince=current.togetherSince))}
+    }
     @Synchronized internal fun change(transform: (PipoState) -> PipoState) {
         val current = staged ?: mutable.value
         val transformed = transform(current).inTaskZone()
@@ -260,6 +270,7 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
     fun chooseRole(role: String) = sync.chooseRole(role)
     fun connect(action: String, code: String = "") = sync.connect(action,code)
     fun checkConnection() = sync.check()
+    fun backupNow() = sync.backupNow()
     fun resumeConnection() = sync.resume()
     fun pauseConnection() = sync.pause()
     fun leaveConnection() = sync.leave()

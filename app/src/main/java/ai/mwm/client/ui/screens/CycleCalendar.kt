@@ -17,14 +17,15 @@ import java.time.*
 import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalLayoutApi::class)
-@Composable internal fun CycleCalendar(state:CareState,month:YearMonth,selected:Long,onMonth:(YearMonth)->Unit,onSelect:(Long)->Unit) {
-    val c=AppTheme.colors;val today=LocalDate.now()
+@Composable internal fun CycleCalendar(state:CareState,month:YearMonth,selected:Long,onMonth:(YearMonth)->Unit,onSelect:(Long)->Unit,todayDay:Long=LocalDate.now().toEpochDay(),tools:@Composable ()->Unit={}) {
+    val c=AppTheme.colors;val today=LocalDate.ofEpochDay(todayDay)
     Paper(color=c.primary.copy(alpha=.08f).compositeOver(c.surface)) {
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
             OutlinedIconButton({onMonth(month.minusMonths(1))}) {Icon(Icons.Outlined.ChevronLeft,"Previous month")}
             PText(month.format(DateTimeFormatter.ofPattern("MMMM yyyy")),Modifier.weight(1f).padding(horizontal=6.dp),MaterialTheme.typography.titleMedium)
             OutlinedIconButton({onMonth(month.plusMonths(1))}) {Icon(Icons.Outlined.ChevronRight,"Next month")}
         }
+        tools()
         Row(Modifier.fillMaxWidth()) {listOf("M","T","W","T","F","S","S").forEach {Box(Modifier.weight(1f),contentAlignment=Alignment.Center) {PText(it,style=MaterialTheme.typography.labelSmall,muted=true)}}}
         val first=month.atDay(1).dayOfWeek.value-1;val cells=((first+month.lengthOfMonth()+6)/7)*7
         (0 until cells step 7).forEach {week->Row(Modifier.fillMaxWidth()) {(week until week+7).forEach {cell->

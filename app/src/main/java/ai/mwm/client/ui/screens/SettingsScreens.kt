@@ -283,17 +283,27 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
         item {Surface(shape=RoundedCornerShape(20.dp),color=c.surface,border=BorderStroke(1.dp,c.error.copy(alpha=.3f))) {
             Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {Duo(22.dp);Column(Modifier.weight(1f)) {PText("Leave shared space",style=MaterialTheme.typography.titleMedium);PText(if(connection.connected) "Leave your connected space. Future partner access ends." else "Exit local mode. Your tasks stay; reminders pause.",style=MaterialTheme.typography.bodySmall,muted=true)};OutlinedButton({confirmLeave=true},shape=CircleShape,border=BorderStroke(1.5.dp,c.error),colors=ButtonDefaults.outlinedButtonColors(contentColor=c.error)) {Text("Leave…")}}
         }}
-        item {SettingsGroup("Account backup") {
-            SettingsStack {
-                val backup by ai.mwm.client.cloud.AccountBackup.status.collectAsState()
-                val owner=AccountScope.current(context)
-                val main=backup["$owner:main"].orEmpty();val care=backup["$owner:care"].orEmpty()
-                val ready=main.startsWith("Saved to") && care.startsWith("Saved to")
-                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {Icon(if(ready) Icons.Outlined.CloudDone else Icons.Outlined.CloudUpload,null,Modifier.size(24.dp),tint=if(ready)c.success else c.textSecondary);PText(if(ready) "Backed up" else if(!connection.authenticated) "Sign in to back up" else "Backup needs attention",Modifier.weight(1f).padding(horizontal=10.dp),MaterialTheme.typography.bodyMedium);TextButton(onBackup,enabled=connection.authenticated && !connection.busy) {PText("Back up")}}
-                PText("Use the same account after reinstalling. Back up before deleting the app.",style=MaterialTheme.typography.labelSmall,muted=true)
-                if(!ready && connection.authenticated) TextButton({backupDetails=true}) {PText("View status",style=MaterialTheme.typography.labelSmall)}
+        item {
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                Surface(Modifier.weight(.64f),shape=RoundedCornerShape(20.dp),color=c.surface,border=BorderStroke(1.dp,c.separator),shadowElevation=1.dp) {
+                    Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                        PText("Account backup",style=MaterialTheme.typography.titleSmall)
+                        val backup by ai.mwm.client.cloud.AccountBackup.status.collectAsState()
+                        val owner=AccountScope.current(context)
+                        val main=backup["$owner:main"].orEmpty();val care=backup["$owner:care"].orEmpty()
+                        val ready=main.startsWith("Saved to") && care.startsWith("Saved to")
+                        val backing=main.startsWith("Checking account") || care.startsWith("Checking account")
+                        Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            Icon(if(ready)Icons.Outlined.CloudDone else Icons.Outlined.CloudUpload,null,Modifier.size(24.dp),tint=if(ready)c.success else c.textSecondary)
+                            PText(if(ready)"Backed up" else if(backing)"Backing up…" else if(!connection.authenticated)"Sign in to back up" else "Needs attention",style=MaterialTheme.typography.bodySmall)
+                        }
+                        Button(onBackup,Modifier.fillMaxWidth(),enabled=connection.authenticated && !connection.busy && !backing){PText("Back up")}
+                        if(!ready && connection.authenticated)TextButton({backupDetails=true}){PText("View status",style=MaterialTheme.typography.labelSmall)}
+                    }
+                }
+                AppUpdateCard(Modifier.weight(.36f).fillMaxHeight())
             }
-        }}
+        }
 
     }
     if(backupDetails) {

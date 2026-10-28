@@ -124,6 +124,7 @@ object AccountBackup {
             if(owner in listOf("local","locked")) return@withLock false
             fun same()=AccountScope.current(c)==owner
             try {
+                label(owner,section,"Checking account backup…")
                 val client=SupabaseClient(c)
                 val uid=client.uid()
                 check(AccountScope.key(uid)==owner && same()) {"Account changed. Backup paused."}

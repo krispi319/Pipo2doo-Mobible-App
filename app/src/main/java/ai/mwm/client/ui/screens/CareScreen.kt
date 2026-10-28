@@ -27,13 +27,19 @@ private val moods=listOf("Very low","Low","Okay","Good","Great")
 
 @OptIn(ExperimentalMaterial3Api::class,ExperimentalLayoutApi::class)
 @Composable fun CareScreen(state: CareState?, name: String,partner: String,error: String?,allowed: Boolean,onBack: ()->Unit,onSave: (DayLog)->Unit,onDelete: (Long)->Unit,onUpdate: ((CareState)->CareState)->Unit,onClear: ()->Unit,onEnable: ()->Unit,
-    shared: CareConnection=CareConnection(),onSharing: (Boolean)->Unit={},onRefresh: ()->Unit={},support: List<Appreciation> = emptyList(),onSupport: (String,(String?)->Unit)->Unit={_,done->done("Connect your partner to send a note.")}) {
+    shared: CareConnection=CareConnection(),onSharing: (Boolean)->Unit={},onRefresh: ()->Unit={},support: List<Appreciation> = emptyList(),onSupport: (String,(String?)->Unit)->Unit={_,done->done("Connect your partner to send a note.")},clockSelection:String="") {
     ApprovedDesign {
     val context=LocalContext.current
     val c=AppTheme.colors
     var partnerView by remember {mutableStateOf(false)}
-    var month by remember {mutableStateOf(YearMonth.now())}
-    var selected by remember {mutableStateOf(LocalDate.now().toEpochDay())}
+    val today=currentTaskDay(clockSelection)
+    val zone=clockZone(clockSelection)
+    var month by remember {mutableStateOf(YearMonth.from(LocalDate.ofEpochDay(today)))}
+    var selected by rememberSaveable {mutableLongStateOf(today)}
+    var followedDay by remember {mutableLongStateOf(today)}
+    var historyOpen by remember {mutableStateOf(false)}
+    var dateOpen by remember {mutableStateOf(false)}
+    LaunchedEffect(today) {if(selected==followedDay){selected=today;month=YearMonth.from(LocalDate.ofEpochDay(today))};followedDay=today}
     var cycleSheet by remember {mutableStateOf(false)}
     var clear by remember {mutableStateOf(false)}
     var delete by remember {mutableStateOf(false)}
@@ -74,9 +80,14 @@ private val moods=listOf("Very low","Low","Okay","Good","Great")
                 }
             }}
             item {Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                CycleCalendar(visible,month,selected,{month=it},{selected=it})
+                CycleCalendar(visible,month,selected,{month=it},{selected=it},today) {
+                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp,Alignment.End)) {
+                        CareTool(Icons.Outlined.WbSunny,"Today") {selected=today;month=YearMonth.from(LocalDate.ofEpochDay(today))}
+                        CareTool(Icons.Outlined.CalendarMonth,"Date") {dateOpen=true}
+                        CareTool(Icons.Outlined.History,"History") {historyOpen=true}
+                    }
+                }
                 if(!partnerView) {
-                    val today=LocalDate.now().toEpochDay()
                     val current=state?.logs?.find {it.day==today} ?: DayLog(today)
                     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                         OutlinedButton({onSave(current.copy(start=true,end=false))},Modifier.weight(1f).heightIn(min=48.dp),enabled=active==null,contentPadding=PaddingValues(12.dp,10.dp)) {Icon(Icons.Outlined.WaterDrop,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp));PText("Start today")}
@@ -102,9 +113,12 @@ private val moods=listOf("Very low","Low","Okay","Good","Great")
             Row(verticalAlignment=Alignment.CenterVertically) {ApprovedCat(Modifier.size(60.dp,48.dp),"care");Spacer(Modifier.width(10.dp));PText("A little support",style=MaterialTheme.typography.titleMedium)}
             PText("Here for each other",style=MaterialTheme.typography.labelSmall,muted=true)
             PText("Notes you send each other, separate from day logs.",style=MaterialTheme.typography.bodySmall,muted=true)
-            support.filter {it.kind=="CareSupport"}.sortedByDescending {it.at}.take(10).reversed().forEach {entry->
-                Surface(color=if(entry.owner==Owner.Me) c.secondary.copy(alpha=.18f) else c.accent.copy(alpha=.12f),shape=RoundedCornerShape(14.dp)) {Column(Modifier.fillMaxWidth().padding(10.dp)) {PText(if(entry.owner==Owner.Me) name else partner,style=MaterialTheme.typography.labelSmall,muted=true,preserveContent=true);PText(entry.message,preserveContent=true)}}
-            }
+            val daily=supportForDay(support,selected,zone)
+            PText(if(selected==today)"Today · "+dayText(selected) else dayText(selected),style=MaterialTheme.typography.labelSmall,muted=true)
+            if(daily.isEmpty())PText("No support notes for this day yet ♡",style=MaterialTheme.typography.bodySmall,muted=true)
+            daily.takeLast(4).forEach {entry->SupportBubble(entry,name,partner,zone)}
+            TextButton({historyOpen=true}) {Icon(Icons.Outlined.History,null,Modifier.size(18.dp));Spacer(Modifier.width(8.dp));PText(if(daily.size>4)"View all ${daily.size} notes" else "View support history")}
+            if(selected!=today)PText("New notes are sent for today.",style=MaterialTheme.typography.labelSmall,muted=true)
             OutlinedTextField(note,{note=it.take(500)},Modifier.fillMaxWidth(),label={PText("A note for $partner")},placeholder={PText("I'm here for you ♡")},maxLines=4)
             supportError?.let {PText(it,style=MaterialTheme.typography.bodySmall)}
             Button({supportSending=true;supportError=null;onSupport(note.trim()) {failure->supportSending=false;if(failure==null) note="" else supportError=failure}},enabled=note.isNotBlank() && connection.paired && connection.online && !connection.busy && !supportSending,modifier=Modifier.fillMaxWidth()) {PText(if(supportSending) "Sending…" else "Send support")}
@@ -120,6 +134,11 @@ private val moods=listOf("Very low","Low","Okay","Good","Great")
                 if(shared.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             }
         }
+    }
+    if(historyOpen)SupportHistorySheet(support,name,partner,clockSelection){historyOpen=false}
+    if(dateOpen) {
+        val picker=rememberDatePickerState(initialSelectedDateMillis=selected*86_400_000,yearRange=1900..2100)
+        DatePickerDialog(onDismissRequest={dateOpen=false},confirmButton={TextButton({picker.selectedDateMillis?.let {selected=Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toEpochDay();month=YearMonth.from(LocalDate.ofEpochDay(selected))};dateOpen=false}) {PText("Choose date")}},dismissButton={TextButton({dateOpen=false}) {PText("Cancel")}}) {DatePicker(picker)}
     }
     if(delete) AlertDialog(onDismissRequest={delete=false},title={PText("Delete my day log?")},text={PText("This also removes it from your shared calendar when sharing is on.")},confirmButton={TextButton({onDelete(selected);delete=false}) {PText("Delete")}},dismissButton={TextButton({delete=false}) {PText("Cancel")}})
     if(clear) AlertDialog(onDismissRequest={clear=false},title={PText("Clear my day logs?")},text={PText("Your partner's records and support notes stay. If sharing is on, your shared copy will be cleared too.")},confirmButton={TextButton({onClear();clear=false}) {PText("Clear my logs")}},dismissButton={TextButton({clear=false}) {PText("Cancel")}})

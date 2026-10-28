@@ -25,10 +25,14 @@ class SignInRequired: Exception("Sign in to Supabase before creating or joining 
 class SupabaseClient(private val context: Context) {
     private val config by lazy { JSONObject(context.assets.open("supabase-client-config.json").bufferedReader().use { it.readText() }) }
     private val file = AtomicFile(File(context.noBackupFilesDir, "supabase_session.bin"))
-    private val authLock = Mutex()
-    @Volatile private var session: JSONObject? = null
-    @Volatile private var epoch = 0L
-    @Volatile private var loaded = false
+    // Backup, shared sync and push delivery share one refresh lock and session epoch.
+    // Separate cached refresh tokens could otherwise invalidate each other's login.
+    companion object {
+        private val authLock = Mutex()
+        @Volatile private var session: JSONObject? = null
+        @Volatile private var epoch = 0L
+        @Volatile private var loaded = false
+    }
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (store.getKey("pipo_supabase_session", null) as? SecretKey)?.let { return it }
@@ -79,7 +83,16 @@ class SupabaseClient(private val context: Context) {
             check(generation==epoch) {"Account changed. A stale response was ignored."}
             result
         } catch(e: SupabaseFailure) {
-            if(e.status==401 && generation==epoch) {signOut();throw SignInRequired()};throw e
+            if(e.status==401 && generation==epoch && !path.startsWith("/functions/")) {
+                // Refresh once. Only a rejected refresh grant clears the encrypted session.
+                authLock.withLock {session?.put("expires_at",0)}
+                val refreshed=token()
+                check(generation==epoch) {"Account changed. Retry from your current account."}
+                val result=raw(path,method,body,refreshed)
+                check(generation==epoch) {"Account changed. A stale response was ignored."}
+                return result
+            }
+            throw e
         }
     }
     suspend fun rpc(name: String, body: JSONObject=JSONObject()): Any? = request("/rest/v1/rpc/$name","POST",body)

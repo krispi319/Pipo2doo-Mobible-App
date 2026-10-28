@@ -37,6 +37,10 @@ object NotificationArtwork {
         }.getOrNull() ?: initial(identity.first)
         return Person.Builder().setKey(sender).setName(identity.first).setIcon(IconCompat.createWithBitmap(bitmap)).build()
     }
+    fun fallbackPartner(context:Context):Person {
+        val name=ai.mwm.client.data.PipoRepository.get(context).state.value.preferences.partnerName.ifBlank {"Partner"}
+        return Person.Builder().setName(name).setIcon(IconCompat.createWithBitmap(initial(name))).build()
+    }
     fun decorate(builder: NotificationCompat.Builder,person: Person,context: Context): NotificationCompat.Builder {
         person.icon?.loadDrawable(context)?.let {drawable->
             val bitmap=Bitmap.createBitmap(144,144,Bitmap.Config.ARGB_8888)

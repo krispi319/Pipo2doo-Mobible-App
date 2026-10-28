@@ -7,20 +7,25 @@ async function accessToken(sa:{client_email:string;private_key:string}){const no
 // Cron-only worker. Deploy with Verify JWT OFF; this endpoint checks its own secret.
 Deno.serve(async req => {
  if(req.method !== 'POST') return json({status:'method_not_allowed'},405);
- const secret = Deno.env.get('TASK_NOTIFICATION_SECRET');
- if(!secret || secret.length < 32 || req.headers.get('X-Task-Secret') !== secret) return json({status:'unauthorized'},401);
+ const supplied=req.headers.get('X-Task-Secret') || '';
+ if(supplied.length<32 || supplied.length>256) return json({status:'unauthorized'},401);
  const url = Deno.env.get('SUPABASE_URL');
  const admin = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
  const raw = Deno.env.get('FCM_SERVICE_ACCOUNT_JSON');
- if(!url || !admin || !raw) return json({status:'sender_not_configured'},503);
- let sa: {project_id:string;client_email:string;private_key:string;type:string};
- try {sa=JSON.parse(raw);if(sa.type !== 'service_account' || !/^[a-z0-9-]+$/.test(sa.project_id) || !sa.client_email || !sa.private_key) throw new Error();}
- catch {return json({status:'sender_not_configured'},503);}
+ if(!url || !admin) return json({status:'sender_not_configured'},503);
  const rpc = async(name:string, payload:unknown) => {
   const r=await fetch(url+'/rest/v1/rpc/'+name,{method:'POST',headers:{apikey:admin,Authorization:'Bearer '+admin,'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(10000)});
   if(!r.ok) throw new Error('database_unavailable');return r.json();
  };
  try {
+  const secret=Deno.env.get('TASK_NOTIFICATION_SECRET');
+  const authorized=secret && secret.length>=32 ? supplied===secret : await rpc('task_worker_authorized',{p_secret:supplied})===true;
+  if(!authorized)return json({status:'unauthorized'},401);
+ let sa: {project_id:string;client_email:string;private_key:string;type:string};
+ try {sa=JSON.parse(raw || '');if(sa.type !== 'service_account' || !/^[a-z0-9-]+$/.test(sa.project_id) || !sa.client_email || !sa.private_key) throw new Error();}
+ catch {return json({status:'sender_not_configured'},503);}
+  // Health checks authenticate and validate configuration, but never claim/send events.
+  if(req.headers.get('X-Pipo-Health')==='1')return json({status:'ready',sender_configured:true,delivery_verified:false});
   const google=await accessToken(sa);
   type Job={event_id:string;recipient_id:string;kind:string;tokens:string[]};
   const jobs:Job[]=await rpc('claim_task_push_batch',{});

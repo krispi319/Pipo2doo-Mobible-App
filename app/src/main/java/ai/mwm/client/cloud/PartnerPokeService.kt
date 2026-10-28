@@ -29,9 +29,23 @@ class PartnerPokeService: FirebaseMessagingService() {
             runCatching { PipoFirebase.get(this@PartnerPokeService).updateDevice(PipoRepository.get(this@PartnerPokeService).state.value.preferences,force=true) }
         }
     }
-    override fun onMessageReceived(message: RemoteMessage) {
+    override fun onMessageReceived(message:RemoteMessage){PushJobService.enqueue(this,message.data)}
+    companion object {
+        const val MESSAGE_CHANNEL="partner_messages"
+        const val CHANNEL="partner_pokes"
+        const val LOCKET_CHANNEL="partner_locket_photos"
+        fun channel(context:Context)=AuthorizedPushDelivery.channel(context)
+        fun allowed(context:Context,channelId:String=CHANNEL)=AuthorizedPushDelivery.allowed(context,channelId)
+        fun clear(context:Context)=AuthorizedPushDelivery.clear(context)
+    }
+}
+
+internal class AuthorizedPushDelivery(context:Context):android.content.ContextWrapper(context) {
+    var retryNeeded=false
+        private set
+    fun receive(message: RemoteMessage) {
         channel(this)
-        if(message.data["type"]=="task_event") {TaskPushNotifications.receive(this,message.data["event_id"]);return}
+        if(message.data["type"]=="task_event") {retryNeeded=!TaskPushNotifications.receive(this,message.data["event_id"]);return}
         if(message.data["type"]=="partner_note") {receiveNote(message);return}
         if(message.data["type"]=="partner_locket") {receiveLocket(message);return}
         if(!CloudRelease.ENABLED || message.data["type"]!="partner_poke" || !allowed(this)) return
@@ -40,12 +54,12 @@ class PartnerPokeService: FirebaseMessagingService() {
         val account=ai.mwm.client.data.AccountScope.current(this)
         val event=message.data["event_id"]?.takeIf { it.matches(Regex("[a-zA-Z0-9_-]{1,100}")) } ?: return
         try {
-            val data=runBlocking {withTimeout(15_000) { PipoFirebase.get(this@PartnerPokeService).validatePoke(event) }}
+            val data=runBlocking {withTimeout(15_000) { PipoFirebase.get(this@AuthorizedPushDelivery).validatePoke(event) }}
             if(account!=ai.mwm.client.data.AccountScope.current(this) || ai.mwm.client.data.AccountScope.key(data["recipientUid"] as? String ?: "")!=account) return
             val task=data["taskId"] as? String ?: return
             val expires=(data["expiresAt"] as? Number)?.toLong() ?: return
             if(expires<=System.currentTimeMillis() || !allowed(this) || !PipoRepository.get(this).state.value.preferences.pokeOptIn) return
-            val person=runBlocking {withTimeout(7000) {NotificationArtwork.partner(this@PartnerPokeService,data["senderUid"] as? String ?: error("Missing sender"))}}
+            val person=runCatching {runBlocking {withTimeout(7000) {NotificationArtwork.partner(this@AuthorizedPushDelivery,data["senderUid"] as? String ?: error("Missing sender"))}}}.getOrElse {NotificationArtwork.fallbackPartner(this)}
             synchronized(lock) {
                 val cache=File(noBackupFilesDir,"poke_seen_$account.json")
                 val seen=runCatching {JSONObject(cache.readText())}.getOrDefault(JSONObject())
@@ -61,7 +75,7 @@ class PartnerPokeService: FirebaseMessagingService() {
                 if(account!=ai.mwm.client.data.AccountScope.current(this) || !PipoRepository.get(this).state.value.preferences.pokeOptIn) return
                 getSystemService(NotificationManager::class.java).notify("partner_poke",task.hashCode(),notification)
             }
-        } catch(_: Exception) { /* Fail closed; no fresh authorization means no notification. */ }
+        } catch(e: Exception) {retryNeeded=transientPushFailure(e)}
     }
     private fun receiveLocket(message: RemoteMessage) {
         channel(this)
@@ -71,9 +85,9 @@ class PartnerPokeService: FirebaseMessagingService() {
         val record=message.data["record_id"]?.takeIf {runCatching {java.util.UUID.fromString(it)}.isSuccess} ?: return
         try {
             // Fetch metadata only; never download picture bytes in the FCM callback.
-            val uid=runBlocking {withTimeout(5_000) {PipoFirebase.get(this@PartnerPokeService).validateLocket(record)}}
+            val uid=runBlocking {withTimeout(5_000) {PipoFirebase.get(this@AuthorizedPushDelivery).validateLocket(record)}}
             if(ai.mwm.client.data.AccountScope.key(uid)!=account || account!=ai.mwm.client.data.AccountScope.current(this)) return
-            val person=runBlocking {withTimeout(7000) {val sender=PipoFirebase.get(this@PartnerPokeService).locketSender(record);NotificationArtwork.partner(this@PartnerPokeService,sender)}}
+            val person=runCatching {runBlocking {withTimeout(7000) {val sender=PipoFirebase.get(this@AuthorizedPushDelivery).locketSender(record);NotificationArtwork.partner(this@AuthorizedPushDelivery,sender)}}}.getOrElse {NotificationArtwork.fallbackPartner(this)}
             synchronized(lock) {
                 val current=PipoRepository.get(this).state.value.preferences
                 if(!current.pokeOptIn || quiet(current) || !allowed(this,LOCKET_CHANNEL)) return
@@ -93,7 +107,7 @@ class PartnerPokeService: FirebaseMessagingService() {
                     .setTimeoutAfter(86_400_000L).setContentIntent(pending).build()
                 if(account==ai.mwm.client.data.AccountScope.current(this)) getSystemService(NotificationManager::class.java).notify("partner_locket",record.hashCode(),notification)
             }
-        } catch(_: Exception) { /* Suppress notifications when current membership cannot be verified. */ }
+        } catch(e:Exception){retryNeeded=transientPushFailure(e)}
     }
     private fun receiveNote(message: RemoteMessage) {
         val account=ai.mwm.client.data.AccountScope.current(this)
@@ -101,11 +115,11 @@ class PartnerPokeService: FirebaseMessagingService() {
         if(!CloudRelease.ENABLED || !allowed(this,MESSAGE_CHANNEL) || !p.pokeOptIn || quiet(p)) return
         val record=message.data["record_id"]?.takeIf {runCatching {java.util.UUID.fromString(it)}.isSuccess} ?: return
         try {
-            val data=runBlocking {withTimeout(7000) {PipoFirebase.get(this@PartnerPokeService).validatePartnerNote(record)}}
+            val data=runBlocking {withTimeout(7000) {PipoFirebase.get(this@AuthorizedPushDelivery).validatePartnerNote(record)}}
             if(ai.mwm.client.data.AccountScope.key(data.getString("uid"))!=account || account!=ai.mwm.client.data.AccountScope.current(this)) return
             val space=data.getString("space")
             if(record in ai.mwm.client.data.ChatReadState.read(this,space,account)) return
-            val person=runBlocking {withTimeout(7000) {NotificationArtwork.partner(this@PartnerPokeService,data.getString("sender"))}}
+            val person=runCatching {runBlocking {withTimeout(7000) {NotificationArtwork.partner(this@AuthorizedPushDelivery,data.getString("sender"))}}}.getOrElse {NotificationArtwork.fallbackPartner(this)}
             synchronized(lock) {
                 val current=PipoRepository.get(this).state.value.preferences
                 if(account!=ai.mwm.client.data.AccountScope.current(this) || !current.pokeOptIn || quiet(current) || !allowed(this,MESSAGE_CHANNEL)) return
@@ -139,12 +153,12 @@ class PartnerPokeService: FirebaseMessagingService() {
                 if(!edit.putLong(record,now).commit()) return
                 if(account==ai.mwm.client.data.AccountScope.current(this)) getSystemService(NotificationManager::class.java).notify("partner_note",record.hashCode(),notification)
             }
-        } catch(_: Exception) { /* A private notification requires a fresh authorized record. */ }
+        } catch(e: Exception) {retryNeeded=transientPushFailure(e)}
     }
     companion object {
         private fun quiet(p: ai.mwm.client.data.Preferences): Boolean {
             if(!p.quietEnabled || p.quietStart==p.quietEnd) return false
-            val t=java.time.LocalTime.now();val m=t.hour*60+t.minute
+            val t=java.time.LocalTime.now(ai.mwm.client.data.clockZone(p.clockZone));val m=t.hour*60+t.minute
             return if(p.quietStart<p.quietEnd) m in p.quietStart until p.quietEnd else m>=p.quietStart || m<p.quietEnd
         }
         const val MESSAGE_CHANNEL="partner_messages"

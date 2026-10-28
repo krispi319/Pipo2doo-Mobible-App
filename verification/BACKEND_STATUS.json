@@ -1,0 +1,23 @@
+{
+  "checked_utc": "2026-10-28",
+  "project": "Pipo2doo",
+  "task_worker": {
+    "status": "ACTIVE",
+    "version": 1,
+    "jwt_verification": false,
+    "authentication": "random Vault secret checked by service-role-only RPC",
+    "health_http": 200,
+    "health_status": "ready",
+    "sender_configured": true,
+    "delivery_verified": false,
+    "invalid_secret_health_http": 401
+  },
+  "scheduler_active": true,
+  "daily_generator_active": true,
+  "backup_and_care_tables_and_write_rpcs_present": true,
+  "worker_auth_rpc_grants": {
+    "anon": false,
+    "authenticated": false,
+    "service_role": true
+  }
+}
