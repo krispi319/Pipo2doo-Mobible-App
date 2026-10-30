@@ -1,6 +1,8 @@
 name: Build APK
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       release_tag:
@@ -15,6 +17,53 @@ permissions:
   contents: read
 
 jobs:
+
+  prepare:
+    name: Read release request
+    runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.request.outputs.mode }}
+      tag: ${{ steps.request.outputs.tag }}
+      ref: ${{ steps.request.outputs.ref }}
+    steps:
+      - name: Read commit summary or selected release
+        id: request
+        shell: bash
+        run: |
+          python3 - <<'PY_REQUEST'
+          import json, os, re
+          from pathlib import Path
+          event=json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
+          kind=os.environ['GITHUB_EVENT_NAME']
+          mode,tag,ref='skip','',''
+          if kind=='push':
+              branch=event.get('repository',{}).get('default_branch','main')
+              if event.get('ref')=='refs/heads/'+branch and not event.get('deleted',False):
+                  first=event.get('head_commit',{}).get('message','').splitlines()
+                  summary=first[0].strip() if first else ''
+                  match=re.fullmatch(r'release:\s*(v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))',summary)
+                  if match:
+                      mode,tag,ref='create',match.group(1),event['after']
+                      if not re.fullmatch(r'[0-9a-f]{40}',ref):
+                          raise SystemExit('Invalid release commit SHA.')
+                  elif summary.startswith('release:'):
+                      raise SystemExit('Use the exact commit summary: release: v1.4.2')
+          elif kind=='release':
+              release=event['release']
+              if not release.get('draft') and not release.get('prerelease'):
+                  mode,tag='upload',release['tag_name']
+          elif kind=='workflow_dispatch':
+              tag=event.get('inputs',{}).get('release_tag','').strip()
+              if tag:mode='upload'
+          if mode!='skip':
+              if not re.fullmatch(r'v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)',tag):
+                  raise SystemExit('Use a stable version tag such as v1.4.2.')
+              if mode=='upload':ref='refs/tags/'+tag
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+              out.write(f'mode={mode}\ntag={tag}\nref={ref}\n')
+          print('Release request:',mode,tag or '(ordinary commit/manual test)')
+          PY_REQUEST
+
   test:
     name: Build test APK (manual)
     if: github.event_name == 'workflow_dispatch' && inputs.release_tag == ''
@@ -85,16 +134,18 @@ jobs:
 
   release:
     name: Build signed release APK
-    if: github.event_name == 'release' || inputs.release_tag != ''
+    needs: prepare
+    if: needs.prepare.outputs.mode != 'skip'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
       contents: write
     concurrency:
-      group: release-apk-${{ github.event.release.tag_name || inputs.release_tag }}
+      group: release-apk-${{ needs.prepare.outputs.tag }}
       cancel-in-progress: false
     env:
-      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      RELEASE_MODE: ${{ needs.prepare.outputs.mode }}
 
     steps:
       - name: Validate release tag
@@ -109,8 +160,33 @@ jobs:
       - name: Download the tagged project
         uses: actions/checkout@v7
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.prepare.outputs.ref }}
           persist-credentials: false
+
+      - name: Check destination release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'PY_DEST'
+          import json, os, urllib.request, urllib.error
+          repo=os.environ['GH_REPO'];tag=os.environ['RELEASE_TAG']
+          def get(path):
+              request=urllib.request.Request('https://api.github.com/repos/'+repo+'/'+path,
+                  headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
+              try:
+                  with urllib.request.urlopen(request,timeout=30) as response:return json.load(response)
+              except urllib.error.HTTPError as e:
+                  if e.code==404:return None
+                  raise
+          release=get('releases/tags/'+tag)
+          if os.environ['RELEASE_MODE']=='create':
+              if release is not None or get('git/ref/tags/'+tag) is not None:
+                  raise SystemExit('This version/tag already exists. Use a NEW version in the release commit. For an existing release without an APK use the manual release_tag input.')
+          elif release is None:
+              raise SystemExit('The selected release does not exist. Create it first, or push a release commit for a new version.')
+          PY_DEST
 
       - name: Set up Java
         uses: actions/setup-java@v6
@@ -178,7 +254,7 @@ jobs:
             --no-daemon \
             --stacktrace \
             --max-workers=2 \
-            '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8'
+            '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8' 2>&1 | tee "$RUNNER_TEMP/pipo-release-build.log"
 
       - name: Check APK version and sign with original key
         shell: bash
@@ -222,17 +298,6 @@ jobs:
           "$tools/apksigner" verify "$apk"
           (cd dist && sha256sum "Pipo2doo-${RELEASE_TAG}.apk" > "Pipo2doo-${RELEASE_TAG}.apk.sha256")
 
-      - name: Attach signed APK to existing release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          gh release upload "$RELEASE_TAG" \
-            "dist/Pipo2doo-${RELEASE_TAG}.apk" \
-            "dist/Pipo2doo-${RELEASE_TAG}.apk.sha256"
-
       - name: Keep a workflow download copy
         uses: actions/upload-artifact@v6
         with:
@@ -240,6 +305,34 @@ jobs:
           path: dist/*
           if-no-files-found: error
           retention-days: 14
+
+      - name: Create release or attach APK to selected release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          apk="dist/Pipo2doo-${RELEASE_TAG}.apk"
+          checksum="${apk}.sha256"
+          if [[ "$RELEASE_MODE" == 'create' ]]; then
+            source_commit="$(git rev-parse HEAD)"
+            gh release create "$RELEASE_TAG" "$apk" "$checksum" \
+              --target "$source_commit" \
+              --title "Pipo2doo ${RELEASE_TAG}" \
+              --generate-notes --latest
+          else
+            gh release upload "$RELEASE_TAG" "$apk" "$checksum"
+          fi
+
+      - name: Keep build diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: Pipo2doo-${{ env.RELEASE_TAG }}-build-log
+          path: ${{ runner.temp }}/pipo-release-build.log
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Remove temporary signing material
         if: always()
