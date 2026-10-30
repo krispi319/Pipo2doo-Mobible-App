@@ -70,6 +70,12 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
             if(chosen.isNotBlank())roleStore().edit().putString("chosen_role",chosen).commit()
         } else mutable.value=mutable.value.copy(accountEmail=email,authenticated=true)
     }
+    /** Direct account access never invents a pending Create/Join action. */
+    fun requestAuth() {
+        if(mutable.value.busy || mutable.value.authenticated)return
+        pendingAction=null
+        mutable.value=mutable.value.copy(needsAuth=true,pairingMessage="Log in to restore your account, or create an account.")
+    }
     fun dismissAuth() {pendingAction=null;mutable.value=mutable.value.copy(needsAuth=false)}
     fun authenticate(email: String,password: String,signup: Boolean) {
         if(mutable.value.busy)return
@@ -199,7 +205,7 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
     }
     fun backupNow(){scope.launch {maintenance?.join();val c=mutable.value;if(c.authenticated)maintain(c.uid,c.spaceId,force=true)}}
     /** Network-first edits: rejected/conflicting/offline writes never masquerade as synced. */
-    suspend fun mutate(showBusy: Boolean = true, block: () -> Unit)=lock.withLock {
+    suspend fun mutate(showBusy: Boolean = true, forceProfile:Boolean=false, block: () -> Unit)=lock.withLock {
         check(!mutable.value.busy){"Please wait for the current account operation."}
         if(!mutable.value.connected){check(!repository.isRemote){"Shared space is still reconnecting. Wait for a fresh server response."};block();return@withLock}
         check(mutable.value.online){"Offline · Change not sent. Reconnect and try again."}
@@ -221,7 +227,7 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
             for(note in old.notes.filter {before->next.notes.none {it.id==before.id}})api.call("deleteNote",mapOf("id" to note.id))
             var locketNotice=""
             for(note in next.notes.filter {it !in old.notes}) {
-                api.call("saveNote",mapOf("id" to note.id,"value" to mapOf("kind" to note.kind,"message" to note.message,"taskTitle" to note.taskTitle,"picture" to if(note.picture.isBlank())"" else api.preparePhoto(note.picture))))
+                api.call("saveNote",mapOf("id" to note.id,"value" to mapOf("kind" to note.kind,"message" to note.message,"taskTitle" to note.taskTitle,"at" to note.at,"picture" to if(note.picture.isBlank())"" else api.preparePhoto(note.picture))))
                 if(note.kind=="Locket") {
                     // A saved photo stays saved even if the optional push sender is unavailable.
                     val status=try {api.notifyLocket(note.id)} catch(e: CancellationException) {throw e} catch(_: Exception) {"failed"}
@@ -236,7 +242,7 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
                 }
             }
             val p=next.preferences
-            if(p.myName!=old.preferences.myName || p.avatar!=old.preferences.avatar || p.myPhoto!=old.preferences.myPhoto || p.clockZone!=old.preferences.clockZone) api.ensureProfile(p)
+            if(forceProfile || p.myName!=old.preferences.myName || p.avatar!=old.preferences.avatar || p.myPhoto!=old.preferences.myPhoto || p.clockZone!=old.preferences.clockZone) api.ensureProfile(p)
             repository.savePrivateNotes(next.tasks)
             repository.savePersonalReminders(next.tasks)
             // Personal reminders/preferences are local; collections are replaced only by server results.
@@ -245,9 +251,9 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
             if(locketNotice.isNotBlank()) mutable.value=mutable.value.copy(message=locketNotice)
         } catch(e: Exception){runCatching {refresh()};mutable.value=mutable.value.copy(message="Shared update interrupted. Refresh to review any saved changes. ${connectionError(e)}");throw e} finally {if(showBusy) mutable.value=mutable.value.copy(busy=false)}
     }
-    suspend fun setTogetherDate(day:Long,expectedVersion:Long,expectedAccount:String)=lock.withLock {
+    suspend fun setTogetherDate(day:Long,expectedVersion:Long,expectedAccount:String,expectedSpace:String)=lock.withLock {
         require(validTogetherDate(day)) {"Choose a date from 1900 through today."}
-        check(AccountScope.current(context)==expectedAccount) {"Account changed. Reopen settings."}
+        check(AccountScope.current(context)==expectedAccount && mutable.value.spaceId==expectedSpace) {"Account or partner changed. Reopen settings."}
         val c=mutable.value
         check(!c.busy) {"Please wait for the current update."}
         if(!c.connected) {
@@ -267,8 +273,8 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
             throw e
         } finally {mutable.value=mutable.value.copy(busy=false)}
     }
-    suspend fun sendChatNote(note: Appreciation,expectedAccount: String,expectedPartner: String) = lock.withLock {
-        check(AccountScope.current(context)==expectedAccount && mutable.value.partnerUid==expectedPartner) {"Account or partner changed. Reopen chat."}
+    suspend fun sendChatNote(note: Appreciation,expectedAccount: String,expectedPartner: String,expectedSpace:String) = lock.withLock {
+        check(AccountScope.current(context)==expectedAccount && mutable.value.partnerUid==expectedPartner && mutable.value.spaceId==expectedSpace) {"Account or partner changed. Reopen chat."}
         val c=mutable.value
         if(!c.connected) {
             check(!repository.isRemote) {"Shared chat is reconnecting. Please wait."}

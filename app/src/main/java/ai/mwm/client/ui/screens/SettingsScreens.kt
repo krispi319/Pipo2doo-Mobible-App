@@ -84,7 +84,7 @@ import kotlinx.coroutines.launch
 private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/60,minute%60)
 
 @OptIn(ExperimentalLayoutApi::class)
-@Composable fun SettingsScreen(state: PipoState, notificationsAllowed: Boolean, onPreferences: ((Preferences) -> Preferences) -> Unit, onEnable: () -> Unit, onTestReminder: () -> Unit, onTags: () -> Unit, onLeave: () -> Unit, onCare: () -> Unit = {}, onReset: () -> Unit = {}, onPair: () -> Unit = {}, onCheck: () -> Unit = {}, onBackup: () -> Unit = {},onTogetherDate:(Long,Long,(String?)->Unit)->Unit={day,_,done->onPreferences {it.copy(togetherSince=day)};done(null)}) {
+@Composable fun SettingsScreen(state: PipoState, notificationsAllowed: Boolean, onPreferences: ((Preferences) -> Preferences) -> Unit, onEnable: () -> Unit, onTestReminder: () -> Unit, onTags: () -> Unit, onLeave: () -> Unit, onCare: () -> Unit = {}, onReset: () -> Unit = {}, onPair: () -> Unit = {}, onCheck: () -> Unit = {}, onBackup: () -> Unit = {},onTogetherDate:(Long,Long,(String?)->Unit)->Unit={day,_,done->onPreferences {it.copy(togetherSince=day)};done(null)},onSaveName:(String,(String?)->Unit)->Unit={_,done->done("Name saving is unavailable. Reopen your account settings.")}) {
     ApprovedDesign {
     val context=LocalContext.current
     val connection=ai.mwm.client.cloud.LocalPartnerConnection.current
@@ -92,11 +92,12 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
     val p=state.preferences
     val c=AppTheme.colors
     val pickMe=rememberPhotoPicker { photo -> onPreferences { it.copy(myPhoto=photo) } }
-    var myName by rememberSaveable(connection.uid,p.myName) {mutableStateOf(p.myName)}
-    var pendingName by rememberSaveable {mutableStateOf<String?>(null)}
-    var savedName by rememberSaveable {mutableStateOf<String?>(null)}
-    LaunchedEffect(connection.uid) {pendingName=null;savedName=null;myName=p.myName}
-    LaunchedEffect(p.myName,pendingName) {if(pendingName!=null && pendingName==p.myName) {savedName=p.myName;pendingName=null}}
+    var myName by rememberSaveable(connection.uid) {mutableStateOf(p.myName)}
+    var nameBaseline by remember(connection.uid) {mutableStateOf(p.myName)}
+    var pendingName by remember(connection.uid,connection.spaceId) {mutableStateOf<String?>(null)}
+    var savedName by remember(connection.uid,connection.spaceId) {mutableStateOf<String?>(null)}
+    var nameError by remember(connection.uid,connection.spaceId) {mutableStateOf<String?>(null)}
+    LaunchedEffect(p.myName) {if(myName==nameBaseline && pendingName==null)myName=p.myName;nameBaseline=p.myName}
     var dateSaving by remember(connection.uid,connection.spaceId) {mutableStateOf(false)}
     var dateError by remember(connection.uid,connection.spaceId) {mutableStateOf<String?>(null)}
     var backupDetails by remember {mutableStateOf(false)}
@@ -105,7 +106,8 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
     var languageOpen by rememberSaveable {mutableStateOf(false)}
     var preview by remember {mutableStateOf(false)}
     val date=LocalDate.ofEpochDay(p.togetherSince)
-    val days=if(connection.connected && !connection.togetherDateKnown)null else java.time.temporal.ChronoUnit.DAYS.between(date,LocalDate.now()).coerceAtLeast(0)
+    val today=currentTaskDay(p.clockZone)
+    val days=if(connection.connected && !connection.togetherDateKnown)null else (today-p.togetherSince).coerceAtLeast(0)
     val manager=context.getSystemService(android.app.NotificationManager::class.java)
     // Read system channels when returning from Android settings, not illustrative mockup states.
     var soundRevision by remember {mutableIntStateOf(0)}
@@ -155,9 +157,18 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
             SettingsStack {
                 PText("Display name",style=MaterialTheme.typography.labelSmall,muted=true)
                 Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(myName,{myName=it.take(20);savedName=null;pendingName=null},Modifier.weight(1f).heightIn(min=48.dp).semantics {contentDescription="My name"},singleLine=true,textStyle=MaterialTheme.typography.titleMedium.copy(color=c.textPrimary),shape=RoundedCornerShape(14.dp))
-                    Button({val name=myName.trim();pendingName=name;savedName=null;onPreferences {it.copy(myName=name)}},enabled=myName.isNotBlank(),modifier=Modifier.heightIn(min=48.dp),shape=CircleShape,contentPadding=PaddingValues(horizontal=14.dp),colors=ButtonDefaults.buttonColors(containerColor=c.primary,contentColor=c.onPrimary)) {Icon(Icons.Outlined.Check,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp));Text("Save")}
+                    OutlinedTextField(myName,{myName=it.take(20);savedName=null;nameError=null},Modifier.weight(1f).heightIn(min=48.dp).semantics {contentDescription="My name"},enabled=pendingName==null,singleLine=true,textStyle=MaterialTheme.typography.titleMedium.copy(color=c.textPrimary),shape=RoundedCornerShape(14.dp))
+                    Button({
+                        val name=myName.trim();val owner=connection.uid;val space=connection.spaceId
+                        pendingName=name;savedName=null;nameError=null
+                        onSaveName(name,nameResult@{failure->
+                            if(owner!=currentConnection.uid || space!=currentConnection.spaceId)return@nameResult
+                            pendingName=null
+                            if(failure==null)savedName=name else nameError=failure
+                        })
+                    },enabled=myName.isNotBlank() && pendingName==null,modifier=Modifier.heightIn(min=48.dp),shape=CircleShape,contentPadding=PaddingValues(horizontal=14.dp),colors=ButtonDefaults.buttonColors(containerColor=c.primary,contentColor=c.onPrimary)) {Icon(Icons.Outlined.Check,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp));Text(if(pendingName!=null)"Saving…" else "Save")}
                 }
+                nameError?.let {Text(it,color=c.error,style=MaterialTheme.typography.bodySmall)}
                 savedName?.let {Text("✓ ${if(connection.connected && p.shareProfile) "Saved to shared space" else "Saved privately on this phone"} · \"$it\"",color=c.success,style=MaterialTheme.typography.labelMedium)}
             }
             DashedRule(Modifier.padding(horizontal=12.dp))
@@ -291,11 +302,19 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
                         val backup by ai.mwm.client.cloud.AccountBackup.status.collectAsState()
                         val owner=AccountScope.current(context)
                         val main=backup["$owner:main"].orEmpty();val care=backup["$owner:care"].orEmpty()
-                        val ready=main.startsWith("Saved to") && care.startsWith("Saved to")
-                        val backing=main.startsWith("Checking account") || care.startsWith("Checking account")
+                        val ready=connection.authenticated && main.startsWith("Saved to") && care.startsWith("Saved to")
+                        val backing=connection.authenticated && (main.startsWith("Checking account") || care.startsWith("Checking account"))
+                        val backupLabel=when {
+                            !connection.authenticated->"Sign in to back up"
+                            backing->"Backing up…"
+                            ready->"Backed up"
+                            main.startsWith("Not backed up") || care.startsWith("Not backed up")->"Needs attention"
+                            main.startsWith("Changes waiting") || care.startsWith("Changes waiting")->"Changes waiting"
+                            else->"Not checked yet"
+                        }
                         Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                             Icon(if(ready)Icons.Outlined.CloudDone else Icons.Outlined.CloudUpload,null,Modifier.size(24.dp),tint=if(ready)c.success else c.textSecondary)
-                            PText(if(ready)"Backed up" else if(backing)"Backing up…" else if(!connection.authenticated)"Sign in to back up" else "Needs attention",style=MaterialTheme.typography.bodySmall)
+                            PText(backupLabel,style=MaterialTheme.typography.bodySmall)
                         }
                         Button(onBackup,Modifier.fillMaxWidth(),enabled=connection.authenticated && !connection.busy && !backing){PText("Back up")}
                         if(!ready && connection.authenticated)TextButton({backupDetails=true}){PText("View status",style=MaterialTheme.typography.labelSmall)}

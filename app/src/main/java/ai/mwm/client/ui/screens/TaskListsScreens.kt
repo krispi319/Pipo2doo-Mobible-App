@@ -142,15 +142,22 @@ import java.util.Locale
     }
 }
 
-@Composable fun ListDetailScreen(list: SharedList, state: PipoState, onBack: () -> Unit, onOpen: (String) -> Unit, onToggle: (Task) -> Unit, onStatus: (String, TaskStatus) -> Unit, onAdd: (String, TaskStatus) -> Unit, onEdit: () -> Unit, onDelete: () -> Unit, onPin: () -> Unit, onQuickAdd: (Task) -> Unit = {}, onListSave: (SharedList) -> Unit = {}) {
+@Composable fun ListDetailScreen(list: SharedList, state: PipoState, onBack: () -> Unit, onOpen: (String) -> Unit, onToggle: (Task) -> Unit, onStatus: (String, TaskStatus) -> Unit, onAdd: (String, TaskStatus) -> Unit, onEdit: () -> Unit, onDelete: () -> Unit, onPin: () -> Unit, onQuickAdd: (Task, (String?)->Unit) -> Unit = {_,done->done(null)}, onListSave: (SharedList) -> Unit = {}) {
     val editable=ai.mwm.client.cloud.canEditList(list,ai.mwm.client.cloud.LocalPartnerConnection.current)
     val deletable=editable && state.tasks.filter {it.listId==list.id}.all {ai.mwm.client.cloud.canEditTask(it,state,ai.mwm.client.cloud.LocalPartnerConnection.current)}
     var board by rememberSaveable(list.id) { mutableStateOf(true) }
     var quickTitle by rememberSaveable(list.id) { mutableStateOf("") }
+    var quickDraftId by rememberSaveable(list.id) { mutableStateOf(newId()) }
+    var quickSaving by remember {mutableStateOf(false)}
+    var quickError by rememberSaveable(list.id) {mutableStateOf<String?>(null)}
     var quickOwner by rememberSaveable(list.id) { mutableStateOf(Owner.Me) }
     var filter by rememberSaveable { mutableStateOf("All") }
     var doneExpanded by rememberSaveable { mutableStateOf(true) }
     var more by remember { mutableStateOf(false) }
+    val listScroll=rememberLazyListState()
+    val boardScroll=rememberLazyListState()
+    val todoScroll=rememberLazyListState()
+    val doneScroll=rememberLazyListState()
     val tasks = state.tasks.filter { it.listId == list.id && (filter == "All" || it.owner.label == filter) }
     Column(Modifier.fillMaxSize()) {
         BackBar("Lists", onBack) { Box { IconButton({ more = true }) { Icon(Icons.Outlined.MoreVert, "More list options") }; DropdownMenu(more, { more = false }) { DropdownMenuItem({ PText("Edit list") }, { more = false; onEdit() },enabled=editable); DropdownMenuItem({ PText(if(list.pinned) "Unpin list" else "Pin to fridge") }, { more = false; onPin() },enabled=editable); DropdownMenuItem({ PText("Delete list") }, { more = false; onDelete() },enabled=deletable) } } }
@@ -164,17 +171,32 @@ import java.util.Locale
             Surface(shape=CircleShape,color=AppTheme.colors.surfaceSunken,border=BorderStroke(1.dp,AppTheme.colors.separator)) { Row(Modifier.padding(4.dp)) { listOf(false,true).forEach { mode -> Surface(onClick={board=mode},shape=CircleShape,color=if(board==mode) AppTheme.colors.surfaceElevated else AppTheme.colors.surfaceSunken,shadowElevation=if(board==mode) 1.dp else 0.dp) { Row(Modifier.padding(20.dp,10.dp),horizontalArrangement=Arrangement.spacedBy(6.dp)) { Icon(if(mode) Icons.Outlined.ViewWeek else Icons.Outlined.Checklist,null,Modifier.size(16.dp));PText(if(mode) "Board" else "List",style=MaterialTheme.typography.labelLarge) } } } } }
         }
         LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(listOf("All") + Owner.entries.map { it.label }) { label -> Pill("${if(label == "All") "Everyone" else if(label == "Me") state.preferences.myName else if(label == "You") state.preferences.partnerName else label} · ${allTasks.count { label=="All" || it.owner.label==label }}", filter == label) { filter = label } } }
-        if(board) BoardView(tasks, state, Modifier.weight(1f), onOpen, onToggle, onStatus, editable) { status -> onAdd(list.id, status) }
-        else LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp)) {
+        if(board) BoardView(tasks, state, Modifier.weight(1f), onOpen, onToggle, onStatus, editable, boardScroll, todoScroll, doneScroll) { status -> onAdd(list.id, status) }
+        else LazyColumn(Modifier.weight(1f), state=listScroll, contentPadding = PaddingValues(16.dp)) {
             items(tasks.filterNot { it.done }, key = { it.id }) { task -> TaskRow(task, state, { onOpen(task.id) }, { onToggle(task) }) }
             item { OutlinedButton({ doneExpanded = !doneExpanded }) { PText("${if(doneExpanded) "Hide" else "Show"} completed · ${tasks.count { it.done }}") } }
             if(doneExpanded) items(tasks.filter { it.done }.sortedByDescending { it.completedAt }, key = { it.id }) { task -> TaskRow(task, state, { onOpen(task.id) }, { onToggle(task) }) }
         }
         Surface(Modifier.padding(12.dp,8.dp).imePadding(),shape=CircleShape,color=AppTheme.colors.surfaceElevated,border=BorderStroke(1.dp,AppTheme.colors.separator),shadowElevation=8.dp) {
-            Row(Modifier.fillMaxWidth().padding(6.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                Pill(ownerName(quickOwner,state.preferences),true,ownerColor(quickOwner).copy(alpha=.22f).compositeOver(AppTheme.colors.surface)) { quickOwner=Owner.entries[(quickOwner.ordinal+1)%Owner.entries.size] }
-                BasicTextField(quickTitle,{quickTitle=it},Modifier.weight(1f),singleLine=true,textStyle=MaterialTheme.typography.bodyMedium.copy(color=AppTheme.colors.textPrimary),decorationBox={inner->if(quickTitle.isBlank()) PText("Add to To do…",muted=true);inner()})
-                FilledIconButton({onQuickAdd(Task(title=quickTitle,owner=quickOwner,listId=list.id));quickTitle=""},enabled=editable && quickTitle.isNotBlank(),modifier=Modifier.size(44.dp)) { Icon(Icons.Outlined.Add,"Add task") }
+            Column {
+                Row(Modifier.fillMaxWidth().padding(6.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    Pill(ownerName(quickOwner,state.preferences),true,ownerColor(quickOwner).copy(alpha=.22f).compositeOver(AppTheme.colors.surface)) {if(!quickSaving)quickOwner=Owner.entries[(quickOwner.ordinal+1)%Owner.entries.size]}
+                    BasicTextField(quickTitle,{quickTitle=it.take(80)},Modifier.weight(1f),enabled=!quickSaving,singleLine=true,textStyle=MaterialTheme.typography.bodyMedium.copy(color=AppTheme.colors.textPrimary),decorationBox={inner->if(quickTitle.isBlank()) PText("Add to To do…",muted=true);inner()})
+                    FilledIconButton({
+                        if(!quickSaving && quickTitle.isNotBlank()) {
+                            val submitted=quickTaskForSave(quickDraftId,quickTitle,quickOwner,list.id,state.preferences.clockZone)
+                            quickSaving=true;quickError=null
+                            onQuickAdd(submitted) {failure->
+                                quickSaving=false
+                                if(failure==null){quickTitle="";quickDraftId=newId()}
+                                else quickError=failure
+                            }
+                        }
+                    },enabled=editable && !quickSaving && quickTitle.isNotBlank(),modifier=Modifier.size(44.dp)) {
+                        if(quickSaving)CircularProgressIndicator(Modifier.size(18.dp),strokeWidth=2.dp) else Icon(Icons.Outlined.Add,"Add task")
+                    }
+                }
+                quickError?.let {PText(it,Modifier.padding(start=18.dp,end=18.dp,bottom=10.dp),MaterialTheme.typography.bodySmall)}
             }
         }
     }

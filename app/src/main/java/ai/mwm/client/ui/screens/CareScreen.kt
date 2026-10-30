@@ -11,6 +11,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.geometry.Offset
@@ -22,12 +23,16 @@ import java.time.*
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+private val SupportDraftSaver=listSaver<CareSupportDraft,Any>(
+    save={listOf(it.ownerKey,it.id,it.message,it.sentAt)},
+    restore={CareSupportDraft(it[0] as String,it[1] as String,it[2] as String,it[3] as Long)}
+)
 private val moods=listOf("Very low","Low","Okay","Good","Great")
 @Composable internal fun MoodFace(value: Int,modifier: Modifier=Modifier) { val ink=AppTheme.colors.textPrimary;Canvas(modifier) { val w=size.width;val h=size.height;drawCircle(ink,w*.43f,style=Stroke(1.5.dp.toPx()));drawCircle(ink,1.2.dp.toPx(),Offset(w*.34f,h*.4f));drawCircle(ink,1.2.dp.toPx(),Offset(w*.66f,h*.4f));val p=Path().apply {moveTo(w*.3f,h*.65f);quadraticTo(w*.5f,h*(if(value<2) .48f else if(value==2) .65f else .84f),w*.7f,h*.65f)};drawPath(p,ink,style=Stroke(1.5.dp.toPx())) } }
 
 @OptIn(ExperimentalMaterial3Api::class,ExperimentalLayoutApi::class)
 @Composable fun CareScreen(state: CareState?, name: String,partner: String,error: String?,allowed: Boolean,onBack: ()->Unit,onSave: (DayLog)->Unit,onDelete: (Long)->Unit,onUpdate: ((CareState)->CareState)->Unit,onClear: ()->Unit,onEnable: ()->Unit,
-    shared: CareConnection=CareConnection(),onSharing: (Boolean)->Unit={},onRefresh: ()->Unit={},support: List<Appreciation> = emptyList(),onSupport: (String,(String?)->Unit)->Unit={_,done->done("Connect your partner to send a note.")},clockSelection:String="") {
+    shared: CareConnection=CareConnection(),onSharing: (Boolean)->Unit={},onRefresh: ()->Unit={},support: List<Appreciation> = emptyList(),onSupport: (String,Long,String,(String?)->Unit)->Unit={_,_,_,done->done("Connect your partner to send a note.")},clockSelection:String="") {
     ApprovedDesign {
     val context=LocalContext.current
     val c=AppTheme.colors
@@ -43,10 +48,13 @@ private val moods=listOf("Very low","Low","Okay","Good","Great")
     var cycleSheet by remember {mutableStateOf(false)}
     var clear by remember {mutableStateOf(false)}
     var delete by remember {mutableStateOf(false)}
-    var note by remember {mutableStateOf("")}
-    var supportSending by remember {mutableStateOf(false)}
-    var supportError by remember {mutableStateOf<String?>(null)}
     val connection=ai.mwm.client.cloud.LocalPartnerConnection.current
+    val currentConnection by rememberUpdatedState(connection)
+    val supportOwner=connection.uid+":"+connection.spaceId
+    var supportDraft by rememberSaveable(supportOwner,stateSaver=SupportDraftSaver) {mutableStateOf(CareSupportDraft(supportOwner))}
+    var supportSending by remember(supportOwner) {mutableStateOf(false)}
+    var supportError by remember(supportOwner) {mutableStateOf<String?>(null)}
+    var supportSent by remember(supportOwner) {mutableStateOf(false)}
     val visible=if(partnerView) {if(connection.paired && connection.online && shared.online && shared.spaceId==connection.spaceId) shared.partner else null} else state
     LazyColumn(contentPadding=PaddingValues(20.dp,16.dp,20.dp,100.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
         item {Row(verticalAlignment=Alignment.CenterVertically) {Column(Modifier.weight(1f)) {PText("Period & Care",style=MaterialTheme.typography.headlineLarge);PText("A little understanding, together",style=MaterialTheme.typography.bodySmall,muted=true)};IconButton(onRefresh) {Icon(Icons.Outlined.Refresh,"Refresh care records")}}}
@@ -61,7 +69,7 @@ private val moods=listOf("Very low","Low","Okay","Good","Great")
                 Row(Modifier.fillMaxWidth().padding(horizontal=4.dp),verticalAlignment=Alignment.Bottom) {
                     Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
                         PText(if(partnerView) "$partner’s cycle" else "$name’s cycle",style=MaterialTheme.typography.labelSmall,muted=true,preserveContent=true)
-                        PText(if(active==null) if(partnerView) "Their cycle" else "Your cycle" else "Day ${LocalDate.now().toEpochDay()-active+1}",style=MaterialTheme.typography.displaySmall)
+                        PText(if(active==null) if(partnerView) "Their cycle" else "Your cycle" else "Day ${today-active+1}",style=MaterialTheme.typography.displaySmall)
                         PText(active?.let {"Started ${dayText(it)}"} ?: "A little care, every day",style=MaterialTheme.typography.bodySmall,muted=true)
                     }
                     ApprovedCat(Modifier.size(92.dp,84.dp),"care")
@@ -71,7 +79,7 @@ private val moods=listOf("Very low","Low","Okay","Good","Great")
                 PText("A little heads-up",style=MaterialTheme.typography.titleMedium)
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                     Column(Modifier.weight(1f)) {PText("Estimated end",style=MaterialTheme.typography.labelSmall,muted=true);PText(visible.starts.lastOrNull()?.let {dayText(it+visible.duration-1)} ?: "—",style=MaterialTheme.typography.titleMedium)}
-                    Column(Modifier.weight(1f)) {PText("Next estimated start",style=MaterialTheme.typography.labelSmall,muted=true);PText(visible.nextStart()?.let {dayText(it)} ?: "Log a start first",style=MaterialTheme.typography.titleMedium)}
+                    Column(Modifier.weight(1f)) {PText("Next estimated start",style=MaterialTheme.typography.labelSmall,muted=true);PText(visible.nextStart(today)?.let {dayText(it)} ?: "Log a start first",style=MaterialTheme.typography.titleMedium)}
                 }
                 PText("Cycle · ${visible.estimateCycle} days    Period · ${visible.duration} days",style=MaterialTheme.typography.bodySmall,muted=true)
                 PText("Estimates may vary from your actual dates.",style=MaterialTheme.typography.bodySmall,muted=true)
@@ -119,9 +127,20 @@ private val moods=listOf("Very low","Low","Okay","Good","Great")
             daily.takeLast(4).forEach {entry->SupportBubble(entry,name,partner,zone)}
             TextButton({historyOpen=true}) {Icon(Icons.Outlined.History,null,Modifier.size(18.dp));Spacer(Modifier.width(8.dp));PText(if(daily.size>4)"View all ${daily.size} notes" else "View support history")}
             if(selected!=today)PText("New notes are sent for today.",style=MaterialTheme.typography.labelSmall,muted=true)
-            OutlinedTextField(note,{note=it.take(500)},Modifier.fillMaxWidth(),label={PText("A note for $partner")},placeholder={PText("I'm here for you ♡")},maxLines=4)
+            OutlinedTextField(supportDraft.message,{supportDraft=supportDraft.edit(it);supportError=null;supportSent=false},Modifier.fillMaxWidth(),label={PText("A note for $partner")},placeholder={PText("I'm here for you ♡")},maxLines=4)
             supportError?.let {PText(it,style=MaterialTheme.typography.bodySmall)}
-            Button({supportSending=true;supportError=null;onSupport(note.trim()) {failure->supportSending=false;if(failure==null) note="" else supportError=failure}},enabled=note.isNotBlank() && connection.paired && connection.online && !connection.busy && !supportSending,modifier=Modifier.fillMaxWidth()) {PText(if(supportSending) "Sending…" else "Send support")}
+            if(supportSent)Text("Support sent ✓",color=c.success,style=MaterialTheme.typography.bodySmall)
+            Button({
+                val sent=supportDraft.prepare(supportOwner,System.currentTimeMillis());supportDraft=sent
+                val owner=connection.uid;val space=connection.spaceId
+                supportSending=true;supportError=null;supportSent=false
+                onSupport(sent.id,sent.sentAt,sent.message.trim(),supportResult@{failure->
+                    if(owner!=currentConnection.uid || space!=currentConnection.spaceId)return@supportResult
+                    supportSending=false
+                    if(failure==null){supportDraft=supportDraft.acknowledge(supportOwner,sent.id);supportSent=true}
+                    else supportError=failure
+                })
+            },enabled=supportDraft.message.isNotBlank() && connection.paired && connection.online && !connection.busy && !supportSending,modifier=Modifier.fillMaxWidth()) {PText(if(supportSending) "Sending…" else "Send support")}
         }}
         if(!partnerView && state!=null) item {
             Paper {

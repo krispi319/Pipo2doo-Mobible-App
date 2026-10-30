@@ -24,18 +24,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.unit.dp
 
-@Composable internal fun BoardView(tasks:List<Task>,state:PipoState,modifier:Modifier,onOpen:(String)->Unit,onToggle:(Task)->Unit,onStatus:(String,TaskStatus)->Unit,canAdd:Boolean,onAdd:(TaskStatus)->Unit) {
+@Composable internal fun BoardView(tasks:List<Task>,state:PipoState,modifier:Modifier,onOpen:(String)->Unit,onToggle:(Task)->Unit,onStatus:(String,TaskStatus)->Unit,canAdd:Boolean,horizontalScroll:LazyListState=rememberLazyListState(),todoScroll:LazyListState=rememberLazyListState(),doneScroll:LazyListState=rememberLazyListState(),onAdd:(TaskStatus)->Unit) {
     // Placement is gesture bookkeeping, not UI state. Scrolling must not restart handlers.
     val bounds=remember {mutableMapOf<TaskStatus,Rect>()}
     val latestStatus by rememberUpdatedState(onStatus)
     val c=AppTheme.colors;val fontScale=LocalDensity.current.fontScale
     BoxWithConstraints(modifier) {
         val width=compactBoardWidth(maxWidth.value,fontScale).dp
-        LazyRow(Modifier.fillMaxSize(),contentPadding=PaddingValues(12.dp,12.dp),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+        LazyRow(Modifier.fillMaxSize(),state=horizontalScroll,contentPadding=PaddingValues(12.dp,12.dp),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
             items(SIMPLE_TASK_STATUSES,key={it.name}) {status->
                 DisposableEffect(status) {onDispose {bounds.remove(status)}}
                 Surface(Modifier.width(width).fillMaxHeight().onGloballyPositioned {bounds[status]=it.boundsInRoot()},color=when(status){TaskStatus.Todo->c.surface;TaskStatus.Doing->c.primary.copy(alpha=.1f).compositeOver(c.surface);TaskStatus.Done->c.secondary.copy(alpha=.14f).compositeOver(c.surface)},shape=RoundedCornerShape(6.dp,6.dp,22.dp,22.dp),border=BorderStroke(1.dp,c.separator),shadowElevation=2.dp) {
-                    LazyColumn(contentPadding=PaddingValues(9.dp,10.dp,9.dp,16.dp),verticalArrangement=Arrangement.spacedBy(7.dp),overscrollEffect=null) {
+                    LazyColumn(state=if(status==TaskStatus.Done)doneScroll else todoScroll,contentPadding=PaddingValues(9.dp,10.dp,9.dp,16.dp),verticalArrangement=Arrangement.spacedBy(7.dp),overscrollEffect=null) {
                         item(key="header_${status.name}") {Box(Modifier.fillMaxWidth(),contentAlignment=Alignment.Center) {Box(Modifier.size(56.dp,10.dp).background(c.surfaceElevated).border(1.dp,c.separator))};Spacer(Modifier.height(8.dp));Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {PText("${status.label} ${tasks.count {it.boardStatus()==status}}",Modifier.weight(1f),MaterialTheme.typography.titleSmall);OutlinedIconButton({onAdd(status)},enabled=canAdd,modifier=Modifier.size(40.dp)) {Icon(Icons.Outlined.Add,"Add to ${status.label}",Modifier.size(18.dp))}};DashedRule()}
                         items(tasks.filter {it.boardStatus()==status}.let {if(status==TaskStatus.Done)it.sortedByDescending {t->t.completedAt} else it},key={it.id}) {task->
                             val editable=canEditTask(task,state,LocalPartnerConnection.current)

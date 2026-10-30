@@ -1,0 +1,57 @@
+final141/app/src/main/java/ai/mwm/client/cloud/NotificationArtwork.kt:45:50: warning: type annotation class 'org.jspecify.annotations.Nullable' of the inferred type is inaccessible. Check the module classpath for missing or conflicting dependencies. This will become an error in language version 2.4. See https://youtrack.jetbrains.com/issue/KT-80247.
+        person.icon?.loadDrawable(context)?.let {drawable->
+                                                 ^^^^^^^^
+final141/app/src/main/java/ai/mwm/client/cloud/PartnerPokeService.kt:26:18: warning: this declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+    override fun onNewToken(token: String) {
+                 ^^^^^^^^^^
+final141/app/src/main/java/ai/mwm/client/cloud/PartnerPokeService.kt:179:122: warning: type annotation class 'org.jspecify.annotations.NonNull' of the inferred type is inaccessible. Check the module classpath for missing or conflicting dependencies. This will become an error in language version 2.4. See https://youtrack.jetbrains.com/issue/KT-80247.
+            val shortcuts=androidx.core.content.pm.ShortcutManagerCompat.getDynamicShortcuts(context).map {it.id}.filter {it.startsWith("chat_")}
+                                                                                                                         ^^^^^^^^^^^^^^^^^^^^^^^^
+final141/app/src/main/java/ai/mwm/client/cloud/PipoFirebase.kt:208:78: warning: 'val token: Task<String!>' is deprecated. Deprecated in Java.
+                val token=com.google.android.gms.tasks.Tasks.await(messaging.token,15,java.util.concurrent.TimeUnit.SECONDS)
+                                                                             ^^^^^
+final141/app/src/main/java/ai/mwm/client/data/CareRepository.kt:171:51: warning: unnecessary non-null assertion (!!) on a non-null receiver of type 'JSONObject'.
+                    val cloud=CareCodec.decode(own!!.getJSONObject("payload"))
+                                                  ^^
+final141/app/src/main/java/ai/mwm/client/ui/screens/CuteChatScreen.kt:200:53: warning: 'val Icons.Outlined.ArrowBack: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.ArrowBack.
+            IconButton(onBack) {Icon(Icons.Outlined.ArrowBack,"Back")}
+                                                    ^^^^^^^^^
+final141/app/src/main/java/ai/mwm/client/ui/screens/CuteChatScreen.kt:241:253: warning: 'val Icons.Outlined.Reply: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.Reply.
+                            TextButton({editDraft {it.copy(replyTo=note.id)}},enabled=!sending && !note.sample && (!connection.connected || serverNotes.orEmpty().any {it.id==note.id}),contentPadding=PaddingValues(horizontal=4.dp)) {Icon(Icons.Outlined.Reply,null,Modifier.size(16.dp));Spacer(Modifier.width(3.dp));Text("Reply",style=MaterialTheme.typography.labelSmall)}
+                                                                                                                                                                                                                                                            ^^^^^
+final141/app/src/main/java/ai/mwm/client/ui/screens/CuteChatScreen.kt:260:116: warning: 'val Icons.Outlined.Reply: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.Reply.
+                    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {Icon(Icons.Outlined.Reply,null,Modifier.size(18.dp),tint=c.textSecondary);Column(Modifier.weight(1f).padding(horizontal=8.dp)) {PText("Replying to "+(quoted?.let {if(it.owner==Owner.Me)p.myName else p.partnerName} ?: "message"),style=MaterialTheme.typography.labelSmall,muted=true);Text(quoted?.message?.ifBlank {"Photo"} ?: "Original message unavailable",maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis,style=MaterialTheme.typography.bodySmall,color=c.textPrimary)};IconButton({editDraft {it.copy(replyTo="")}},Modifier.size(32.dp),enabled=!sending) {Icon(Icons.Outlined.Close,"Cancel reply",Modifier.size(18.dp))}}
+                                                                                                                   ^^^^^
+final141/app/src/main/java/ai/mwm/client/ui/screens/CuteChatScreen.kt:273:206: warning: 'val Icons.Outlined.Send: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.Send.
+                    FilledIconButton({send()},Modifier.size(40.dp),enabled=canSend,shape=CircleShape) {if(sending) CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp) else Icon(Icons.Outlined.Send,"Send ${if(kind=="Message") "message" else "thank-you"}",Modifier.size(20.dp))}
+                                                                                                                                                                                                             ^^^^
+final141/app/src/main/java/ai/mwm/client/ui/screens/HomeScreen.kt:75:19: warning: unnecessary safe call on a non-null receiver of type 'CareViewModel'.
+            careVm?.clearNotice(notice.id)
+                  ^^
+final141/app/src/main/java/ai/mwm/client/ui/screens/HomeScreen.kt:78:106: warning: unnecessary safe call on a non-null receiver of type 'PipoViewModel'.
+    LaunchedEffect(error) { if(error != null) { snack.showSnackbar(localized(error, translationCode)); vm?.clearError() } }
+                                                                                                         ^^
+final141/app/src/main/java/ai/mwm/client/ui/screens/NotificationSoundPicker.kt:26:52: warning: 'val Icons.Outlined.VolumeOff: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.VolumeOff.
+            Icon(if(tone=="silent") Icons.Outlined.VolumeOff else Icons.Outlined.MusicNote,null,Modifier.size(22.dp))
+                                                   ^^^^^^^^^
+final141/app/src/main/java/ai/mwm/client/ui/screens/NotificationSoundPicker.kt:32:187: warning: 'val Icons.Outlined.VolumeOff: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.VolumeOff.
+                DropdownMenu(menu,{menu=false}) {NotificationSounds.choices.forEach {(key,label)->DropdownMenuItem(text={PText(label)},leadingIcon={Icon(if(key=="silent") Icons.Outlined.VolumeOff else Icons.Outlined.MusicNote,null,Modifier.size(20.dp))},trailingIcon={if(tone==key) Icon(Icons.Outlined.Check,null)},onClick={
+                                                                                                                                                                                          ^^^^^^^^^
+final141/app/src/main/java/ai/mwm/client/ui/screens/PipoComponents.kt:189:72: warning: 'val Icons.Outlined.StickyNote2: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.StickyNote2.
+                        if(task.note.isNotBlank()) Icon(Icons.Outlined.StickyNote2, "Has a note", Modifier.padding(3.dp).size(14.dp), tint = colors.textSecondary)
+                                                                       ^^^^^^^^^^^
+final141/app/src/main/java/ai/mwm/client/ui/screens/SettingsScreens.kt:277:447: warning: 'val Icons.Outlined.ArrowForward: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.ArrowForward.
+                Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {Icon(Icons.Outlined.LocalFlorist,null,Modifier.size(32.dp),tint=c.secondary);Column(Modifier.weight(1f)) {PText("Period & care",style=MaterialTheme.typography.titleMedium);PText("Your calendar, partner updates & support notes",style=MaterialTheme.typography.bodySmall,muted=true)};SettingsStatus("Care",true);Icon(Icons.Outlined.ArrowForward,"Open Period and care",Modifier.size(20.dp),tint=c.textSecondary)}
+                                                                                                                                                                                                                                                                                                                                                                                                                                                              ^^^^^^^^^^^^
+final141/app/src/main/java/ai/mwm/client/ui/screens/TaskCalendarScreen.kt:35:114: warning: 'val Icons.Outlined.ArrowBack: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.ArrowBack.
+        item {Row(verticalAlignment=Alignment.CenterVertically) {OutlinedIconButton(onBack) {Icon(Icons.Outlined.ArrowBack,"Back")};Column(Modifier.weight(1f)) {PText("Our calendar",style=MaterialTheme.typography.headlineSmall);PText("Little wins, one day at a time",style=MaterialTheme.typography.bodySmall,muted=true)};PipoBrand(Modifier.size(42.dp))}}
+                                                                                                                 ^^^^^^^^^
+final141/app/src/main/java/ai/mwm/client/ui/screens/TaskCalendarScreen.kt:61:417: warning: 'val Icons.Outlined.EventNote: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.EventNote.
+                Surface(Modifier.weight(1f),shape=RoundedCornerShape(18.dp),color=tone.copy(alpha=.12f).compositeOver(c.surface),border=BorderStroke(1.dp,c.separator)) {Column(Modifier.padding(8.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(3.dp)) {Icon(when(title){"Completed"->Icons.Outlined.LocalFlorist;"Missed"->Icons.Outlined.FavoriteBorder;else->Icons.Outlined.EventNote},null,Modifier.size(22.dp),tint=tone);PText(count.toString(),style=MaterialTheme.typography.titleLarge);PText(title,style=MaterialTheme.typography.labelSmall)}}
+                                                                                                                                                                                                                                                                                                                                                                                                                                ^^^^^^^^^
+final141/app/src/main/java/ai/mwm/client/ui/screens/UpcomingNotes.kt:82:177: warning: 'val Icons.Outlined.EventNote: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.EventNote.
+                            Icon(when(group.key){"overdue"->Icons.Outlined.History;"today"->Icons.Outlined.WbSunny;"tomorrow"->Icons.Outlined.LocalFlorist;else->Icons.Outlined.EventNote},null,Modifier.align(Alignment.CenterEnd).padding(end=18.dp).size(28.dp).graphicsLayer {
+                                                                                                                                                                                ^^^^^^^^^
+final141/app/src/main/java/ai/mwm/client/ui/screens/WelcomeScreen.kt:94:45: warning: 'val Icons.Outlined.Logout: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.Logout.
+                        Icon(Icons.Outlined.Logout, "Sign out and keep local data", tint = c.textSecondary, modifier = Modifier.size(20.dp))
+                                            ^^^^^^

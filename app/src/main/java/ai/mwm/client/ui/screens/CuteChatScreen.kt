@@ -19,6 +19,7 @@ import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.unit.*
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextRange
@@ -55,6 +56,31 @@ private fun chatIcon(kind: String)=when(kind) {
         onDispose {lifecycle.removeObserver(observer)}
     }
     val scope=rememberCoroutineScope()
+    val owner=AccountScope.current(context)
+    val inspection=LocalInspectionMode.current
+    val storage=remember(owner,connection.spaceId,inspection) {
+        if(inspection)ChatConversationStore.preview(context,if(taskTitle.isBlank())"Message" else "Thank you")
+        else ChatConversationStore.open(context,owner,connection.spaceId,if(taskTitle.isBlank())"Message" else "Thank you")
+    }
+    val stored by storage.state.collectAsState()
+    LaunchedEffect(storage,stored.ready,taskTitle) {
+        if(stored.ready)storage.editDraft {d->
+            if(d.text.isEmpty() && d.picture.isEmpty() && d.replyTo.isEmpty())
+                d.copy(kind=if(taskTitle.isBlank())"Message" else "Thank you") else d
+        }
+    }
+    val draft=stored.data.draft
+    val pending=stored.data.pending
+    val sending=stored.sending
+    val kind=draft.kind
+    val picture=draft.picture
+    val replyTo=draft.replyTo
+    var messageDraft by rememberSaveable(owner,connection.spaceId,stateSaver=TextFieldValue.Saver) {mutableStateOf(TextFieldValue(draft.text))}
+    LaunchedEffect(draft.text) {
+        if(storage.state.value.data.draft.text==draft.text && messageDraft.text!=draft.text)
+            messageDraft=TextFieldValue(draft.text,TextRange(draft.text.length))
+    }
+    fun editDraft(transform:(ChatComposerDraft)->ChatComposerDraft)=storage.editDraft {old->transform(old).copy(id=newId())}
     var reactions by remember(connection.uid,connection.spaceId) {mutableStateOf(emptyList<ChatReaction>())}
     var reactionEpoch by remember(connection.uid,connection.spaceId) {mutableIntStateOf(0)}
     var reactionBusy by remember(connection.uid,connection.spaceId) {mutableStateOf(false)}
@@ -63,7 +89,6 @@ private fun chatIcon(kind: String)=when(kind) {
     var serverNotes by remember(connection.uid,connection.spaceId) {mutableStateOf<List<Appreciation>?>(null)}
     var readIds by remember(connection.uid,connection.spaceId) {mutableStateOf(emptySet<String>())}
     var acknowledged by remember(connection.uid,connection.spaceId) {mutableStateOf(emptySet<String>())}
-    var pending by remember(connection.uid,connection.spaceId) {mutableStateOf(emptyMap<String,ChatPending>())}
     var refreshKey by remember {mutableIntStateOf(0)}
     var pollTick by remember {mutableIntStateOf(0)}
     var chatStatus by remember(connection.uid,connection.spaceId) {mutableStateOf("")}
@@ -75,7 +100,7 @@ private fun chatIcon(kind: String)=when(kind) {
             try {
                 val messages=withContext(Dispatchers.IO) {api.chatSnapshot(connection.uid,connection.spaceId)}
                 serverNotes=messages
-                pending=pending.filter { (id,value)->value.state=="Sending" || messages.none {it.id==id} }
+                storage.reconcile(messages)
                 chatStatus=""
                 try {
                     readIds=withContext(Dispatchers.IO) {api.chatReceipts(connection.uid,connection.spaceId)}
@@ -93,16 +118,14 @@ private fun chatIcon(kind: String)=when(kind) {
             delay(if(chatStatus=="Chat reconnecting…") 3000 else 1500)
         }
     }
-    var kind by rememberSaveable(connection.uid,connection.spaceId,taskTitle) {mutableStateOf(if(taskTitle.isBlank()) "Message" else "Thank you")}
-    var messageDraft by rememberSaveable(connection.uid,connection.spaceId,stateSaver=TextFieldValue.Saver) {mutableStateOf(TextFieldValue(""))}
     val message=messageDraft.text
-    var picture by rememberSaveable(connection.uid,connection.spaceId) {mutableStateOf("")}
-    var draftId by rememberSaveable(connection.uid,connection.spaceId) {mutableStateOf(newId())}
-    var replyTo by rememberSaveable(connection.uid,connection.spaceId) {mutableStateOf("")}
     var menu by remember {mutableStateOf(false)}
-    var sending by remember(connection.uid,connection.spaceId) {mutableStateOf(false)}
-    var failure by remember(connection.uid,connection.spaceId) {mutableStateOf<String?>(null)}
-    val picker=rememberPhotoPicker {picture=it;draftId=newId()}
+    var reactionFailure by remember(connection.uid,connection.spaceId) {mutableStateOf<String?>(null)}
+    val failure=stored.error ?: reactionFailure
+    val picker=rememberPhotoPicker {photo->editDraft {it.copy(picture=photo)}}
+    LaunchedEffect(storage,state.notes,connection.connected) {
+        if(!connection.connected)storage.reconcile(state.notes)
+    }
     val notes=mergeChatNotes((serverNotes ?: state.notes).filter {it.kind!="Locket"},pending)
     val listState=rememberLazyListState()
     var firstScroll by remember(connection.uid,connection.spaceId) {mutableStateOf(true)}
@@ -113,33 +136,32 @@ private fun chatIcon(kind: String)=when(kind) {
             firstScroll=false
         }
     }
-    val canSend=!sending && !connection.busy && (!connection.connected || connection.paired && connection.online) && (kind!="Message" || message.isNotBlank() || picture.isNotBlank())
+    val canSend=stored.ready && !sending && !connection.busy && (!connection.connected || connection.paired && connection.online) && (kind!="Message" || message.isNotBlank() || picture.isNotBlank())
     fun submit(note: Appreciation) {
-        if(sending) return
-        sending=true;failure=null
-        pending=pending+(note.id to ChatPending(note))
-        val account=connection.uid;val space=connection.spaceId
-        onSend(note.id,note.kind,note.message,note.taskTitle,note.picture,note.replyTo) {error->
-            if(account!=currentConnection.uid || space!=currentConnection.spaceId) return@onSend
-            sending=false
-            pending=pending+(note.id to ChatPending(note,if(error==null) "Sent" else "Failed",error))
-            if(error==null) {
-                if(draftId==note.id) {messageDraft=TextFieldValue("");picture="";replyTo="";draftId=newId()}
-                refreshKey++
-            } else failure=error
-        }
+        if(sending || !stored.ready)return
+        reactionFailure=null
+        storage.submit(note) {queued,done->onSend(queued.id,queued.kind,queued.message,queued.taskTitle,queued.picture,queued.replyTo,done)}
     }
     fun send() {
-        if(!canSend) return
-        submit(Appreciation(id=draftId,kind=kind,message=message.trim(),taskTitle=taskTitle,picture=picture,replyTo=replyTo))
+        if(!canSend)return
+        // Read one current store snapshot: a last keystroke may precede recomposition.
+        val current=storage.state.value.data.draft
+        if(current.kind=="Message" && current.text.isBlank() && current.picture.isBlank())return
+        submit(Appreciation(id=current.id,kind=current.kind,message=current.text.trim(),taskTitle=taskTitle,picture=current.picture,replyTo=current.replyTo))
     }
     val visibleIds by remember {
         derivedStateOf {listState.layoutInfo.visibleItemsInfo.mapNotNull {it.key as? String}.toSet()}
     }
-    LaunchedEffect(visibleIds,foreground,pollTick,connection.uid,connection.spaceId) {
-        if(!foreground || !connection.paired || serverNotes==null) return@LaunchedEffect
+    LaunchedEffect(visibleIds,foreground,pollTick,connection.uid,connection.spaceId,openPhoto,emojiOpen,reactionTarget,menu) {
+        if(!foreground || !connection.paired || serverNotes==null || openPhoto!=null || emojiOpen || reactionTarget!=null || menu) return@LaunchedEffect
         val incoming=serverNotes.orEmpty().filter {it.owner==Owner.You && !it.sample && it.id in visibleIds && it.id !in acknowledged}.map {it.id}.toSet()
         if(incoming.isNotEmpty()) {
+            // Local unread badges, notification clearing and server Seen share one visibility rule.
+            if(owner==AccountScope.current(context) && currentConnection.spaceId==connection.spaceId) {
+                ChatReadState.mark(context,connection.spaceId,incoming)
+                val manager=context.getSystemService(android.app.NotificationManager::class.java)
+                incoming.forEach {manager.cancel("partner_note",it.hashCode())}
+            }
             try {
                 withContext(Dispatchers.IO) {PipoFirebase.get(context).markChatRead(connection.uid,connection.spaceId,incoming)}
                 acknowledged=acknowledged+incoming
@@ -150,7 +172,7 @@ private fun chatIcon(kind: String)=when(kind) {
         if(reactionBusy || !connection.paired || !connection.online) return
         val account=connection.uid;val space=connection.spaceId
         val desired=nextChatReaction(reactions.find {it.messageId==messageId && it.userId==account}?.emoji,chosen)
-        reactionEpoch++;reactionBusy=true;failure=null;reactionTarget=null
+        reactionEpoch++;reactionBusy=true;reactionFailure=null;reactionTarget=null
         scope.launch {
             try {
                 withContext(Dispatchers.IO) {PipoFirebase.get(context).setChatReaction(account,space,messageId,desired)}
@@ -159,7 +181,7 @@ private fun chatIcon(kind: String)=when(kind) {
                         if(desired.isEmpty()) emptyList() else listOf(ChatReaction(messageId,account,desired))
                 }
             } catch(e:CancellationException) {throw e} catch(_:Exception) {
-                if(currentConnection.uid==account && currentConnection.spaceId==space) failure="Couldn't confirm the reaction. Check your connection and try again."
+                if(currentConnection.uid==account && currentConnection.spaceId==space) reactionFailure="Couldn't confirm the reaction. Check your connection and try again."
             } finally {
                 if(currentConnection.uid==account && currentConnection.spaceId==space) {reactionEpoch++;reactionBusy=false;refreshKey++}
             }
@@ -167,8 +189,8 @@ private fun chatIcon(kind: String)=when(kind) {
     }
     if(emojiOpen) ChatEmojiPicker("A little emoji ♡",onDismiss={emojiOpen=false}) {emoji->
         val inserted=insertChatEmoji(message,messageDraft.selection.start,messageDraft.selection.end,emoji)
-        if(inserted!=null) {messageDraft=TextFieldValue(inserted.text,TextRange(inserted.cursor));draftId=newId();failure=null}
-        else failure="Your message is full. Make a little room for the emoji."
+        if(inserted!=null) {messageDraft=TextFieldValue(inserted.text,TextRange(inserted.cursor));editDraft {it.copy(text=inserted.text)};reactionFailure=null}
+        else reactionFailure="Your message is full. Make a little room for the emoji."
         emojiOpen=false
     }
     reactionTarget?.let {id->ChatEmojiPicker("React with a little feeling",reactions.find {it.messageId==id && it.userId==connection.uid}?.emoji ?: "",{reactionTarget=null}) {react(id,it)}}
@@ -215,8 +237,8 @@ private fun chatIcon(kind: String)=when(kind) {
                             }
                         }
                         Row(Modifier.padding(horizontal=4.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(5.dp)) {
-                            PText(Instant.ofEpochMilli(note.at).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm",Locale.getDefault())),style=MaterialTheme.typography.labelSmall,muted=true)
-                            TextButton({replyTo=note.id;draftId=newId()},enabled=!sending && !note.sample && (!connection.connected || serverNotes.orEmpty().any {it.id==note.id}),contentPadding=PaddingValues(horizontal=4.dp)) {Icon(Icons.Outlined.Reply,null,Modifier.size(16.dp));Spacer(Modifier.width(3.dp));Text("Reply",style=MaterialTheme.typography.labelSmall)}
+                            PText(Instant.ofEpochMilli(note.at).atZone(clockZone(p.clockZone)).format(DateTimeFormatter.ofPattern("HH:mm",Locale.getDefault())),style=MaterialTheme.typography.labelSmall,muted=true)
+                            TextButton({editDraft {it.copy(replyTo=note.id)}},enabled=!sending && !note.sample && (!connection.connected || serverNotes.orEmpty().any {it.id==note.id}),contentPadding=PaddingValues(horizontal=4.dp)) {Icon(Icons.Outlined.Reply,null,Modifier.size(16.dp));Spacer(Modifier.width(3.dp));Text("Reply",style=MaterialTheme.typography.labelSmall)}
                             IconButton({keyboard?.hide();reactionTarget=note.id},Modifier.size(40.dp),enabled=!reactionBusy && connection.paired && connection.online && serverNotes.orEmpty().any {it.id==note.id} && !note.sample) {Icon(Icons.Outlined.AddReaction,"React to message",Modifier.size(18.dp),tint=c.textSecondary)}
                         }
                         if(mine && !note.sample) {
@@ -235,18 +257,19 @@ private fun chatIcon(kind: String)=when(kind) {
             Column(Modifier.fillMaxWidth().padding(14.dp,12.dp,14.dp,14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                 if(replyTo.isNotBlank()) {
                     val quoted=notes.find {it.id==replyTo}
-                    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {Icon(Icons.Outlined.Reply,null,Modifier.size(18.dp),tint=c.textSecondary);Column(Modifier.weight(1f).padding(horizontal=8.dp)) {PText("Replying to "+(quoted?.let {if(it.owner==Owner.Me)p.myName else p.partnerName} ?: "message"),style=MaterialTheme.typography.labelSmall,muted=true);Text(quoted?.message?.ifBlank {"Photo"} ?: "Original message unavailable",maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis,style=MaterialTheme.typography.bodySmall,color=c.textPrimary)};IconButton({replyTo="";draftId=newId()},Modifier.size(32.dp),enabled=!sending) {Icon(Icons.Outlined.Close,"Cancel reply",Modifier.size(18.dp))}}
+                    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {Icon(Icons.Outlined.Reply,null,Modifier.size(18.dp),tint=c.textSecondary);Column(Modifier.weight(1f).padding(horizontal=8.dp)) {PText("Replying to "+(quoted?.let {if(it.owner==Owner.Me)p.myName else p.partnerName} ?: "message"),style=MaterialTheme.typography.labelSmall,muted=true);Text(quoted?.message?.ifBlank {"Photo"} ?: "Original message unavailable",maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis,style=MaterialTheme.typography.bodySmall,color=c.textPrimary)};IconButton({editDraft {it.copy(replyTo="")}},Modifier.size(32.dp),enabled=!sending) {Icon(Icons.Outlined.Close,"Cancel reply",Modifier.size(18.dp))}}
                 }
                 if(taskTitle.isNotBlank() && runCatching {java.util.UUID.fromString(taskTitle)}.isFailure) PText("For $taskTitle",style=MaterialTheme.typography.labelSmall,muted=true,preserveContent=true)
                 if(kind!="Message") PText(kind,Modifier.padding(start=4.dp),MaterialTheme.typography.labelSmall,true)
-                if(picture.isNotBlank()) Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {LocalPicture(picture,Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)).clickable {openPhoto=picture});TextButton({picture="";draftId=newId()},enabled=!sending) {PText("Remove photo")}}
+                if(picture.isNotBlank()) Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {LocalPicture(picture,Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)).clickable {openPhoto=picture});TextButton({editDraft {it.copy(picture="")}},enabled=!sending) {PText("Remove photo")}}
                 Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(5.dp)) {
                     Box {
                         FilledTonalIconButton({menu=true},Modifier.size(40.dp),enabled=!sending,shape=CircleShape) {Icon(chatIcon(kind),"Choose message or thank-you style")}
-                        DropdownMenu(menu,{menu=false}) {listOf("Message","Thank you","You're the best","Purr-fect").forEach {value->DropdownMenuItem(text={PText(value)},leadingIcon={Icon(chatIcon(value),null,Modifier.size(20.dp))},trailingIcon={if(kind==value) Icon(Icons.Outlined.Check,null,Modifier.size(18.dp))},onClick={kind=value;draftId=newId();menu=false})}}
+                        DropdownMenu(menu,{menu=false}) {listOf("Message","Thank you","You're the best","Purr-fect").forEach {value->DropdownMenuItem(text={PText(value)},leadingIcon={Icon(chatIcon(value),null,Modifier.size(20.dp))},trailingIcon={if(kind==value) Icon(Icons.Outlined.Check,null,Modifier.size(18.dp))},onClick={editDraft {it.copy(kind=value)};menu=false})}}
                     }
                     OutlinedIconButton(picker,Modifier.size(40.dp),enabled=!sending) {Icon(Icons.Outlined.AddPhotoAlternate,"Add a picture",Modifier.size(20.dp))}
-                    OutlinedTextField(messageDraft,{val text=limitChatText(it.text);messageDraft=it.copy(text=text,selection=TextRange(it.selection.start.coerceAtMost(text.length),it.selection.end.coerceAtMost(text.length)));draftId=newId()},Modifier.weight(1f),enabled=!sending,placeholder={PText(if(kind=="Message") "A little message…" else "Add a note…")},maxLines=4,shape=RoundedCornerShape(22.dp),trailingIcon={IconButton({keyboard?.hide();emojiOpen=true},enabled=!sending) {Icon(Icons.Outlined.SentimentSatisfiedAlt,"Add emoji",Modifier.size(20.dp))}})
+                    // Keep the editor enabled during sending so its keyboard/focus is not discarded.
+                    OutlinedTextField(messageDraft,{val text=limitChatText(it.text);val changed=text!=messageDraft.text;messageDraft=it.copy(text=text,selection=TextRange(it.selection.start.coerceAtMost(text.length),it.selection.end.coerceAtMost(text.length)));if(changed){editDraft {d->d.copy(text=text)};reactionFailure=null}},Modifier.weight(1f),enabled=stored.ready,placeholder={PText(if(kind=="Message") "A little message…" else "Add a note…")},maxLines=4,shape=RoundedCornerShape(22.dp),trailingIcon={IconButton({keyboard?.hide();emojiOpen=true},enabled=!sending) {Icon(Icons.Outlined.SentimentSatisfiedAlt,"Add emoji",Modifier.size(20.dp))}})
                     FilledIconButton({send()},Modifier.size(40.dp),enabled=canSend,shape=CircleShape) {if(sending) CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp) else Icon(Icons.Outlined.Send,"Send ${if(kind=="Message") "message" else "thank-you"}",Modifier.size(20.dp))}
                 }
                 Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {

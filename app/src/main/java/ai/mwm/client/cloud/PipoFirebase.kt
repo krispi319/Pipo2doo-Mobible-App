@@ -164,7 +164,10 @@ class PipoFirebase private constructor(context: Context) {
         "deleteProfile"->{val uid=client.uid();val old=records(space()).firstOrNull {it.getString("kind")=="profile" && it.getString("created_by")==uid};if(old==null) emptyMap() else delete(old.getString("id"),"profile",old.getLong("version"))}
         "saveNote"->{val id=body["id"] as String;val old=records(space()).firstOrNull {it.getString("id")==id}
             @Suppress("UNCHECKED_CAST") val value=body["value"] as Map<String,Any?>
-            write(id,"appreciation",value+mapOf("at" to System.currentTimeMillis()),old?.getLong("version") ?: 0)
+            // Preserve the original day/time when retrying a note after an uncertain response.
+            val at=old?.optJSONObject("payload")?.optLong("at")?.takeIf {it>0}
+                ?: (value["at"] as? Number)?.toLong()?.takeIf {it>0} ?: System.currentTimeMillis()
+            write(id,"appreciation",value+mapOf("at" to at),old?.getLong("version") ?: 0)
         }
         "deleteNote"->{val id=body["id"] as String;val old=records(space()).firstOrNull {it.getString("id")==id};delete(id,"appreciation",old?.getLong("version") ?: 0)}
         else->error("This operation is not available on the Supabase connection.")

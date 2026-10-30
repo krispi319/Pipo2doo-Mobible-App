@@ -19,6 +19,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
@@ -28,6 +30,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.sp
+
+internal val ListPicturesSaver=Saver<List<String>,ArrayList<String>>(save={ArrayList(it)},restore={it.toList()})
 
 private data class EmojiChoice(val icon: String,val name: String,val category: String)
 private val emojiLibrary=listOf(
@@ -45,12 +49,13 @@ private val emojiLibrary=listOf(
     var saving by remember { mutableStateOf(false) }
     var saveError by remember { mutableStateOf<String?>(null) }
     val context=LocalContext.current
+    val focus=LocalFocusManager.current
     val recentsStore=remember {context.getSharedPreferences("pipo_emoji_recents",0)}
     val recents=remember {recentsStore.getString("icons", "🛒|🧳|🎁|🧺|🍜|🪴|🎬")!!.split('|')}
     val draftId = rememberSaveable(list?.id) { list?.id ?: newId() }
     var name by rememberSaveable(list?.id) {mutableStateOf(list?.name ?: "")}
     var emoji by rememberSaveable(list?.id) {mutableStateOf(list?.emoji ?: "🧺")}
-    var pictures by remember(list?.id) {mutableStateOf(list?.pictures ?: emptyList<String>())}
+    var pictures by rememberSaveable(list?.id,stateSaver=ListPicturesSaver) {mutableStateOf(list?.pictures ?: emptyList<String>())}
     var owner by rememberSaveable(list?.id) {mutableStateOf(list?.owner ?: Owner.Together)}
     var category by rememberSaveable {mutableStateOf("Recent")}
     val choices=if(category=="Recent") recents.map {EmojiChoice(it,"Recently used","Recent")} else emojiLibrary.filter {it.category==category}
@@ -58,12 +63,12 @@ private val emojiLibrary=listOf(
     ModalBottomSheet(onDismissRequest={ if(!saving) onClose() },sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),containerColor=c.surfaceElevated,shape=RoundedCornerShape(28.dp,28.dp,0.dp,0.dp),scrimColor=c.textPrimary.copy(alpha=.34f),dragHandle={Box(Modifier.padding(top=10.dp,bottom=2.dp).size(40.dp,4.dp).background(c.separator,CircleShape))}) {
         Column(Modifier.fillMaxWidth().fillMaxHeight(.90f).imePadding()) {
             Row(Modifier.fillMaxWidth().padding(start=20.dp,end=12.dp),verticalAlignment=Alignment.CenterVertically) {PText(if(list==null) "New list" else "Edit list",Modifier.weight(1f),MaterialTheme.typography.titleLarge);TextButton(onClose, enabled = !saving) {PText("Cancel",decoration=TextDecoration.Underline)}}
-            LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(20.dp,6.dp,20.dp,16.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
+            LazyColumn(Modifier.weight(1f).freezeWhileSaving(saving),contentPadding=PaddingValues(20.dp,6.dp,20.dp,16.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
                 item {
                     Surface(color=c.surface,shape=RoundedCornerShape(14.dp),border=BorderStroke(1.dp,c.separator)) {
                         Row(Modifier.fillMaxWidth().padding(14.dp,10.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)) {
                             Surface(Modifier.size(56.dp),color=ownerColor(owner).copy(alpha=.3f).compositeOver(c.surface),shape=RoundedCornerShape(14.dp),border=BorderStroke(1.5.dp,c.secondary.copy(alpha=.7f))) {Box(contentAlignment=Alignment.Center) {Text(emoji,fontSize=30.sp)}}
-                            Column(Modifier.weight(1f)) {PText("List name",style=MaterialTheme.typography.labelSmall,muted=true);SheetInput(name,{name=it.take(80)},"List name",Modifier.fillMaxWidth(),18.sp)}
+                            Column(Modifier.weight(1f)) {PText("List name",style=MaterialTheme.typography.labelSmall,muted=true);SheetInput(name,{name=it.take(80)},"List name",Modifier.fillMaxWidth(),18.sp,enabled=!saving)}
                         }
                     }
                 }
@@ -90,6 +95,8 @@ private val emojiLibrary=listOf(
             DashedRule()
             saveError?.let { PText(it, Modifier.padding(horizontal = 20.dp), MaterialTheme.typography.bodySmall) }
             Button({
+                if(saving)return@Button
+                focus.clearFocus()
                 saving = true; saveError = null
                 val submitted = (list ?: SharedList(id=draftId,name=name)).copy(name=name.trim(),emoji=emoji.trim(),owner=owner,pictures=pictures)
                 onSave(submitted) { failure ->
@@ -104,9 +111,9 @@ private val emojiLibrary=listOf(
     }
 }
 
-@Composable internal fun SheetInput(value: String,onChange: (String)->Unit,label: String,modifier: Modifier=Modifier,fontSize: androidx.compose.ui.unit.TextUnit=18.sp,underline: Boolean=true) {
+@Composable internal fun SheetInput(value: String,onChange: (String)->Unit,label: String,modifier: Modifier=Modifier,fontSize: androidx.compose.ui.unit.TextUnit=18.sp,underline: Boolean=true,enabled:Boolean=true) {
     val c=AppTheme.colors
-    BasicTextField(value,onChange,modifier.heightIn(min=36.dp).semantics {contentDescription=label}.then(if(underline) Modifier.drawBehind {drawLine(c.separator,Offset(0f,size.height),Offset(size.width,size.height),1.5.dp.toPx(),pathEffect=PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(),4.dp.toPx())))} else Modifier).padding(vertical=6.dp),singleLine=true,textStyle=MaterialTheme.typography.bodyLarge.copy(fontSize=fontSize,fontWeight=FontWeight.SemiBold,color=c.textPrimary),cursorBrush=SolidColor(c.primary),keyboardOptions=KeyboardOptions(capitalization=KeyboardCapitalization.Sentences),decorationBox={inner->if(value.isBlank()) PText(label,style=MaterialTheme.typography.bodyMedium,muted=true);inner()})
+    BasicTextField(value,onChange,modifier.heightIn(min=36.dp).semantics {contentDescription=label}.then(if(underline) Modifier.drawBehind {drawLine(c.separator,Offset(0f,size.height),Offset(size.width,size.height),1.5.dp.toPx(),pathEffect=PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(),4.dp.toPx())))} else Modifier).padding(vertical=6.dp),singleLine=true,enabled=enabled,textStyle=MaterialTheme.typography.bodyLarge.copy(fontSize=fontSize,fontWeight=FontWeight.SemiBold,color=c.textPrimary),cursorBrush=SolidColor(c.primary),keyboardOptions=KeyboardOptions(capitalization=KeyboardCapitalization.Sentences),decorationBox={inner->if(value.isBlank()) PText(label,style=MaterialTheme.typography.bodyMedium,muted=true);inner()})
 }
 
 @Composable private fun ListSheetGroup(content: @Composable ColumnScope.()->Unit) {Surface(color=AppTheme.colors.surfaceSunken,shape=RoundedCornerShape(14.dp)) {Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp),content=content)}}

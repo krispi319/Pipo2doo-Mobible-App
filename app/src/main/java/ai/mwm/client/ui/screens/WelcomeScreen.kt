@@ -29,7 +29,7 @@ fun shareLocalCode(context: Context, code: String) {
     context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "Pipo2doo partner invitation: $code. Enter this code in Pipo2doo before it expires. Pairing does not share health records."), "Share code"))
 }
 
-@Composable fun WelcomeScreen(state: PipoState, onStart: () -> Unit, onRegenerate: () -> Unit, onSetCode: (String) -> Unit, onConnect: (String,String) -> Unit = {_,_->}, onCheck: () -> Unit = {}, onSignOut: () -> Unit = {}, onChooseRole: (String) -> Unit = {}) {
+@Composable fun WelcomeScreen(state: PipoState, onStart: () -> Unit, onRegenerate: () -> Unit, onSetCode: (String) -> Unit, onConnect: (String,String) -> Unit = {_,_->}, onCheck: () -> Unit = {}, onSignOut: () -> Unit = {}, onChooseRole: (String) -> Unit = {}, onAccount: () -> Unit = {}) {
     val context = LocalContext.current
     var code by rememberSaveable { mutableStateOf("") }
     var error by rememberSaveable { mutableStateOf("") }
@@ -39,7 +39,7 @@ fun shareLocalCode(context: Context, code: String) {
     LazyWelcomeContent(display, code, { code = it.uppercase(Locale.ENGLISH).filter { char -> char in 'A'..'Z' || char in '0'..'9' }.take(6); error = "" }, error,
         { if(code.length!=6)error="That code has ${code.length} characters — space codes have 6." else if(!code.matches(Regex("[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}")))error="Use the six characters from your partner's invitation." else onConnect("join",code) },
         { if(canUseCode) { (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Partner invitation", connection.code)); android.widget.Toast.makeText(context, "Code copied", android.widget.Toast.LENGTH_SHORT).show() } },
-        { if(canUseCode) shareLocalCode(context, connection.code) }, onRegenerate, {onConnect("create","")}, onStart, onSignOut, onChooseRole, onCheck)
+        { if(canUseCode) shareLocalCode(context, connection.code) }, onRegenerate, {onConnect("create","")}, onStart, onSignOut, onChooseRole, onCheck, onAccount)
 
 }
 
@@ -47,7 +47,7 @@ fun shareLocalCode(context: Context, code: String) {
     state: PipoState, code: String, onCode: (String) -> Unit, error: String,
     onJoin: () -> Unit, onCopy: () -> Unit, onShare: () -> Unit,
     onRegenerate: () -> Unit, onCreate: () -> Unit, onLocal: () -> Unit,
-    onSignOut: () -> Unit, onChooseRole: (String) -> Unit, onCheck: () -> Unit
+    onSignOut: () -> Unit, onChooseRole: (String) -> Unit, onCheck: () -> Unit, onAccount: () -> Unit
 ) {
     val c = AppTheme.colors
     val connection = ai.mwm.client.cloud.LocalPartnerConnection.current
@@ -76,9 +76,20 @@ fun shareLocalCode(context: Context, code: String) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Duo(20.dp)
                 Spacer(Modifier.width(8.dp))
-                PText("Pipo2doo", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.weight(1f))
-                if(connection.authenticated) {
+                PText("Pipo2doo", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.width(8.dp))
+                if(!connection.authenticated) {
+                    // The pill is visually compact; the full 48dp-high area is tappable.
+                    Box(Modifier.width(88.dp).heightIn(min=48.dp)
+                        .semantics {contentDescription="Account · Log in or create an account"}
+                        .clickable(enabled=!connection.busy,role=Role.Button,onClick=onAccount),
+                        contentAlignment=Alignment.Center) {
+                        Surface(Modifier.fillMaxWidth().heightIn(min=32.dp),shape=CircleShape,
+                            color=c.surface,border=BorderStroke(1.dp,c.separator)) {
+                            Box(Modifier.padding(vertical=4.dp),contentAlignment=Alignment.Center) {PText("Account",style=MaterialTheme.typography.labelMedium,align=TextAlign.Center)}
+                        }
+                    }
+                } else {
                     IconButton(onSignOut, enabled = !connection.busy) {
                         Icon(Icons.Outlined.Logout, "Sign out and keep local data", tint = c.textSecondary, modifier = Modifier.size(20.dp))
                     }

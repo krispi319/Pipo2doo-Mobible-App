@@ -260,11 +260,13 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
     }
     private fun act(after: () -> Unit = {}, block: () -> Unit) {
         val account=AccountScope.current(getApplication())
+        val space=connection.value.spaceId
         viewModelScope.launch(Dispatchers.IO) { runCatching {
-            sync.mutate {check(account==AccountScope.current(getApplication())){"Account changed. Reopen this screen before editing."};block()};after()
+            sync.mutate {check(account==AccountScope.current(getApplication()) && space==connection.value.spaceId){"Account changed. Reopen this screen before editing."};block()};after()
         }.onFailure { errorState.value = ai.mwm.client.cloud.connectionError(it) } }
     }
     fun authenticate(email: String, password: String, signup: Boolean) = sync.authenticate(email,password,signup)
+    fun requestAuth() = sync.requestAuth()
     fun dismissAuth() = sync.dismissAuth()
     fun signOut() = sync.signOut()
     fun chooseRole(role: String) = sync.chooseRole(role)
@@ -290,13 +292,17 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
     fun save(task: Task) = act(after={event("task_saved")}) { repository.saveTask(task) }
 
     /** Editor callback always arrives on Main; it closes only if the remote write succeeded. */
+    private val pendingSaves=java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     fun saveWithResult(task: Task, onResult: (String?) -> Unit) {
         val account=AccountScope.current(getApplication())
+        val space=connection.value.spaceId
+        val operation="task:$account:$space:${task.id}"
+        if(!pendingSaves.add(operation)) {onResult("This task is already saving. Please wait before saving again.");return}
         viewModelScope.launch {
             val failure=try {
                 withContext(Dispatchers.IO) {
                     sync.mutate {
-                        check(account==AccountScope.current(getApplication())){"Account changed. Reopen this task before saving."}
+                        check(account==AccountScope.current(getApplication()) && space==connection.value.spaceId){"Account or partner changed. Reopen this task before saving."}
                         repository.saveTask(task)
                     }
                 }
@@ -304,6 +310,7 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
                 null
             } catch(e: CancellationException) { throw e }
               catch(e: Exception) { ai.mwm.client.cloud.connectionError(e) }
+              finally {pendingSaves.remove(operation)}
             if(failure!=null) errorState.value=failure
             onResult(failure)
         }
@@ -323,10 +330,17 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
     fun toggle(task: Task) = status(task.id, if(task.done) TaskStatus.Todo else TaskStatus.Done)
     fun delete(id: String) = act { repository.deleteTask(id) }
     fun preferences(update: (Preferences) -> Preferences) = act { repository.updateOwnPreferences(update) }
+    fun saveName(name:String,onResult:(String?)->Unit) = mutationWithResult(onResult,"profile-name",forceProfile=true) {
+        val clean=name.trim()
+        require(clean.isNotBlank() && clean.length<=40) {"Use a name between 1 and 40 characters."}
+        repository.updateOwnPreferences {it.copy(myName=clean)}
+    }
+
     fun setTogetherDate(day:Long,version:Long,onResult:(String?)->Unit) {
         val account=AccountScope.current(getApplication())
+        val space=connection.value.spaceId
         viewModelScope.launch {
-            val failure=try {withContext(Dispatchers.IO) {sync.setTogetherDate(day,version,account)};null}
+            val failure=try {withContext(Dispatchers.IO) {sync.setTogetherDate(day,version,account,space)};null}
                 catch(e:CancellationException) {throw e} catch(e:Exception) {ai.mwm.client.cloud.connectionError(e)}
             onResult(failure)
         }
@@ -337,7 +351,7 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
     fun setCode(code: String) = act { repository.change { it.copy(preferences = it.preferences.copy(code = code)) } }
     fun regenerate() = sync.connect("regenerate")
     fun saveList(list: SharedList) = act { repository.change { s -> s.copy(lists = if(s.lists.any { it.id == list.id }) s.lists.map { if(it.id == list.id) list.copy(name = list.name.trim()) else it } else s.lists + list.copy(name = list.name.trim())) } }
-    fun saveListWithResult(list: SharedList, onResult: (String?) -> Unit) = mutationWithResult(onResult) {
+    fun saveListWithResult(list: SharedList, onResult: (String?) -> Unit) = mutationWithResult(onResult,"list:${list.id}") {
         repository.change { s ->
             require(list.name.trim().isNotBlank()) { "List name is required." }
             val saved = list.copy(name = list.name.trim())
@@ -365,34 +379,42 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteTagWithResult(id: String, onResult: (String?) -> Unit) = mutationWithResult(onResult) {
         repository.change { s -> s.copy(tags = s.tags.filterNot { it.id == id }, tasks = s.tasks.map { it.copy(tags = it.tags - id) }) }
     }
-    private fun mutationWithResult(onResult: (String?) -> Unit, change: () -> Unit) {
+    private fun mutationWithResult(onResult: (String?) -> Unit, operationKey:String="", forceProfile:Boolean=false, change: () -> Unit) {
         val account=AccountScope.current(getApplication())
+        val space=connection.value.spaceId
+        val operation="$account:$space:$operationKey"
+        if(operationKey.isNotBlank() && !pendingSaves.add(operation)) {onResult("This item is already saving. Please wait before saving again.");return}
         viewModelScope.launch {
             val failure=try {
                 withContext(Dispatchers.IO) {
-                    sync.mutate {
-                        check(account==AccountScope.current(getApplication())){"Account changed. Reopen this screen before saving."}
+                    sync.mutate(forceProfile=forceProfile) {
+                        check(account==AccountScope.current(getApplication()) && space==connection.value.spaceId){"Account or partner changed. Reopen this screen before saving."}
                         change()
                     }
                 }
                 null
             } catch(e: CancellationException) { throw e }
               catch(e: Exception) { ai.mwm.client.cloud.connectionError(e) }
+              finally {if(operationKey.isNotBlank())pendingSaves.remove(operation)}
             if(failure!=null)errorState.value=failure
             onResult(failure)
         }
     }
     fun deleteTag(id: String) = act { repository.change { s -> s.copy(tags = s.tags.filterNot { it.id == id }, tasks = s.tasks.map { it.copy(tags = it.tags - id) }) } }
-    fun sendSupport(message: String,onResult: (String?)->Unit) {
+    fun sendSupport(id:String,at:Long,message: String,onResult: (String?)->Unit) {
         val account=AccountScope.current(getApplication())
         val target=connection.value.partnerUid
+        val space=connection.value.spaceId
         viewModelScope.launch {
             val failure=try {
                 withContext(Dispatchers.IO) {
+                    java.util.UUID.fromString(id)
+                    require(at>0) {"The support note needs a valid date."}
                     check(connection.value.paired && message.trim().length in 1..500) {"Connect your partner and write a support note first."}
                     sync.mutate {
-                        check(account==AccountScope.current(getApplication()) && target==connection.value.partnerUid) {"Account or partner changed. Reopen Care before sending."}
-                        repository.change {it.copy(notes=it.notes+Appreciation(kind="CareSupport",message=message.trim(),taskTitle=target))}
+                        check(account==AccountScope.current(getApplication()) && target==connection.value.partnerUid && space==connection.value.spaceId) {"Account or partner changed. Reopen Care before sending."}
+                        val note=Appreciation(id=id,at=at,kind="CareSupport",message=message.trim(),taskTitle=target)
+                        repository.change {it.copy(notes=it.notes.filterNot {existing->existing.id==id}+note)}
                     }
                 }
                 null
@@ -400,14 +422,16 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
             onResult(failure)
         }
     }
-    fun sendChatNote(id: String,kind: String,message: String,taskTitle: String,picture: String,replyTo: String,onResult: (String?)->Unit) {
-        val account=AccountScope.current(getApplication())
+    fun sendChatNote(id: String,kind: String,message: String,taskTitle: String,picture: String,replyTo: String,onResult: (String?)->Unit,expectedAccount:String?=null,expectedSpace:String?=null) {
+        val account=expectedAccount ?: AccountScope.current(getApplication())
+        val space=expectedSpace ?: connection.value.spaceId
+        if(account!=AccountScope.current(getApplication()) || space!=connection.value.spaceId) {onResult("Account or partner space changed. Reopen chat to retry.");return}
         val target=connection.value.partnerUid
         viewModelScope.launch {
             val failure=try {
                 require(kind in listOf("Message","Thank you","You're the best","Purr-fect")) {"Choose a message type."}
                 require(message.trim().length<=240 && (kind!="Message" || message.isNotBlank() || picture.isNotBlank())) {"Write a message or choose a picture."}
-                withContext(Dispatchers.IO) {sync.sendChatNote(Appreciation(id=id,kind=kind,message=message.trim(),taskTitle=taskTitle,picture=picture,replyTo=replyTo),account,target)}
+                withContext(Dispatchers.IO) {sync.sendChatNote(Appreciation(id=id,kind=kind,message=message.trim(),taskTitle=taskTitle,picture=picture,replyTo=replyTo),account,target,space)}
                 null
             } catch(e: CancellationException) {throw e} catch(e: Exception) {ai.mwm.client.cloud.connectionError(e)}
             onResult(failure)

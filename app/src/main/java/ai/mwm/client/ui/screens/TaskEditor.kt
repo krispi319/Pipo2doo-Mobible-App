@@ -39,11 +39,12 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.*
 import androidx.compose.ui.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 
-private val DraftSaver = listSaver<Task, Any>(save = { listOf(it.id, it.title, it.owner.name, it.day, it.minute ?: -1, it.listId, it.note, org.json.JSONArray(it.tags).toString(), it.repeat.name, it.reminder, it.offset, it.status.name, it.completedAt, it.parentId, it.assigneeUid, it.scheduledAt, it.scheduleZone, it.displayZone, it.seriesId) }, restore = { Task(id = it[0] as String, title = it[1] as String, owner = Owner.valueOf(it[2] as String), day = it[3] as Long, minute = (it[4] as Int).takeIf { m -> m >= 0 }, listId = it[5] as String, note = it[6] as String, tags = runCatching { org.json.JSONArray(it[7] as String).let { a -> (0 until a.length()).map { index -> a.getString(index) } } }.getOrElse { _ -> (it[7] as String).split(",").filter(String::isNotEmpty) }, repeat = Repeat.valueOf(it[8] as String), reminder = it[9] as Boolean, offset = it[10] as Int, status = TaskStatus.valueOf(it[11] as String), completedAt = it[12] as Long, parentId = it[13] as String, assigneeUid = it.getOrNull(14) as? String ?: "", scheduledAt = it.getOrNull(15) as? Long ?: 0L, scheduleZone = it.getOrNull(16) as? String ?: "", displayZone = it.getOrNull(17) as? String ?: "", seriesId = it.getOrNull(18) as? String ?: "") })
+internal val TaskDraftSaver = listSaver<Task, Any>(save = { listOf(it.id, it.title, it.owner.name, it.day, it.minute ?: -1, it.listId, it.note, org.json.JSONArray(it.tags).toString(), it.repeat.name, it.reminder, it.offset, it.status.name, it.completedAt, it.parentId, it.assigneeUid, it.scheduledAt, it.scheduleZone, it.displayZone, it.seriesId) }, restore = { Task(id = it[0] as String, title = it[1] as String, owner = Owner.valueOf(it[2] as String), day = it[3] as Long, minute = (it[4] as Int).takeIf { m -> m >= 0 }, listId = it[5] as String, note = it[6] as String, tags = runCatching { org.json.JSONArray(it[7] as String).let { a -> (0 until a.length()).map { index -> a.getString(index) } } }.getOrElse { _ -> (it[7] as String).split(",").filter(String::isNotEmpty) }, repeat = Repeat.valueOf(it[8] as String), reminder = it[9] as Boolean, offset = it[10] as Int, status = TaskStatus.valueOf(it[11] as String), completedAt = it[12] as Long, parentId = it[13] as String, assigneeUid = it.getOrNull(14) as? String ?: "", scheduledAt = it.getOrNull(15) as? Long ?: 0L, scheduleZone = it.getOrNull(16) as? String ?: "", displayZone = it.getOrNull(17) as? String ?: "", seriesId = it.getOrNull(18) as? String ?: "") })
 
 fun pickDay(context: android.content.Context, day: Long, onSelect: (Long) -> Unit) {
     val date = LocalDate.ofEpochDay(day)
@@ -57,12 +58,14 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable fun TaskEditor(task: Task?, state: PipoState, defaultList: String?, onClose: () -> Unit, onSave: (Task, (String?) -> Unit) -> Unit, onSaveTag: (Tag, (String?) -> Unit) -> Unit, onManageTags: () -> Unit, onNewList: () -> Unit, requestNotifications: () -> Unit, initialStatus: TaskStatus = TaskStatus.Todo) {
     val context = LocalContext.current
+    val focus = LocalFocusManager.current
     val c = AppTheme.colors
     val today = LocalDate.now(clockZone(state.preferences.clockZone)).toEpochDay()
-    var draft by rememberSaveable(task?.id, stateSaver = DraftSaver) { mutableStateOf(task ?: Task(listId = defaultList ?: state.lists.firstOrNull()?.id ?: "home", status = initialStatus, day = today, minute = null, reminder = true, offset = 0)) }
+    var draft by rememberSaveable(task?.id, stateSaver = TaskDraftSaver) { mutableStateOf(task ?: Task(listId = defaultList ?: state.lists.firstOrNull()?.id ?: "home", status = initialStatus, day = today, minute = null, reminder = true, offset = 0)) }
     var confirmClearNote by rememberSaveable { mutableStateOf(false) }
     var tagPicker by rememberSaveable { mutableStateOf(false) }
     var newTagName by rememberSaveable { mutableStateOf("") }
+    var tagDraftId by rememberSaveable { mutableStateOf(newId()) }
     var creatingTag by remember { mutableStateOf(false) }
     var tagError by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
@@ -97,10 +100,10 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
                 IconButton(onClick = onClose, enabled = !saving, modifier = Modifier.size(48.dp)) { Icon(Icons.Outlined.Close, "Close without saving", Modifier.size(22.dp), tint = c.textPrimary) }
                 Spacer(Modifier.weight(1f)); Duo(22.dp); Spacer(Modifier.width(8.dp)); PText(if(task == null) "New task" else "Edit task", style = MaterialTheme.typography.titleMedium)
             }
-            LazyColumn(Modifier.weight(1f), state=rememberLazyListState(), overscrollEffect=null, contentPadding = PaddingValues(20.dp, 0.dp, 20.dp, 20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            LazyColumn(Modifier.weight(1f).freezeWhileSaving(saving), state=rememberLazyListState(), overscrollEffect=null, contentPadding = PaddingValues(20.dp, 0.dp, 20.dp, 20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 item {
                     TaskCaption("What needs doing?")
-                    BasicTextField(draft.title, { draft = draft.copy(title = it.take(80)) }, Modifier.fillMaxWidth().drawBehind { drawLine(c.primary, Offset(0f, size.height), Offset(size.width, size.height), 2.dp.toPx()) }.padding(2.dp, 4.dp, 2.dp, 8.dp), textStyle = MaterialTheme.typography.headlineMedium.copy(fontSize = 28.sp, lineHeight = 34.sp, letterSpacing = (-.3).sp, fontWeight = FontWeight.Bold, color = c.textPrimary), keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences), maxLines = 4, decorationBox = { inner ->
+                    BasicTextField(draft.title, { draft = draft.copy(title = it.take(80)) }, Modifier.fillMaxWidth().drawBehind { drawLine(c.primary, Offset(0f, size.height), Offset(size.width, size.height), 2.dp.toPx()) }.padding(2.dp, 4.dp, 2.dp, 8.dp), textStyle = MaterialTheme.typography.headlineMedium.copy(fontSize = 28.sp, lineHeight = 34.sp, letterSpacing = (-.3).sp, fontWeight = FontWeight.Bold, color = c.textPrimary), enabled = !saving, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences), maxLines = 4, decorationBox = { inner ->
                         if(draft.title.isBlank()) PText("E.g. Water the basil", style = MaterialTheme.typography.headlineMedium.copy(fontSize = 28.sp, lineHeight = 34.sp), muted = true)
                         inner()
                     })
@@ -132,6 +135,7 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
                         TaskTime(draft.minute) { openDueTime() }
                         TaskSegments(Repeat.entries.map { it.label }, draft.repeat.ordinal, Modifier.weight(1f)) { draft = draft.copy(repeat = Repeat.entries[it]) }
                     }
+                    PText(taskScheduleHint(draft,state.preferences),Modifier.fillMaxWidth().padding(top=6.dp),MaterialTheme.typography.bodySmall,muted=true)
                 }
                 item {
                     TaskSectionLabel("Tags") { TaskQuietAction("Manage tags", onManageTags) }
@@ -219,7 +223,7 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
                     TaskSectionLabel("Private note") { PText("Optional · Only you see it", style = MaterialTheme.typography.bodySmall, muted = true) }
                     TaskNotePaper(Modifier.padding(start = 2.dp, end = 6.dp)) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { PText("Just for ${state.preferences.myName}", Modifier.weight(1f), MaterialTheme.typography.bodySmall, muted = true); TaskNoteCat() }
-                        BasicTextField(draft.note, { draft = draft.copy(note = it.take(240)) }, Modifier.fillMaxWidth(), textStyle = MaterialTheme.typography.bodyMedium.copy(color = c.textPrimary), keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences), decorationBox = { inner -> if(draft.note.isEmpty()) PText("Anything to remember…", muted = true); inner() })
+                        BasicTextField(draft.note, { draft = draft.copy(note = it.take(240)) }, Modifier.fillMaxWidth(), enabled = !saving, textStyle = MaterialTheme.typography.bodyMedium.copy(color = c.textPrimary), keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences), decorationBox = { inner -> if(draft.note.isEmpty()) PText("Anything to remember…", muted = true); inner() })
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { PText("${draft.note.length} / 240", Modifier.weight(1f), MaterialTheme.typography.bodySmall, muted = true); TextButton({ confirmClearNote = true }, enabled = draft.note.isNotEmpty()) { Text("Clear note", color = c.error, style = MaterialTheme.typography.labelLarge) } }
                     }
                 }
@@ -229,6 +233,7 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { TaskQuietAction("Cancel", {if(!saving) onClose()}) }
                 Button({
                     if(!saving) {
+                        focus.clearFocus()
                         saving=true
                         saveError=null
                         val submitted=draft.copy(tags=draft.tags.filter { id -> state.tags.any { it.id == id } })
@@ -245,15 +250,16 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
             }
         }
     }
-    if(tagPicker) AlertDialog(onDismissRequest = { tagPicker = false }, title = { PText("Add tag") }, text = {
+    if(tagPicker) AlertDialog(onDismissRequest = { if(!creatingTag)tagPicker = false }, title = { PText("Add tag") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if(state.tags.isEmpty()) PText("No tags yet. Create one below.", muted = true)
             state.tags.forEach { tag -> TaskChip(tag.name, tag.id in draft.tags) { draft = draft.copy(tags = if(tag.id in draft.tags) draft.tags - tag.id else draft.tags + tag.id) } }
             HorizontalDivider()
-            OutlinedTextField(newTagName, {newTagName=it.take(30)},label={PText("New tag")},singleLine=true)
+            OutlinedTextField(newTagName, {newTagName=it.take(30)},label={PText("New tag")},enabled=!creatingTag,singleLine=true)
             val duplicate=state.tags.any {it.name.equals(newTagName.trim(),true)}
             Button({
-                val tag=Tag(name=newTagName.trim())
+                if(creatingTag)return@Button
+                val tag=Tag(id=tagDraftId,name=newTagName.trim())
                 creatingTag=true
                 tagError=null
                 onSaveTag(tag) {failure ->
@@ -261,6 +267,7 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
                     if(failure==null) {
                         draft=draft.copy(tags=draft.tags+tag.id)
                         newTagName=""
+                        tagDraftId=newId()
                         tagPicker=false
                     } else tagError=failure
                 }
@@ -268,13 +275,14 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
             if(duplicate) PText("That tag already exists.",muted=true)
             if(tagError!=null) PText(tagError ?: "",style=MaterialTheme.typography.bodySmall)
         }
-    }, confirmButton = { TextButton({ tagPicker = false }) { PText("Done") } }, dismissButton = { TextButton({ tagPicker = false; onManageTags() }) { PText("Manage tags") } })
+    }, confirmButton = { TextButton({ tagPicker = false },enabled=!creatingTag) { PText("Done") } }, dismissButton = { TextButton({ tagPicker = false; onManageTags() },enabled=!creatingTag) { PText("Manage tags") } })
     if(confirmClearNote) AlertDialog(onDismissRequest = { confirmClearNote = false }, title = { PText("Clear this note?") }, text = { PText("Your task will stay. The note will be removed when you save.") }, confirmButton = { OutlinedButton({ draft = draft.copy(note = ""); confirmClearNote = false }) { PText("Clear note") } }, dismissButton = { OutlinedButton({ confirmClearNote = false }) { PText("Keep note") } })
 }
 
 @Composable fun TagManager(state: PipoState, onSave: (Tag, (String?) -> Unit) -> Unit, onDelete: (String, (String?) -> Unit) -> Unit, onClose: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var tagDraftId by rememberSaveable { mutableStateOf(newId()) }
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     var name by rememberSaveable { mutableStateOf("") }
     var deleteId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -286,10 +294,11 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
             OutlinedTextField(name, { name = it.take(30) }, enabled = !busy, label = { PText(if(editingId == null) "New tag" else "Rename tag") }, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences), singleLine = true, isError = duplicate, supportingText = { if(duplicate) PText("That tag already exists.") })
             Row {
                 Button({
+                    if(busy)return@Button
                     busy = true; error = null
-                    onSave(Tag(editingId ?: newId(), name.trim())) { failure ->
+                    onSave(Tag(editingId ?: tagDraftId, name.trim())) { failure ->
                         busy = false
-                        if(failure == null) { name = ""; editingId = null } else error = failure
+                        if(failure == null) { name = ""; editingId = null; tagDraftId=newId() } else error = failure
                     }
                 }, enabled = !busy && name.isNotBlank() && !duplicate) { PText(if(busy) "Saving…" else if(editingId == null) "Add tag" else "Rename") }
                 if(editingId != null) OutlinedButton({ editingId = null; name = "" }, enabled = !busy) { PText("Cancel edit") }
