@@ -2,12 +2,22 @@ name: Build APK
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing release tag, e.g. v1.4.1. Leave empty for the original test APK build.'
+        required: false
+        type: string
+        default: ''
+  release:
+    types: [published]
 
 permissions:
   contents: read
 
 jobs:
-  build:
+  test:
+    name: Build test APK (manual)
+    if: github.event_name == 'workflow_dispatch' && inputs.release_tag == ''
     runs-on: ubuntu-latest
     timeout-minutes: 40
 
@@ -72,3 +82,166 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
+
+  release:
+    name: Build signed release APK
+    if: github.event_name == 'release' || inputs.release_tag != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    concurrency:
+      group: release-apk-${{ github.event.release.tag_name || inputs.release_tag }}
+      cancel-in-progress: false
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+
+    steps:
+      - name: Validate release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+(\.[0-9]+){1,3}$ ]]; then
+            echo '::error::Use a stable numeric tag such as v1.4.1.'
+            exit 1
+          fi
+
+      - name: Download the tagged project
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Check required project files
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            gradlew
+            gradle/wrapper/gradle-wrapper.jar
+            mwm_private/app.properties
+            mwm_private/build_icon_generation.gradle.kts
+            mwm_private/build_screenshot_preview.gradle.kts
+            app/google-services.json
+            app/src/main/assets/supabase-client-config.json
+          )
+          for file in "${required[@]}"; do
+            if [[ ! -f "$file" ]]; then
+              echo "::error::Missing required project file: $file"
+              exit 1
+            fi
+          done
+
+      - name: Check original signing key is configured
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing Actions secret: $name. Use the original app signing key."
+              exit 1
+            fi
+          done
+
+      - name: Configure Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-36.1" \
+            "build-tools;36.0.0" \
+            "platform-tools"
+
+      - name: Install icon image tool
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y webp
+          cwebp -version
+
+      - name: Build release APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash ./gradlew :app:assembleRelease \
+            --no-daemon \
+            --stacktrace \
+            --max-workers=2 \
+            '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8'
+
+      - name: Check APK version and sign with original key
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          tools="$ANDROID_HOME/build-tools/36.0.0"
+          mapfile -t candidates < <(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk')
+          if [[ "${#candidates[@]}" -ne 1 ]]; then
+            echo '::error::Expected exactly one release APK.'
+            exit 1
+          fi
+          "$tools/aapt" dump badging "${candidates[0]}" > "$RUNNER_TEMP/pipo-apk-badging.txt"
+          python3 - <<'CHECK'
+          import os, pathlib, re
+          text=pathlib.Path(os.environ['RUNNER_TEMP'],'pipo-apk-badging.txt').read_text()
+          package=re.search(r"^package: name='([^']+)' versionCode='([0-9]+)' versionName='([^']+)'",text,re.M)
+          if not package:
+              raise SystemExit('Could not read the built APK version.')
+          if package.group(3)!=os.environ['RELEASE_TAG'][1:]:
+              raise SystemExit('Release tag does not match APK versionName. Update app/build.gradle.kts and create a release from that commit.')
+          if int(package.group(2))<=0:
+              raise SystemExit('APK versionCode must be positive.')
+          print('Built APK version matches the release tag.')
+          CHECK
+          mkdir -p "$RUNNER_TEMP/pipo-signing" dist
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/pipo-signing/original.jks"
+          "$tools/zipalign" -P 16 -f 4 "${candidates[0]}" "$RUNNER_TEMP/pipo-signing/aligned.apk"
+          apk="dist/Pipo2doo-${RELEASE_TAG}.apk"
+          "$tools/apksigner" sign \
+            --ks "$RUNNER_TEMP/pipo-signing/original.jks" \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            --ks-pass env:ANDROID_KEYSTORE_PASSWORD \
+            --key-pass env:ANDROID_KEY_PASSWORD \
+            --out "$apk" "$RUNNER_TEMP/pipo-signing/aligned.apk"
+          "$tools/apksigner" verify "$apk"
+          (cd dist && sha256sum "Pipo2doo-${RELEASE_TAG}.apk" > "Pipo2doo-${RELEASE_TAG}.apk.sha256")
+
+      - name: Attach signed APK to existing release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release upload "$RELEASE_TAG" \
+            "dist/Pipo2doo-${RELEASE_TAG}.apk" \
+            "dist/Pipo2doo-${RELEASE_TAG}.apk.sha256"
+
+      - name: Keep a workflow download copy
+        uses: actions/upload-artifact@v6
+        with:
+          name: Pipo2doo-${{ env.RELEASE_TAG }}-signed-APK
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Remove temporary signing material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/pipo-signing"
