@@ -37,31 +37,28 @@ import java.util.Locale
     val today = currentTaskDay(state.preferences.clockZone)
     val tasks = state.tasks.filter { (!it.done && it.day <= today) || (it.done && it.completedAt > 0 && Instant.ofEpochMilli(it.completedAt).atZone(clockZone(state.preferences.clockZone)).toLocalDate().toEpochDay() == today) }
     var clockTarget by rememberSaveable {mutableStateOf("")}
-    var coupleExpanded by rememberSaveable {mutableStateOf(false)}
     var locketExpanded by rememberSaveable {mutableStateOf(false)}
     LaunchedEffect(locketRequest) {if(locketRequest!=null)locketExpanded=true}
-    val done = tasks.count { it.done }
     val colors = AppTheme.colors
     LazyColumn(contentPadding = PaddingValues(top = 8.dp, bottom = 144.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
         item { Row(Modifier.fillMaxWidth().padding(20.dp,12.dp), verticalAlignment = Alignment.Top) { Column(Modifier.weight(1f)) { PText("Good morning, ${state.preferences.myName}", style = MaterialTheme.typography.labelLarge, muted = true); PText("Today", style = MaterialTheme.typography.headlineLarge) }; Surface(onClick = onReminders, modifier = Modifier.size(48.dp), shape = CircleShape, color = colors.surface, border = BorderStroke(1.dp, colors.separator), shadowElevation = 1.dp) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Outlined.NotificationsNone, "Notifications",Modifier.size(22.dp)); if(state.tasks.any { it.isOwnReminder() }) Box(Modifier.align(Alignment.TopEnd).padding(top=11.dp,end=12.dp).size(9.dp).background(colors.accent,CircleShape)) } } } }
         item {
-            TextButton({coupleExpanded=!coupleExpanded},Modifier.padding(horizontal=12.dp)) {
-                Icon(Icons.Outlined.FavoriteBorder,null,Modifier.size(18.dp));Spacer(Modifier.width(8.dp))
-                PText("${state.preferences.myName} & ${state.preferences.partnerName} · $done of ${tasks.size} done",Modifier.weight(1f))
-                Icon(if(coupleExpanded)Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,if(coupleExpanded)"Hide couple overview" else "Show couple overview")
-            }
-            if(coupleExpanded) TodayRings(state.preferences,tasks,filter,onClock={clockTarget=if(it==Owner.Me) "mine" else "partner"}) {filter=it}
-        }
-        item {
-            FlowRow(Modifier.padding(start=20.dp,end=20.dp,bottom=24.dp),horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) { (listOf("All") + Owner.entries.map { it.label }).forEach { label -> Pill("${if(label=="All") "All" else ownerName(Owner.valueOf(label),state.preferences)} · ${tasks.count { label == "All" || it.owner.label == label }}", filter == label, Owner.entries.find { it.label == label }?.let { ownerColor(it) } ?: colors.primary) { filter = label } } }
+            TodayRings(state.preferences,tasks,filter,onClock={clockTarget=if(it==Owner.Me) "mine" else "partner"}) {filter=it}
         }
         val shown = tasks.filter { filter == "All" || it.owner.label == filter }
-        item { Row(Modifier.fillMaxWidth().padding(start=20.dp,end=20.dp,bottom=12.dp),horizontalArrangement=Arrangement.SpaceBetween) { PText("Still to do",style=MaterialTheme.typography.titleMedium); PText("${shown.count { !it.done }} left",style=MaterialTheme.typography.bodySmall,muted=true) } }
-        items(shown.filterNot { it.done }.sortedWith(compareBy<Task> { it.day }.thenBy { it.minute ?: 1440 }), key = { it.id }) { task -> TaskRow(task, state, { onOpen(task.id) }, { onToggle(task) }) }
+        item { Row(Modifier.fillMaxWidth().padding(start=20.dp,end=20.dp,top=8.dp,bottom=10.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.weight(1f)) {
+                PText("Still to do",style=MaterialTheme.typography.titleMedium)
+                if(filter!="All")PText(ownerName(Owner.valueOf(filter),state.preferences),style=MaterialTheme.typography.labelSmall,muted=true)
+            }
+            if(filter!="All")TextButton({filter="All"}) {PText("All tasks",style=MaterialTheme.typography.labelMedium)}
+            PText("${shown.count { !it.done }} left",style=MaterialTheme.typography.bodySmall,muted=true)
+        } }
+        items(shown.filterNot { it.done }.sortedWith(compareBy<Task> { it.day }.thenBy { it.minute ?: 1440 }), key = { it.id }) { task -> TodayTaskRow(task,state,onOpen,onToggle) }
         if(shown.none { !it.done }) item { PText("A clear windowsill. Add a little task when you're ready.", Modifier.padding(24.dp), muted = true) }
         item { Row(Modifier.fillMaxWidth().padding(20.dp,12.dp),verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.spacedBy(12.dp)) { DashedRule(Modifier.weight(1f).padding(bottom=10.dp));ApprovedCat(Modifier.size(58.dp,44.dp)) } }
         if(shown.any { it.done }) item { Row(Modifier.fillMaxWidth().padding(20.dp,12.dp),horizontalArrangement=Arrangement.SpaceBetween) { PText("Done today",style=MaterialTheme.typography.titleMedium);PText("${shown.count { it.done }} finished",style=MaterialTheme.typography.bodySmall,muted=true) } }
-        items(shown.filter { it.done }.sortedByDescending { it.completedAt }, key = { it.id }) { task -> TaskRow(task, state, { onOpen(task.id) }, { onToggle(task) }) }
+        items(shown.filter { it.done }.sortedByDescending { it.completedAt }, key = { it.id }) { task -> TodayTaskRow(task,state,onOpen,onToggle) }
         item {
             TextButton({locketExpanded=!locketExpanded},Modifier.fillMaxWidth().padding(horizontal=12.dp)) {
                 Icon(Icons.Outlined.PhotoLibrary,null,Modifier.size(18.dp));Spacer(Modifier.width(8.dp));PText("Our Locket",Modifier.weight(1f))
@@ -77,6 +74,14 @@ import java.util.Locale
     }
 }
 
+
+@Composable private fun TodayTaskRow(task:Task,state:PipoState,onOpen:(String)->Unit,onToggle:(Task)->Unit) {
+    Box(Modifier.padding(horizontal=20.dp)) {
+        TaskRow(task,state,{onOpen(task.id)},{onToggle(task)},aligned=false) {
+            if(task.owner!=Owner.Me && !task.done)PokeButton(state.preferences.partnerName,task)
+        }
+    }
+}
 
 @Composable fun UpcomingScreen(state:PipoState,onOpen:(String)->Unit,onToggle:(Task)->Unit,onEdit:(String)->Unit,onCalendar:()->Unit={}) {
     UpcomingNotes(state,onOpen,onToggle,onEdit,onCalendar)

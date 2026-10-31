@@ -160,22 +160,6 @@ import kotlinx.coroutines.launch
     val userContent = remember(state, connection) { (state.tasks.flatMap { listOf(it.title,it.note,it.id,it.parentId) } + state.lists.flatMap {listOf(it.name,it.id)} + state.tags.flatMap {listOf(it.name,it.id)} + state.notes.flatMap {listOf(it.message,it.taskTitle,it.id)} + listOf(state.preferences.myName,state.preferences.partnerName,state.preferences.code,connection.code,connection.accountEmail,connection.uid)).filter {it.isNotBlank()}.toSet() }
     CompositionLocalProvider(LocalUserContent provides userContent, ai.mwm.client.cloud.LocalPartnerConnection provides connection, ai.mwm.client.cloud.LocalPartnerNote provides {kind,message,task,picture -> vm?.thank(kind,message,task,picture)}, ai.mwm.client.cloud.LocalPartnerPoke provides {task -> vm?.poke(task)}) {
     Scaffold(containerColor = AppTheme.colors.background,
-        topBar = {
-            if(connection.connected) {
-                Row(Modifier.fillMaxWidth().background(AppTheme.colors.surfaceSunken).padding(horizontal=14.dp,vertical=6.dp),verticalAlignment=Alignment.CenterVertically) {
-                    Icon(if(!connection.online)Icons.Outlined.CloudOff else if(connection.busy || pendingTaskCount>0)Icons.Outlined.CloudUpload else Icons.Outlined.CloudDone,null,Modifier.size(18.dp),tint=AppTheme.colors.textSecondary)
-                    Spacer(Modifier.width(8.dp))
-                    Text(when {
-                        !connection.online -> if(pendingTaskCount>0)"Offline · $pendingTaskCount task updates pending" else "Offline · Shared space not updated"
-                        connection.busy -> "Saving to shared space…"
-                        pendingTaskCount>0 -> "Saving $pendingTaskCount task updates…"
-                        connection.lastSyncedAt>0 -> "Shared space updated ${java.time.Instant.ofEpochMilli(connection.lastSyncedAt).atZone(clockZone(state.preferences.clockZone)).format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))}"
-                        else -> "Connected to shared space"
-                    },Modifier.weight(1f),style=MaterialTheme.typography.labelMedium)
-                    TextButton(onClick={vm?.checkConnection()},enabled=!connection.busy) { Text(if(connection.online)"Refresh" else "Retry") }
-                }
-            }
-        },
         snackbarHost = { SnackbarHost(snack) { data ->
         Snackbar(action = { data.visuals.actionLabel?.let { label -> TextButton(onClick = { data.performAction() }) { Text(appDisplayText(label)) } } }, dismissAction = { if(data.visuals.withDismissAction) IconButton(onClick = { data.dismiss() }) { Icon(Icons.Outlined.Close, "Dismiss message") } }) { Text(appDisplayText(data.visuals.message)) }
     } }, bottomBar = {
@@ -215,7 +199,7 @@ import kotlinx.coroutines.launch
                 tab == "Upcoming" -> screenStates.SaveableStateProvider("Upcoming") { UpcomingScreen(state, openTask, toggle, { id -> editId=id; editorOpen=true },{calendarOpen=true}) }
                 tab == "Lists" -> screenStates.SaveableStateProvider("Lists") { ListsScreen(state, { listId = it }, { editListId = null; listEditorOpen = true }, openTask, { vm?.saveList(it) }, toggle, {layout->vm?.preferences {it.copy(listLayout=layout)}}) }
                 tab == "Progress" -> ProgressScreen(state, openTask) { thanksFor = ""; notesOpen = true }
-                tab == "Us" -> SettingsScreen(state, allowed, { vm?.preferences(it) }, notificationControl, { if(allowed) { vm?.testReminder(); scope.launch { snack.showSnackbar("Test task created. Complete it to clear its reminder.") } } else { requestIfNeeded(); scope.launch { snack.showSnackbar("Enable notifications, then create your test task.") } } }, { tagsOpen = true }, { vm?.leaveConnection(); careVm?.refresh(); tab = "Today" }, { tab="Care" }, {vm?.resetWorkspace()}, {pairingOpen=true}, {vm?.checkConnection()}, {vm?.backupNow();careVm?.backupNow()}, {day,version,done->if(vm!=null)vm.setTogetherDate(day,version,done) else done("Run the app to save the date.")}, onSaveName={name,done->if(vm!=null)vm.saveName(name,done) else done("Run the app to save your name.")},onChatVisibility={vm?.setChatVisibility(it,connection.uid,connection.spaceId)})
+                tab == "Us" -> SettingsScreen(state, allowed, { vm?.preferences(it) }, notificationControl, { if(allowed) { vm?.testReminder(); scope.launch { snack.showSnackbar("Test task created. Complete it to clear its reminder.") } } else { requestIfNeeded(); scope.launch { snack.showSnackbar("Enable notifications, then create your test task.") } } }, { tagsOpen = true }, { vm?.leaveConnection(); careVm?.refresh(); tab = "Today" }, { tab="Care" }, {vm?.resetWorkspace()}, {pairingOpen=true}, {vm?.checkConnection()}, {vm?.backupNow();careVm?.backupNow()}, {day,version,done->if(vm!=null)vm.setTogetherDate(day,version,done) else done("Run the app to save the date.")}, onSaveName={name,done->if(vm!=null)vm.saveName(name,done) else done("Run the app to save your name.")},onChatVisibility={vm?.setChatVisibility(it,connection.uid,connection.spaceId)},pendingTaskCount=pendingTaskCount)
                 else -> screenStates.SaveableStateProvider("Today") { TodayScreen(state, openTask, toggle, { vm?.preferences(it) }, { remindersOpen = true }, { tab="Care" }, locketToOpen, {locketToOpen=null}) }
             }
         }

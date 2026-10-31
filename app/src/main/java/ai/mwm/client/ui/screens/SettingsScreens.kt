@@ -84,7 +84,7 @@ import kotlinx.coroutines.launch
 private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/60,minute%60)
 
 @OptIn(ExperimentalLayoutApi::class)
-@Composable fun SettingsScreen(state: PipoState, notificationsAllowed: Boolean, onPreferences: ((Preferences) -> Preferences) -> Unit, onEnable: () -> Unit, onTestReminder: () -> Unit, onTags: () -> Unit, onLeave: () -> Unit, onCare: () -> Unit = {}, onReset: () -> Unit = {}, onPair: () -> Unit = {}, onCheck: () -> Unit = {}, onBackup: () -> Unit = {},onTogetherDate:(Long,Long,(String?)->Unit)->Unit={day,_,done->onPreferences {it.copy(togetherSince=day)};done(null)},onSaveName:(String,(String?)->Unit)->Unit={_,done->done("Name saving is unavailable. Reopen your account settings.")},onChatVisibility:(Boolean)->Unit={}) {
+@Composable fun SettingsScreen(state: PipoState, notificationsAllowed: Boolean, onPreferences: ((Preferences) -> Preferences) -> Unit, onEnable: () -> Unit, onTestReminder: () -> Unit, onTags: () -> Unit, onLeave: () -> Unit, onCare: () -> Unit = {}, onReset: () -> Unit = {}, onPair: () -> Unit = {}, onCheck: () -> Unit = {}, onBackup: () -> Unit = {},onTogetherDate:(Long,Long,(String?)->Unit)->Unit={day,_,done->onPreferences {it.copy(togetherSince=day)};done(null)},onSaveName:(String,(String?)->Unit)->Unit={_,done->done("Name saving is unavailable. Reopen your account settings.")},onChatVisibility:(Boolean)->Unit={},pendingTaskCount:Int=0) {
     ApprovedDesign {
     val context=LocalContext.current
     val connection=ai.mwm.client.cloud.LocalPartnerConnection.current
@@ -133,6 +133,21 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
         item {Surface(shape=RoundedCornerShape(20.dp),color=c.surface,border=BorderStroke(1.dp,c.separator),shadowElevation=1.dp) {
             Row(Modifier.fillMaxWidth().padding(16.dp,14.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(6.dp)) {PText("Us & settings",style=MaterialTheme.typography.headlineLarge);Badge("${p.myName} & ${p.partnerName} · ${if(connection.paired) "Connected" else if(connection.connected) "Waiting" else "Local mode"}",c.secondary)};Duo(22.dp)
+            }
+        }}
+        if(connection.connected) item {SettingsGroup("Shared space") {
+            SettingsStack {
+                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    Icon(if(!connection.online)Icons.Outlined.CloudOff else if(connection.busy || pendingTaskCount>0)Icons.Outlined.CloudUpload else Icons.Outlined.CloudDone,null,Modifier.size(18.dp),tint=c.textSecondary)
+                    PText(when {
+                        !connection.online -> if(pendingTaskCount>0)"Offline · $pendingTaskCount task updates pending" else "Offline · Shared space not updated"
+                        connection.busy -> "Saving to shared space…"
+                        pendingTaskCount>0 -> "Saving $pendingTaskCount task updates…"
+                        connection.lastSyncedAt>0 -> "Shared space updated ${java.time.Instant.ofEpochMilli(connection.lastSyncedAt).atZone(clockZone(p.clockZone)).format(DateTimeFormatter.ofPattern("HH:mm"))}"
+                        else -> "Connected to shared space"
+                    },Modifier.weight(1f),style=MaterialTheme.typography.bodySmall,muted=true)
+                    TextButton(onCheck,enabled=!connection.busy) {PText(if(connection.online)"Refresh" else "Retry")}
+                }
             }
         }}
         item {Surface(shape=RoundedCornerShape(28.dp),color=c.secondary.copy(alpha=.1f).compositeOver(c.surface),border=BorderStroke(1.dp,c.separator),shadowElevation=1.dp) {

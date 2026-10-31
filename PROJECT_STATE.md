@@ -1,3 +1,26 @@
+# v1.4.3 replacement preparation (build 154) — 2026-10-31
+
+- Compact Today preview accepted by user. Restored full Create task form as the
+  default for new tasks; the earlier quick-add entry had hidden it behind More
+  options. Existing avatar choices, scheduling, repeat, tags, reminders, notes,
+  save callbacks and draft saver remain. Preview: verification/create-task-restored/.
+- Removed the couple-overview collapse toggle. Both avatar/timezone cards are always
+  visible on Today in shorter cards with consistent 20dp side margins.
+- Today task cards share those margins and use compact, left-aligned contents.
+  Completion, assignment colors and Poke controls remain. Duplicate name-filter
+  pills removed; avatar/Together cards filter tasks and All tasks resets the view.
+- Moved shared-space sync status and Refresh/Retry from the global page header into
+  Us & settings > Shared space, including saving/pending/offline state.
+- Full 183-test suite passed for build 154. Guard checks passed for replacement
+  ordering, changed-release/tag cancellation, and ordinary create/upload behavior.
+- User explicitly requested removal and replacement of old v1.4.3. The version
+  name stays 1.4.3; internal Android code increases from 153 to 154. Existing 1.4.3
+  users must download the replacement once because the old updater compares names.
+- Workflow now has an explicit replace_existing manual flag; it builds, signs,
+  verifies and saves the candidate APK before deleting the old release/repointing
+  its tag. Publication pending. Previews: verification/today-layout-fix/ and
+  verification/create-task-restored/. Evidence: verification/v143-replacement/.
+
 # Published v1.4.3 — 2026-10-31
 
 - Published release v1.4.2 points to ae9f669; build-script lint fix and signed APK

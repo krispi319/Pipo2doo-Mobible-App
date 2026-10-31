@@ -10,6 +10,11 @@ on:
         required: false
         type: string
         default: ''
+      replace_existing:
+        description: 'Explicitly replace the selected release from this branch, only after a signed APK is ready.'
+        required: false
+        type: boolean
+        default: false
   release:
     types: [published]
 
@@ -55,6 +60,9 @@ jobs:
           elif kind=='workflow_dispatch':
               tag=event.get('inputs',{}).get('release_tag','').strip()
               if tag:mode='upload'
+              if str(event.get('inputs',{}).get('replace_existing','false')).lower()=='true':
+                  if not tag:raise SystemExit('Replacement requires an existing release_tag.')
+                  mode,ref='replace',os.environ['GITHUB_SHA']
           if mode!='skip':
               if not re.fullmatch(r'v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)',tag):
                   raise SystemExit('Use a stable version tag such as v1.4.2.')
@@ -186,6 +194,12 @@ jobs:
                   raise SystemExit('This version/tag already exists. Use a NEW version in the release commit. For an existing release without an APK use the manual release_tag input.')
           elif release is None:
               raise SystemExit('The selected release does not exist. Create it first, or push a release commit for a new version.')
+          if os.environ['RELEASE_MODE']=='replace':
+              old_tag=get('git/ref/tags/'+tag)
+              if old_tag is None or release.get('immutable',False):
+                  raise SystemExit('Replacement needs an existing mutable release and tag.')
+              with open(os.environ['GITHUB_ENV'],'a') as out:
+                  out.write(f"REPLACED_RELEASE_ID={release['id']}\nREPLACED_TAG_SHA={old_tag['object']['sha']}\n")
           PY_DEST
 
       - name: Set up Java
@@ -315,7 +329,18 @@ jobs:
           set -euo pipefail
           apk="dist/Pipo2doo-${RELEASE_TAG}.apk"
           checksum="${apk}.sha256"
-          if [[ "$RELEASE_MODE" == 'create' ]]; then
+          if [[ "$RELEASE_MODE" == 'replace' ]]; then
+            current_id="$(gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG" --jq .id)"
+            current_sha="$(gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" --jq .object.sha)"
+            if [[ "$current_id" != "$REPLACED_RELEASE_ID" || "$current_sha" != "$REPLACED_TAG_SHA" ]]; then
+              echo '::error::Release changed during the build. Replacement canceled.'
+              exit 1
+            fi
+            source_commit="$(git rev-parse HEAD)"
+            gh release delete "$RELEASE_TAG" --yes
+            gh api --method PATCH "repos/$GH_REPO/git/refs/tags/$RELEASE_TAG" -f sha="$source_commit" -F force=true > /dev/null
+          fi
+          if [[ "$RELEASE_MODE" == 'create' || "$RELEASE_MODE" == 'replace' ]]; then
             source_commit="$(git rev-parse HEAD)"
             gh release create "$RELEASE_TAG" "$apk" "$checksum" \
               --target "$source_commit" \

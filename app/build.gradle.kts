@@ -24,7 +24,7 @@ android {
         applicationId = properties.getProperty("APPLICATION_ID", "")
         minSdk = 26
         targetSdk = 36
-        versionCode = 153
+        versionCode = 154
         versionName = "1.4.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

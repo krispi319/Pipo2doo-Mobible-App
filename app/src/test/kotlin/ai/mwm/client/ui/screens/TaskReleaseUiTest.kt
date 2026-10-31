@@ -24,22 +24,29 @@ class TaskReleaseUiTest {
     private val list=SharedList(id="home",name="Home")
     private val state=PipoState(lists=listOf(list),preferences=Preferences(myName="Alex",partnerName="Sam",started=true))
 
-    @Test fun compactTodayKeepsTasksVisibleAndLocketExpandable() {
+    @Test fun todayKeepsBothClocksVisibleWithoutOverviewToggle() {
         compose.setContent {CompositionLocalProvider(LocalInspectionMode provides true) {MyApplicationTheme {HomeScreen()}}}
-        compose.onNodeWithText("Still to do").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Show couple overview").assertExists()
-        compose.onRoot().captureRoboImage("build/outputs/roborazzi/v142-today.png")
+        compose.onNodeWithContentDescription("Show couple overview").assertDoesNotExist()
+        compose.onAllNodes(hasContentDescription("clock timezone",substring=true)).assertCountEquals(2)
+        compose.onAllNodes(hasContentDescription("clock timezone",substring=true))[0].assertIsDisplayed()
+        compose.onAllNodes(hasContentDescription("clock timezone",substring=true))[1].assertIsDisplayed()
+        compose.onNodeWithText("Shared space updated",substring=true).assertDoesNotExist()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/today-visible-overview.png")
+        compose.onNodeWithText("Still to do").performScrollTo().assertIsDisplayed()
     }
 
-    @Test fun quickAddDraftSurvivesMoreOptionsAndSaves() {
+    @Test fun createTaskOpensFullFormAndSaves() {
         var saved:Task?=null
         compose.setContent {MyApplicationTheme {
             TaskEditor(null,state,null,{}, {task,_,done->saved=task;done(null)}, {_,done->done(null)}, {}, {}, {})
         }}
-        compose.onNodeWithText("What needs doing?").performTextInput("Buy oat milk")
+        compose.onNodeWithText("Create task").assertIsDisplayed()
+        compose.onNodeWithText("More options").assertDoesNotExist()
+        compose.onAllNodes(hasSetTextAction()).onFirst().performTextInput("Buy oat milk")
         compose.waitForIdle()
-        compose.onRoot().captureRoboImage("build/outputs/roborazzi/v142-quick-add.png")
-        compose.onNodeWithText("More options").performClick()
+        compose.onNodeWithContentDescription("Assign to Alex").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Assign to Sam").assertIsDisplayed()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/create-task-restored.png")
         compose.onNodeWithText("Buy oat milk").assertExists()
         compose.onNodeWithText("Save task").performClick()
         compose.runOnIdle {assertEquals("Buy oat milk",saved?.title);assertEquals("home",saved?.listId)}

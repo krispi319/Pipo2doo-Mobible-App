@@ -70,7 +70,6 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
     var tagError by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
     var editScope by rememberSaveable(task?.id) {mutableStateOf(TaskEditScope.Occurrence.name)}
-    var fullEditor by rememberSaveable(task?.id) {mutableStateOf(task!=null || initialStatus!=TaskStatus.Todo)}
     var saveError by remember { mutableStateOf<String?>(null) }
     val presetOffsets = listOf(0, 10, 30, 60, 120, 1440, 2880)
     var customReminder by rememberSaveable { mutableStateOf(draft.offset !in presetOffsets) }
@@ -104,16 +103,12 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
             if(failure==null){if(submitted.reminder)requestNotifications();onClose()} else saveError=failure
         }
     }
-    if(!fullEditor) {
-        QuickTaskSheet(draft,state,saving,saveError,{draft=it},{submit()},{fullEditor=true},onClose,onNewList)
-        return
-    }
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = {if(!saving) onClose()}, sheetState = sheet, sheetGesturesEnabled = false, containerColor = c.surface, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp), dragHandle = null) {
         Column(Modifier.fillMaxWidth().fillMaxHeight(.98f).imePadding()) {
             Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 20.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onClose, enabled = !saving, modifier = Modifier.size(48.dp)) { Icon(Icons.Outlined.Close, "Close without saving", Modifier.size(22.dp), tint = c.textPrimary) }
-                Spacer(Modifier.weight(1f)); Duo(22.dp); Spacer(Modifier.width(8.dp)); PText(if(task == null) "New task" else "Edit task", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.weight(1f)); Duo(22.dp); Spacer(Modifier.width(8.dp)); PText(if(task == null) "Create task" else "Edit task", style = MaterialTheme.typography.titleMedium)
             }
             LazyColumn(Modifier.weight(1f).freezeWhileSaving(saving), state=rememberLazyListState(), overscrollEffect=null, contentPadding = PaddingValues(20.dp, 0.dp, 20.dp, 20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 if(task!=null && task.repeat!=Repeat.Once) item {
