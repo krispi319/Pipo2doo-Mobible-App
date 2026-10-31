@@ -10,4 +10,4 @@ failure handling, and save callback. Editing recurring tasks retains occurrence 
 
 Preview: create-task.png (native Compose, 360dp phone width, sample profiles).
 UI/save/avatar checks: ui-test-results.csv. Draft checks: draft-test-results.csv.
-Source changes are local and not yet included in a published APK.
+Included in the corrected v1.4.3 replacement APK, Android build 154.

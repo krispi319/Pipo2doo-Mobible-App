@@ -1,4 +1,4 @@
-# v1.4.3 replacement preparation (build 154) — 2026-10-31
+# Published corrected v1.4.3 (build 154) — 2026-10-31
 
 - Compact Today preview accepted by user. Restored full Create task form as the
   default for new tasks; the earlier quick-add entry had hidden it behind More
@@ -18,10 +18,13 @@
   users must download the replacement once because the old updater compares names.
 - Workflow now has an explicit replace_existing manual flag; it builds, signs,
   verifies and saves the candidate APK before deleting the old release/repointing
-  its tag. Publication pending. Previews: verification/today-layout-fix/ and
+  its tag. Workflow 41218115156 succeeded. Old release 429975230 was removed;
+  replacement 430040957 and tag v1.4.3 point to a1f159a. Downloaded APK independently
+  verified as 1.4.3 / 154 with a valid signature and matching checksum.
+  Previews: verification/today-layout-fix/ and
   verification/create-task-restored/. Evidence: verification/v143-replacement/.
 
-# Published v1.4.3 — 2026-10-31
+# Earlier v1.4.3 build 153 (superseded) — 2026-10-31
 
 - Published release v1.4.2 points to ae9f669; build-script lint fix and signed APK
   publication succeeded. Current version 1.4.3 / 153 published from 770e61d.

@@ -1,0 +1,10 @@
+{
+  "releaseId": 430040957,
+  "replacedReleaseId": 429975230,
+  "sourceCommit": "a1f159a5d0524a247fd609ceb7bc5a275db76fb1",
+  "versionName": "1.4.3",
+  "versionCode": 154,
+  "sha256": "fa00f0ebe313e5abd52d2d829751ddda3b6a41b28d1d174c99356b81bedf6e13",
+  "signatureVerified": true,
+  "package": "package: name='ai.mwm.android_2ebb28d1_fa04_4d16_89bf_06b0a18eff09' versionCode='154' versionName='1.4.3' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'"
+}

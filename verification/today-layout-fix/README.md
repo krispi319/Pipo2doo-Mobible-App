@@ -14,4 +14,4 @@ The screenshot uses sample profiles and a partner timezone that has not been set
 The existing profile-photo and timezone data paths are unchanged.
 
 Six existing Compose UI checks passed; per-class counts are in test-results.csv.
-These are local source changes, not a replacement for the published v1.4.3 APK.
+Included in the corrected v1.4.3 replacement APK, Android build 154.
