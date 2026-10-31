@@ -90,5 +90,5 @@ dependencies {
     testImplementation(libs.androidx.compose.ui.test.junit4)
 }
 
-apply(from = "../mwm_private/build_icon_generation.gradle.kts")
-apply(from = "../mwm_private/build_screenshot_preview.gradle.kts")
+apply(from = file("../mwm_private/build_icon_generation.gradle.kts"))
+apply(from = file("../mwm_private/build_screenshot_preview.gradle.kts"))
