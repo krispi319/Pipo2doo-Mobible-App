@@ -17,7 +17,7 @@ class RepositoryRegressionTest {
         repository = PipoRepository.get(RuntimeEnvironment.getApplication())
         repository.activateAccount("")
         repository.restoreLocal()
-        repository.change { PipoState() }
+        repository.change { PipoState(preferences=it.preferences) }
     }
     @Test fun completeCreatesExactlyOneNextOccurrence() {
         val task = Task(title = "Daily", repeat = Repeat.Weekly)

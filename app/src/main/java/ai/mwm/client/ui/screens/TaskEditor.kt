@@ -56,7 +56,7 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
-@Composable fun TaskEditor(task: Task?, state: PipoState, defaultList: String?, onClose: () -> Unit, onSave: (Task, (String?) -> Unit) -> Unit, onSaveTag: (Tag, (String?) -> Unit) -> Unit, onManageTags: () -> Unit, onNewList: () -> Unit, requestNotifications: () -> Unit, initialStatus: TaskStatus = TaskStatus.Todo) {
+@Composable fun TaskEditor(task: Task?, state: PipoState, defaultList: String?, onClose: () -> Unit, onSave: (Task, TaskEditScope, (String?) -> Unit) -> Unit, onSaveTag: (Tag, (String?) -> Unit) -> Unit, onManageTags: () -> Unit, onNewList: () -> Unit, requestNotifications: () -> Unit, initialStatus: TaskStatus = TaskStatus.Todo) {
     val context = LocalContext.current
     val focus = LocalFocusManager.current
     val c = AppTheme.colors
@@ -69,6 +69,8 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
     var creatingTag by remember { mutableStateOf(false) }
     var tagError by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
+    var editScope by rememberSaveable(task?.id) {mutableStateOf(TaskEditScope.Occurrence.name)}
+    var fullEditor by rememberSaveable(task?.id) {mutableStateOf(task!=null || initialStatus!=TaskStatus.Todo)}
     var saveError by remember { mutableStateOf<String?>(null) }
     val presetOffsets = listOf(0, 10, 30, 60, 120, 1440, 2880)
     var customReminder by rememberSaveable { mutableStateOf(draft.offset !in presetOffsets) }
@@ -93,6 +95,19 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
     LaunchedEffect(state.lists) {
         if(state.lists.isNotEmpty() && state.lists.none { it.id == draft.listId }) draft = draft.copy(listId = state.lists.first().id)
     }
+    fun submit() {
+        if(saving)return
+        focus.clearFocus();saving=true;saveError=null
+        val submitted=draft.copy(tags=draft.tags.filter {id->state.tags.any {it.id==id}})
+        onSave(submitted,TaskEditScope.valueOf(editScope)) {failure->
+            saving=false
+            if(failure==null){if(submitted.reminder)requestNotifications();onClose()} else saveError=failure
+        }
+    }
+    if(!fullEditor) {
+        QuickTaskSheet(draft,state,saving,saveError,{draft=it},{submit()},{fullEditor=true},onClose,onNewList)
+        return
+    }
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = {if(!saving) onClose()}, sheetState = sheet, sheetGesturesEnabled = false, containerColor = c.surface, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp), dragHandle = null) {
         Column(Modifier.fillMaxWidth().fillMaxHeight(.98f).imePadding()) {
@@ -101,6 +116,14 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
                 Spacer(Modifier.weight(1f)); Duo(22.dp); Spacer(Modifier.width(8.dp)); PText(if(task == null) "New task" else "Edit task", style = MaterialTheme.typography.titleMedium)
             }
             LazyColumn(Modifier.weight(1f).freezeWhileSaving(saving), state=rememberLazyListState(), overscrollEffect=null, contentPadding = PaddingValues(20.dp, 0.dp, 20.dp, 20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                if(task!=null && task.repeat!=Repeat.Once) item {
+                    TaskCaption("Apply changes to")
+                    Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                        FilterChip(selected=editScope==TaskEditScope.Occurrence.name,onClick={editScope=TaskEditScope.Occurrence.name},enabled=!saving,label={PText("Only this occurrence")})
+                        FilterChip(selected=editScope==TaskEditScope.Future.name,onClick={editScope=TaskEditScope.Future.name},enabled=!saving,label={PText("This and future occurrences")})
+                        PText("Future edits apply the title, assignee, list and tags. Dates and personal settings stay individual. Completed tasks keep their content and completion.",style=MaterialTheme.typography.bodySmall,muted=true)
+                    }
+                }
                 item {
                     TaskCaption("What needs doing?")
                     BasicTextField(draft.title, { draft = draft.copy(title = it.take(80)) }, Modifier.fillMaxWidth().drawBehind { drawLine(c.primary, Offset(0f, size.height), Offset(size.width, size.height), 2.dp.toPx()) }.padding(2.dp, 4.dp, 2.dp, 8.dp), textStyle = MaterialTheme.typography.headlineMedium.copy(fontSize = 28.sp, lineHeight = 34.sp, letterSpacing = (-.3).sp, fontWeight = FontWeight.Bold, color = c.textPrimary), enabled = !saving, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences), maxLines = 4, decorationBox = { inner ->
@@ -232,17 +255,7 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
             Row(Modifier.fillMaxWidth().padding(20.dp, 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { TaskQuietAction("Cancel", {if(!saving) onClose()}) }
                 Button({
-                    if(!saving) {
-                        focus.clearFocus()
-                        saving=true
-                        saveError=null
-                        val submitted=draft.copy(tags=draft.tags.filter { id -> state.tags.any { it.id == id } })
-                        onSave(submitted) {failure ->
-                            saving=false
-                            if(failure==null) {if(submitted.reminder) requestNotifications();onClose()}
-                            else saveError=failure
-                        }
-                    }
+                    submit()
                 }, enabled = !saving && !creatingTag && draft.title.isNotBlank() && state.lists.any { it.id == draft.listId }, modifier = Modifier.weight(1f).heightIn(min = 52.dp), shape = CircleShape) {
                     if(saving) CircularProgressIndicator(Modifier.size(18.dp),strokeWidth=2.dp)
                     else PText("Save task")

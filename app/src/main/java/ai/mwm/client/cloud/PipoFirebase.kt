@@ -141,6 +141,25 @@ class PipoFirebase private constructor(context: Context) {
         val canonical = task.canonicalSchedule()
         return write(task.id,"task",mapOf("seriesId" to task.seriesId,"scheduledAt" to canonical.scheduledAt,"scheduleZone" to canonical.scheduleZone,"title" to task.title,"listId" to task.listId,"day" to canonical.day,"minute" to canonical.minute,"repeat" to task.repeat.name,"status" to task.status.name,"tags" to task.tags,"parentId" to task.parentId,"completedAt" to task.completedAt),version,parent=task.parentId.ifBlank {task.listId}.takeIf {runCatching {UUID.fromString(it)}.isSuccess},assigned=assigned(task.owner,uid,partner))
     }
+    suspend fun saveTaskBatch(changed: List<Task>, deleted: List<Task>, uid: String, partner: String?, versions: Map<String,Long>, deletedLists: List<SharedList> = emptyList(), listVersions: Map<String,Long> = emptyMap()) {
+        check(uid==client.uid()) {"Account changed. Reopen this task."}
+        val changes=JSONArray()
+        for(t in changed+deleted) {
+            val canonical=t.canonicalSchedule()
+            val payload=JSONObject().put("seriesId",t.seriesId).put("scheduledAt",canonical.scheduledAt).put("scheduleZone",canonical.scheduleZone)
+                .put("title",t.title).put("listId",t.listId).put("day",canonical.day).put("minute",canonical.minute ?: JSONObject.NULL)
+                .put("repeat",t.repeat.name).put("status",t.status.name).put("tags",JSONArray(t.tags)).put("parentId",t.parentId).put("completedAt",t.completedAt)
+            val parent=t.parentId.ifBlank {t.listId}.takeIf {runCatching {UUID.fromString(it)}.isSuccess}
+            changes.put(JSONObject().put("id",t.id).put("payload",payload).put("parent",parent ?: JSONObject.NULL)
+                .put("assigned",assigned(t.owner,uid,partner) ?: JSONObject.NULL).put("version",versions[t.id] ?: 0)
+                .put("mutation",UUID.randomUUID().toString()).put("deleted",deleted.any {it.id==t.id}))
+        }
+        for(list in deletedLists) changes.put(JSONObject().put("id",list.id).put("kind","list")
+            .put("payload",JSONObject().put("name",list.name).put("emoji",list.emoji).put("pinned",list.pinned).put("pictures",JSONArray(list.pictures)))
+            .put("parent",JSONObject.NULL).put("assigned",assigned(list.owner,uid,partner) ?: JSONObject.NULL)
+            .put("version",listVersions[list.id] ?: 0).put("mutation",UUID.randomUUID().toString()).put("deleted",true))
+        client.rpc("mutate_shared_tasks",JSONObject().put("p_space",space()).put("p_changes",changes))
+    }
     private suspend fun delete(id: String,kind: String,version: Long): Map<String,Any?> {
         val r=records(space()).firstOrNull {it.getString("id")==id} ?: return emptyMap()
         return write(id,kind,map(r.getJSONObject("payload")),version,r.optString("parent_id").takeUnless {it=="null" || it.isBlank()},r.optString("assigned_to").takeUnless {it=="null" || it.isBlank()},true)

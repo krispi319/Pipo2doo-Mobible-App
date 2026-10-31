@@ -10,7 +10,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /** No demo imports, no health serialization, no persistent partner-data cache. */
-data class PartnerConnection(val busy: Boolean=false,val restoring: Boolean=false, val spaceId: String="", val uid: String="", val partnerUid: String="", val generation: String="", val code: String="", val expiresAt: Long=0, val message: String="Local mode · Sign in to connect with your partner", val online: Boolean=false, val pokeCooldowns: Map<String,Long> = emptyMap(), val needsAuth: Boolean=false, val pairingMessage: String="", val retryAt: Long=0, val authenticated: Boolean=false, val role: String="", val partnerRole: String="", val selectedRole: String="", val accountEmail: String="", val partnerAvatar: Int = -1,val togetherDateVersion:Long=0,val togetherDateKnown:Boolean=false) {
+data class PartnerConnection(val busy: Boolean=false,val restoring: Boolean=false, val spaceId: String="", val uid: String="", val partnerUid: String="", val generation: String="", val code: String="", val expiresAt: Long=0, val message: String="Local mode · Sign in to connect with your partner", val online: Boolean=false, val pokeCooldowns: Map<String,Long> = emptyMap(), val needsAuth: Boolean=false, val pairingMessage: String="", val retryAt: Long=0, val authenticated: Boolean=false, val role: String="", val partnerRole: String="", val selectedRole: String="", val accountEmail: String="", val partnerAvatar: Int = -1,val togetherDateVersion:Long=0,val togetherDateKnown:Boolean=false,val lastSyncedAt:Long=0) {
     val connected get() = spaceId.isNotBlank()
     val paired get() = connected && partnerUid.isNotBlank()
 }
@@ -177,6 +177,7 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
         val savedTags=tagRows.map {Tag(it["id"] as String,it["name"] as String)}
         val legacyTags=tasks.flatMap {it.tags}.distinct().filter {id -> savedTags.none {it.id==id} }.map {Tag(it,it)}
         repository.importRemote(current.copy(tasks=tasks,lists=lists,notes=notes,tags=savedTags+legacyTags,preferences=p))
+        mutable.value=mutable.value.copy(lastSyncedAt=System.currentTimeMillis())
         mutable.value=mutable.value.copy(togetherDateVersion=together?.let {n(it,"version")} ?: 0,togetherDateKnown=together!=null,role=role,partnerRole=partnerRole,selectedRole=role,spaceId=sid,uid=uid,partnerUid=partner,generation=generation,restoring=false,partnerAvatar=(other?.get("avatar") as? Number)?.toInt() ?: -1,authenticated=true,online=true,message=(if(partner.isBlank()) "Space created · Waiting for your partner" else "Partner connected · Synced")+profileNotice,code=if(partner.isBlank())mutable.value.code else "",expiresAt=if(partner.isBlank())mutable.value.expiresAt else 0)
         maintain(uid,sid,own==null)
     }
@@ -220,9 +221,15 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
             // Legacy tags have non-UUID IDs: retain their name IDs until the user replaces them.
             for(tag in renamedOrAdded) api.saveTag(tag,tagVersions[tag.id] ?: 0)
             fun sharedTask(t: Task)=t.canonicalSchedule().copy(note="",reminder=false,offset=0,events=emptyList())
-            for(t in next.tasks.filter {t->old.tasks.find {it.id==t.id}?.let {sharedTask(it)==sharedTask(t)}!=true}){api.saveTask(t,c.uid,c.partnerUid.ifBlank {null},taskVersions[t.id] ?: 0)}
-            for(t in old.tasks.filter {before->next.tasks.none {it.id==before.id}}.sortedByDescending(::depth))api.deleteTask(t.id,taskVersions[t.id] ?: 0)
-            for(l in old.lists.filter {before->next.lists.none {it.id==before.id}})api.deleteList(l.id,listVersions[l.id] ?: 0)
+            val changedTasks=next.tasks.filter {t->old.tasks.find {it.id==t.id}?.let {sharedTask(it)==sharedTask(t)}!=true}
+            val deletedTasks=old.tasks.filter {before->next.tasks.none {it.id==before.id}}.sortedByDescending(::depth)
+            val deletedLists=old.lists.filter {before->next.lists.none {it.id==before.id}}
+            if(changedTasks.size+deletedTasks.size+deletedLists.size>1) api.saveTaskBatch(changedTasks,deletedTasks,c.uid,c.partnerUid.ifBlank {null},taskVersions,deletedLists,listVersions)
+            else {
+                for(t in changedTasks) api.saveTask(t,c.uid,c.partnerUid.ifBlank {null},taskVersions[t.id] ?: 0)
+                for(t in deletedTasks) api.deleteTask(t.id,taskVersions[t.id] ?: 0)
+                for(l in deletedLists) api.deleteList(l.id,listVersions[l.id] ?: 0)
+            }
             for(tag in old.tags.filter {before -> next.tags.none {it.id==before.id} && tagVersions.containsKey(before.id)})api.deleteTag(tag.id,tagVersions[tag.id] ?: 0)
             for(note in old.notes.filter {before->next.notes.none {it.id==before.id}})api.call("deleteNote",mapOf("id" to note.id))
             var locketNotice=""

@@ -162,13 +162,7 @@ class PipoRepository private constructor(private val context: Context) {
     @Synchronized internal fun refreshDaily() {
         if(!remote && mutable.value.withDailyOccurrences()!=mutable.value) change {it}
     }
-    fun saveTask(task: Task) = change { s ->
-        val old = s.tasks.find { it.id == task.id }
-        val saved = task.withSavedSchedule(old, clockZone(s.preferences.clockZone)).copy(title = task.title.trim(), note = task.note.trim(), completedAt = if(task.done) { if(old?.done == true) old.completedAt else System.currentTimeMillis() } else 0L, events = (old?.events ?: emptyList()) + TaskEvent(if(old == null) "Created this task" else "Edited this task"))
-        val tasks = if(old == null) s.tasks + saved else s.tasks.map { if(it.id == saved.id) saved else it }
-        val next = if(saved.done && old?.done != true && saved.repeat==Repeat.Weekly) nextOccurrence(saved) else null
-        s.copy(tasks = tasks + if(next != null && tasks.none { it.parentId == saved.id }) listOf(next) else emptyList())
-    }
+    fun saveTask(task: Task, scope: TaskEditScope = TaskEditScope.Occurrence) = change {it.withTaskEdit(task,scope)}
     fun setStatus(id: String, status: TaskStatus) = change { s ->
         val task = s.tasks.find { it.id == id } ?: return@change s
         if(task.status == status) return@change s
@@ -212,6 +206,9 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
         else -> "$account:local"
     }
     private fun currentStatusScope()=statusScope(AccountScope.current(getApplication()),connection.value)
+    val pendingTaskCount: StateFlow<Int> = combine(statusOutbox.updates,connection,AccountScope.changes) {pending,c,account ->
+        if(pending.scope==statusScope(account,c))pending.items.size else 0
+    }.stateIn(viewModelScope,SharingStarted.Eagerly,0)
     val state: StateFlow<PipoState> = combine(repository.state,statusOutbox.updates,connection,AccountScope.changes) {confirmed,pending,c,account ->
         withPendingTaskStatuses(confirmed,pending,statusScope(account,c))
     }.stateIn(viewModelScope,SharingStarted.Eagerly,repository.state.value)
@@ -293,7 +290,7 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Editor callback always arrives on Main; it closes only if the remote write succeeded. */
     private val pendingSaves=java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
-    fun saveWithResult(task: Task, onResult: (String?) -> Unit) {
+    fun saveWithResult(task: Task, onResult: (String?) -> Unit, scope: TaskEditScope = TaskEditScope.Occurrence) {
         val account=AccountScope.current(getApplication())
         val space=connection.value.spaceId
         val operation="task:$account:$space:${task.id}"
@@ -303,7 +300,7 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
                 withContext(Dispatchers.IO) {
                     sync.mutate {
                         check(account==AccountScope.current(getApplication()) && space==connection.value.spaceId){"Account or partner changed. Reopen this task before saving."}
-                        repository.saveTask(task)
+                        repository.saveTask(task,scope)
                     }
                 }
                 event("task_saved")
@@ -319,7 +316,7 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
         val task=repository.state.value.tasks.find {it.id==id} ?: return
         val c=connection.value
         if(!ai.mwm.client.cloud.canEditTask(task,repository.state.value,c) || currentStatusScope().isBlank()) {
-            errorState.value="This task cannot be changed right now. Check its assignment and connection."
+            errorState.value="This task cannot be changed right now. Wait for syncing or reconnect and refresh."
             return
         }
         try {
@@ -329,6 +326,10 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun toggle(task: Task) = status(task.id, if(task.done) TaskStatus.Todo else TaskStatus.Done)
     fun delete(id: String) = act { repository.deleteTask(id) }
+    fun deleteWithResult(id: String, onResult: (String?) -> Unit) = mutationWithResult(onResult,"delete-task:$id") {repository.deleteTask(id)}
+    fun deleteListWithResult(id: String, onResult: (String?) -> Unit) = mutationWithResult(onResult,"delete-list:$id") {
+        repository.change {s->s.copy(lists=s.lists.filterNot {it.id==id},tasks=s.tasks.filterNot {it.listId==id})}
+    }
     fun preferences(update: (Preferences) -> Preferences) = act { repository.updateOwnPreferences(update) }
     fun saveName(name:String,onResult:(String?)->Unit) = mutationWithResult(onResult,"profile-name",forceProfile=true) {
         val clean=name.trim()

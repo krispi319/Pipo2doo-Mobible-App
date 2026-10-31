@@ -4,7 +4,13 @@ import ai.mwm.client.data.*
 import androidx.compose.runtime.saveable.SaverScope
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import android.app.Application
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk=[28],application=Application::class)
 class EditorDraftTest {
     private val scope=object:SaverScope {override fun canBeSaved(value:Any)=true}
     @Test fun completeTaskDraftSurvivesRecreationWithSameId() {

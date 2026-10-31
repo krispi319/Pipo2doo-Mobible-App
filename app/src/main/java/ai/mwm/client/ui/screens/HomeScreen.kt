@@ -37,6 +37,7 @@ import kotlinx.coroutines.launch
     val vm: PipoViewModel? = if(preview) null else viewModel()
     val state = vm?.state?.collectAsState()?.value ?: remember { seedState().copy(preferences = Preferences(started = true)) }
     val connection = vm?.connection?.collectAsState()?.value ?: ai.mwm.client.cloud.PartnerConnection()
+    val pendingTaskCount=vm?.pendingTaskCount?.collectAsState()?.value ?: 0
     var pairingOpen by rememberSaveable { mutableStateOf(false) }
     val careVm: CareViewModel? = if(preview) null else viewModel()
     val care = careVm?.state?.collectAsState()?.value
@@ -62,6 +63,8 @@ import kotlinx.coroutines.launch
     var listEditorOpen by rememberSaveable { mutableStateOf(false) }
     var editListId by rememberSaveable { mutableStateOf<String?>(null) }
     var deleteListConfirm by rememberSaveable { mutableStateOf<String?>(null) }
+    var deletingList by remember {mutableStateOf(false)}
+    var deleteListError by remember {mutableStateOf<String?>(null)}
     var permissionAsked by rememberSaveable { mutableStateOf(context.getSharedPreferences("pipo_permission_ui", 0).getBoolean("asked", false)) }
     var permissionVersion by remember { mutableIntStateOf(0) }
     val snack = remember { SnackbarHostState() }
@@ -150,12 +153,18 @@ import kotlinx.coroutines.launch
     CompositionLocalProvider(LocalUserContent provides userContent, ai.mwm.client.cloud.LocalPartnerConnection provides connection, ai.mwm.client.cloud.LocalPartnerNote provides {kind,message,task,picture -> vm?.thank(kind,message,task,picture)}, ai.mwm.client.cloud.LocalPartnerPoke provides {task -> vm?.poke(task)}) {
     Scaffold(containerColor = AppTheme.colors.background,
         topBar = {
-            if(connection.connected && !connection.online) {
+            if(connection.connected) {
                 Row(Modifier.fillMaxWidth().background(AppTheme.colors.surfaceSunken).padding(horizontal=14.dp,vertical=6.dp),verticalAlignment=Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.CloudOff,"Shared space offline",Modifier.size(18.dp),tint=AppTheme.colors.textSecondary)
+                    Icon(if(!connection.online)Icons.Outlined.CloudOff else if(connection.busy || pendingTaskCount>0)Icons.Outlined.CloudUpload else Icons.Outlined.CloudDone,null,Modifier.size(18.dp),tint=AppTheme.colors.textSecondary)
                     Spacer(Modifier.width(8.dp))
-                    Text("Shared space not synced",Modifier.weight(1f),style=MaterialTheme.typography.labelMedium)
-                    TextButton(onClick={vm?.checkConnection()}) { Text("Retry") }
+                    Text(when {
+                        !connection.online -> if(pendingTaskCount>0)"Offline · $pendingTaskCount task updates pending" else "Offline · Shared space not updated"
+                        connection.busy -> "Saving to shared space…"
+                        pendingTaskCount>0 -> "Saving $pendingTaskCount task updates…"
+                        connection.lastSyncedAt>0 -> "Shared space updated ${java.time.Instant.ofEpochMilli(connection.lastSyncedAt).atZone(clockZone(state.preferences.clockZone)).format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))}"
+                        else -> "Connected to shared space"
+                    },Modifier.weight(1f),style=MaterialTheme.typography.labelMedium)
+                    TextButton(onClick={vm?.checkConnection()},enabled=!connection.busy) { Text(if(connection.online)"Refresh" else "Retry") }
                 }
             }
         },
@@ -183,7 +192,7 @@ import kotlinx.coroutines.launch
                     TextButton({pairingOpen=true}) {PText("Account & sign in")}
                 }
                 !state.preferences.started || pairingOpen -> WelcomeScreen(state, { pairingOpen=false; vm?.start() }, { pairingOpen=true; vm?.regenerate() }, { vm?.setCode(it) }, {action,code->pairingOpen=true; vm?.connect(action,code)}, {vm?.checkConnection()}, {vm?.signOut()}, {vm?.chooseRole(it)}, onAccount={vm?.requestAuth()})
-                taskId != null && detail != null -> TaskDetailScreen(detail, state, { taskId = null }, { editId = detail.id; editorOpen = true }, { toggle(detail) }, { task -> if(task.reminder && !detail.reminder) requestIfNeeded(); vm?.save(task) }, { vm?.delete(detail.id); taskId = null }, { title -> taskId = null; thanksFor = title; notesOpen = true })
+                taskId != null && detail != null -> TaskDetailScreen(detail, state, { taskId = null }, { editId = detail.id; editorOpen = true }, { toggle(detail) }, { task -> if(task.reminder && !detail.reminder) requestIfNeeded(); vm?.save(task) }, {done -> if(vm!=null)vm.deleteWithResult(detail.id) {failure->done(failure);if(failure==null)taskId=null} else done("Run the app to delete a task.") }, { title -> taskId = null; thanksFor = title; notesOpen = true })
                 taskId != null -> Column(Modifier.padding(24.dp)) { PText(if(connection.connected && !connection.online) "Reconnecting · Waiting for a fresh task snapshot." else "This task is no longer available."); OutlinedButton({ taskId = null }) { PText("Back") } }
                 listId != null && list != null -> screenStates.SaveableStateProvider("list:$listId") { ListDetailScreen(list, state, { listId = null }, openTask, toggle, { id, status -> vm?.status(id, status) }, { id, status -> add(id, status) }, { editListId = list.id; listEditorOpen = true }, { deleteListConfirm = list.id }, { vm?.saveList(list.copy(pinned = !list.pinned)) }, {task,done -> if(vm!=null)vm.saveWithResult(task,done) else done(null)}, {vm?.saveList(it)}) }
                 calendarOpen -> TaskCalendarScreen(state,{calendarOpen=false},openTask)
@@ -203,7 +212,7 @@ import kotlinx.coroutines.launch
     if(connection.needsAuth) PairingSignInDialog(connection, {vm?.dismissAuth()}, {email,password,signup->vm?.authenticate(email,password,signup)})
     if(editorOpen) {
         val edited = state.tasks.find { it.id == editId }
-        TaskEditor(edited, state, addListId, { editorOpen = false }, {task,done -> if(vm!=null) vm.saveWithResult(task,done) else done(null) }, {tag,done -> if(vm!=null) vm.saveTagWithResult(tag,done) else done(null)}, { tagsOpen = true }, { editListId = null; listEditorOpen = true }, requestIfNeeded, TaskStatus.valueOf(addStatus))
+        TaskEditor(edited, state, addListId, { editorOpen = false }, {task,editScope,done -> if(vm!=null) vm.saveWithResult(task,done,editScope) else done(null) }, {tag,done -> if(vm!=null) vm.saveTagWithResult(tag,done) else done(null)}, { tagsOpen = true }, { editListId = null; listEditorOpen = true }, requestIfNeeded, TaskStatus.valueOf(addStatus))
     }
     if(tagsOpen) TagManager(state, { tag, done -> if(vm != null) vm.saveTagWithResult(tag, done) else done(null) }, { id, done -> if(vm != null) vm.deleteTagWithResult(id, done) else done(null) }, { tagsOpen = false })
     if(listEditorOpen) ListEditor(state.lists.find { it.id == editListId }, { list, done ->
@@ -212,6 +221,15 @@ import kotlinx.coroutines.launch
             done(failure)
         } else done(null)
     }, { listEditorOpen = false }, state.preferences)
-    deleteListConfirm?.let { id -> AlertDialog(onDismissRequest = { deleteListConfirm = null }, title = { PText("Delete this list?") }, text = { PText("All tasks in this list will be deleted and their reminders cleared.") }, confirmButton = { OutlinedButton({ vm?.deleteList(id); deleteListConfirm = null; listId = null }) { PText("Delete") } }, dismissButton = { OutlinedButton({ deleteListConfirm = null }) { PText("Cancel") } }) }
+    deleteListConfirm?.let { id -> AlertDialog(onDismissRequest = { if(!deletingList){deleteListConfirm=null;deleteListError=null} }, title = { PText("Delete this list?") }, text = {
+        Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+            PText("Delete “${state.lists.find {it.id==id}?.name ?: "this list"}” and ${state.tasks.count {it.listId==id}} tasks for both partners? Their reminders will be cleared. This cannot be undone.")
+            deleteListError?.let {PText(it,style=MaterialTheme.typography.bodySmall)}
+        }
+    }, confirmButton = { OutlinedButton({
+        deletingList=true;deleteListError=null
+        if(vm!=null)vm.deleteListWithResult(id) {failure->deletingList=false;if(failure==null){deleteListConfirm=null;listId=null} else deleteListError=failure}
+        else {deletingList=false;deleteListError="Run the app to delete a list."}
+    },enabled=!deletingList) { PText(if(deletingList) "Deleting…" else "Delete list and tasks") } }, dismissButton = { OutlinedButton({ deleteListConfirm=null;deleteListError=null },enabled=!deletingList) { PText("Cancel") } }) }
     }
 }

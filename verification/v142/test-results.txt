@@ -1,0 +1,13 @@
+v1.4.2 final verification — 2026-10-31
+Gradle: BUILD SUCCESSFUL, exit code 0 (separate temporary project cache)
+
+ai.mwm.client.cloud.MemberPermissionsTest: tests=7, failures=0, errors=0, skipped=0
+ai.mwm.client.data.DailyOccurrencesTest: tests=17, failures=0, errors=0, skipped=0
+ai.mwm.client.data.PendingTaskStatusTest: tests=13, failures=0, errors=0, skipped=0
+ai.mwm.client.data.RecurringTaskEditingTest: tests=11, failures=0, errors=0, skipped=0
+ai.mwm.client.data.RepositoryRegressionTest: tests=8, failures=0, errors=0, skipped=0
+ai.mwm.client.data.TaskScheduleTest: tests=14, failures=0, errors=0, skipped=0
+ai.mwm.client.ui.screens.EditorDraftTest: tests=4, failures=0, errors=0, skipped=0
+ai.mwm.client.ui.screens.TaskReleaseUiTest: tests=3, failures=0, errors=0, skipped=0
+Total: 77 tests, 0 failures.
+Supabase: deployed v142_atomic_task_edits; synthetic transaction checks passed before/after deployment; all fixtures rolled back.

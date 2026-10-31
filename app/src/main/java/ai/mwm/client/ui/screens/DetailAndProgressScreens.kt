@@ -57,7 +57,7 @@ import java.util.Locale
     }
 }
 
-@Composable fun TaskDetailScreen(task: Task, state: PipoState, onBack: () -> Unit, onEdit: () -> Unit, onToggle: () -> Unit, onSave: (Task) -> Unit, onDelete: () -> Unit, onThanks: (String) -> Unit) {
+@Composable fun TaskDetailScreen(task: Task, state: PipoState, onBack: () -> Unit, onEdit: () -> Unit, onToggle: () -> Unit, onSave: (Task) -> Unit, onDelete: ((String?) -> Unit) -> Unit, onThanks: (String) -> Unit) {
     val canEdit=ai.mwm.client.cloud.canEditTask(task,state,ai.mwm.client.cloud.LocalPartnerConnection.current)
     if(!canEdit) {
         LazyColumn(contentPadding=PaddingValues(bottom=24.dp)) {
@@ -65,7 +65,7 @@ import java.util.Locale
             item {Column(Modifier.padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 Badge("Read-only · ${ownerName(task.owner,state.preferences)}",ownerColor(task.owner))
                 PText(task.title,style=MaterialTheme.typography.headlineLarge,align=if(task.owner==Owner.You) TextAlign.End else TextAlign.Start)
-                PText("Only the assigned member can edit, complete or delete this task. Together tasks can be changed by both members.",style=MaterialTheme.typography.bodySmall,muted=true)
+                PText("Both partners can change shared tasks. Editing is temporarily unavailable; wait for syncing to finish or reconnect and refresh.",style=MaterialTheme.typography.bodySmall,muted=true)
             }}
             item {Sticky(Modifier.padding(start=52.dp,end=12.dp,top=26.dp,bottom=8.dp)) {PText("Little note",style=MaterialTheme.typography.labelSmall,muted=true);PText(task.note.ifBlank {"No note"});ApprovedCat(Modifier.size(64.dp,38.dp),"note")}}
             item {Paper(Modifier.padding(20.dp)) {PText("When & nudges",style=MaterialTheme.typography.titleMedium);PText("${dayText(task.day)} · ${timeText(task.minute)} · ${task.repeat.label}");PText("Lives in ${state.lists.find {it.id==task.listId}?.name ?: "a list"}",muted=true);PText("Your partner's personal reminders are private.",style=MaterialTheme.typography.bodySmall,muted=true)}}
@@ -78,6 +78,8 @@ import java.util.Locale
     var menu by remember { mutableStateOf(false) }
     var move by rememberSaveable { mutableStateOf(false) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    var deleting by remember(task.id) {mutableStateOf(false)}
+    var deleteError by remember(task.id) {mutableStateOf<String?>(null)}
     var scheduleExpanded by rememberSaveable { mutableStateOf(false) }
     var noteEditor by rememberSaveable(task.id) { mutableStateOf(false) }
     var noteDraft by rememberSaveable(task.id) { mutableStateOf("") }
@@ -144,7 +146,15 @@ import java.util.Locale
     }, confirmButton = { OutlinedButton({ move = false }) { PText("Cancel") } })
     if(noteEditor) AlertDialog(onDismissRequest = { noteEditor = false }, title = { PText("Edit little note") }, text = { OutlinedTextField(noteDraft, { noteDraft = it }, modifier = Modifier.fillMaxWidth(), label = { PText("Little note") }, minLines = 3) }, confirmButton = { OutlinedButton({ if(noteDraft.isBlank() && task.note.isNotBlank()) confirmNoteDelete = true else { onSave(task.copy(note = noteDraft)); noteEditor = false } }) { PText("Save note") } }, dismissButton = { OutlinedButton({ noteEditor = false }) { PText("Cancel") } })
     if(confirmNoteDelete) AlertDialog(onDismissRequest = { confirmNoteDelete = false }, title = { PText("Delete this note?") }, text = { PText("The task will stay. Only its little note will be removed.") }, confirmButton = { OutlinedButton({ onSave(task.copy(note = "")); confirmNoteDelete = false; noteEditor = false }) { PText("Delete note") } }, dismissButton = { OutlinedButton({ confirmNoteDelete = false }) { PText("Keep note") } })
-    if(confirmDelete) AlertDialog(onDismissRequest = { confirmDelete = false }, title = { PText("Delete this task?") }, text = { PText("Its reminder will be cleared. This won't remove other repeat occurrences.") }, confirmButton = { OutlinedButton({ confirmDelete = false; onDelete() }) { PText("Delete") } }, dismissButton = { OutlinedButton({ confirmDelete = false }) { PText("Cancel") } })
+    if(confirmDelete) AlertDialog(onDismissRequest = { if(!deleting)confirmDelete = false }, title = { PText("Delete this task?") }, text = {
+        Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+            PText("Delete “${task.title}” from the shared space for both partners? Its reminder will be cleared. Other existing occurrences will stay.")
+            deleteError?.let {PText(it,style=MaterialTheme.typography.bodySmall)}
+        }
+    }, confirmButton = { OutlinedButton({
+        deleting=true;deleteError=null
+        onDelete {failure->deleting=false;if(failure==null)confirmDelete=false else deleteError=failure}
+    },enabled=!deleting) { PText(if(deleting) "Deleting…" else "Delete for both") } }, dismissButton = { OutlinedButton({ confirmDelete = false },enabled=!deleting) { PText("Cancel") } })
 }
 
 @Composable fun ProgressScreen(state: PipoState, onTask: (String) -> Unit, onThanks: () -> Unit) {
