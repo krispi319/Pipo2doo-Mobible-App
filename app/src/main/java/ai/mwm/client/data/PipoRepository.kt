@@ -268,7 +268,14 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
     fun signOut() = sync.signOut()
     fun chooseRole(role: String) = sync.chooseRole(role)
     fun connect(action: String, code: String = "") = sync.connect(action,code)
-    fun checkConnection() = sync.check()
+    fun checkConnection() {sync.check();sync.retryPresence()}
+    fun setChatVisibility(visible:Boolean,uid:String=connection.value.uid,space:String=connection.value.spaceId) {
+        val account=AccountScope.current(getApplication())
+        viewModelScope.launch {
+        try {withContext(Dispatchers.IO){sync.setChatVisibility(visible,uid,space,account)}}
+        catch(e:CancellationException){throw e}
+        catch(e:Exception){errorState.value=ai.mwm.client.cloud.connectionError(e)}
+    }}
     fun backupNow() = sync.backupNow()
     fun resumeConnection() = sync.resume()
     fun pauseConnection() = sync.pause()
@@ -287,6 +294,10 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
     fun clearError() { errorState.value = null }
     fun event(name: String) { runCatching { SparkApplication.spark.analytics.logEvent(type = name) } }
     fun save(task: Task) = act(after={event("task_saved")}) { repository.saveTask(task) }
+    fun saveDetailWithResult(base:Task,edited:Task,onResult:(String?)->Unit) = mutationWithResult(onResult,"task:${base.id}") {
+        val current=repository.state.value.tasks.find {it.id==base.id} ?: error("This task is no longer available.")
+        repository.saveTask(mergeTaskDetailEdit(current,base,edited))
+    }
 
     /** Editor callback always arrives on Main; it closes only if the remote write succeeded. */
     private val pendingSaves=java.util.concurrent.ConcurrentHashMap.newKeySet<String>()

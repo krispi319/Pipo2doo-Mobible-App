@@ -94,7 +94,7 @@ private fun chatIcon(kind: String)=when(kind) {
     var chatStatus by remember(connection.uid,connection.spaceId) {mutableStateOf("")}
     var openPhoto by remember(connection.uid,connection.spaceId) {mutableStateOf<String?>(null)}
     LaunchedEffect(connection.uid,connection.spaceId,connection.paired,foreground,refreshKey) {
-        if(!connection.paired || !foreground) return@LaunchedEffect
+        if(!connection.paired || !foreground || inspection) return@LaunchedEffect
         val api=PipoFirebase.get(context)
         while(isActive) {
             try {
@@ -152,11 +152,15 @@ private fun chatIcon(kind: String)=when(kind) {
     val visibleIds by remember {
         derivedStateOf {listState.layoutInfo.visibleItemsInfo.mapNotNull {it.key as? String}.toSet()}
     }
+    LaunchedEffect(serverNotes,foreground,connection.uid,connection.spaceId) {
+        if(foreground && connection.paired && serverNotes!=null && owner==AccountScope.current(context) && currentConnection.spaceId==connection.spaceId)
+            ChatReadState.mark(context,connection.spaceId,ChatReadState.incoming(serverNotes.orEmpty()).map {it.id}.toSet(),owner)
+    }
     LaunchedEffect(visibleIds,foreground,pollTick,connection.uid,connection.spaceId,openPhoto,emojiOpen,reactionTarget,menu) {
         if(!foreground || !connection.paired || serverNotes==null || openPhoto!=null || emojiOpen || reactionTarget!=null || menu) return@LaunchedEffect
         val incoming=serverNotes.orEmpty().filter {it.owner==Owner.You && !it.sample && it.id in visibleIds && it.id !in acknowledged}.map {it.id}.toSet()
         if(incoming.isNotEmpty()) {
-            // Local unread badges, notification clearing and server Seen share one visibility rule.
+            // Server Seen and notification clearing require foreground-visible messages.
             if(owner==AccountScope.current(context) && currentConnection.spaceId==connection.spaceId) {
                 ChatReadState.mark(context,connection.spaceId,incoming)
                 val manager=context.getSystemService(android.app.NotificationManager::class.java)
@@ -199,7 +203,14 @@ private fun chatIcon(kind: String)=when(kind) {
         Row(Modifier.fillMaxWidth().padding(horizontal=12.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
             IconButton(onBack) {Icon(Icons.Outlined.ArrowBack,"Back")}
             ProfilePhoto(p.partnerPhoto,false,Modifier.size(40.dp))
-            Column(Modifier.weight(1f)) {Text(p.partnerName,style=MaterialTheme.typography.titleMedium,color=c.textPrimary,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis);PText(if(chatStatus.isNotBlank()) chatStatus else if(connection.paired) if(connection.online) "Our little chat ♡" else "Reconnecting…" else "Notes on this phone",style=MaterialTheme.typography.labelSmall,muted=true)}
+            Column(Modifier.weight(1f)) {
+                Text(p.partnerName,style=MaterialTheme.typography.titleMedium,color=c.textPrimary,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(5.dp)) {
+                    Box(Modifier.size(6.dp).background(if(connection.online && connection.chatPresence.known && connection.chatPresence.partnerOnline)c.success else c.textSecondary,CircleShape))
+                    PText(if(chatStatus.isNotBlank())chatStatus else partnerPresenceText(connection.paired,connection.online,connection.chatPresence),style=MaterialTheme.typography.labelSmall,muted=true)
+                }
+                if(connection.paired && connection.chatPresence.known)PText(if(!connection.chatPresence.visible)"You: Invisible" else if(connection.online)"You: Online" else "You: Offline",style=MaterialTheme.typography.labelSmall,muted=true)
+            }
             ApprovedCat(Modifier.size(46.dp,36.dp),"note")
         }
         HorizontalDivider(color=c.separator.copy(alpha=.5f))

@@ -1,4 +1,38 @@
-# Pipo2doo project state — v1.4.2 (2026-10-31)
+# v1.4.3 release preparation — 2026-10-31
+
+- Published release v1.4.2 points to ae9f669; build-script lint fix and signed APK
+  publication succeeded. Current local version is 1.4.3 / 153; publication is pending.
+- Pending source includes the avatar-only assignee circles and padded time button;
+  their existing previews are in verification/assignee-preview.
+- Chat unread badge now observes persisted markers, clears existing incoming IDs when
+  the foreground conversation opens, and counts newly arriving messages afterward.
+  Server Seen receipts still require actual foreground-visible messages.
+- Added Us > Chat visibility > Show online status; opt-in starts Invisible. Chat
+  header shows partner Online/Offline separately from the current user's visibility.
+- Foreground heartbeat every 20 seconds; background/sign-out attempts remove this
+  device's heartbeat. Interrupted sessions expire after 70 seconds. Invisible is
+  account-wide and hides timestamps across devices; status is partner-scoped.
+- Supabase migration v143_opt_in_chat_presence deployed: two RLS-protected tables,
+  owner-controlled preference, session membership FK and SECURITY INVOKER RPC.
+  Read-only permission/schema checks passed; security-advisor findings unchanged.
+- Full synthetic-account presence SQL behavior test passed and rolled back. See
+  verification/chat_presence_test.sql. Physical two-phone acceptance remains manual.
+- 29 selected chat/UI tests passed; previews and evidence in verification/chat-visibility.
+  Details and acceptance steps: verification/chat-visibility.md.
+- Task detail changes show saving/success/failure, preserve note/move drafts on failure,
+  and retry only the requested field changes while preserving newer partner edits.
+- Explicit Update now downloads, verifies and opens Android's installer; passive
+  checks never install. Android confirmation and first-use install permission remain.
+- Task reminders and visible task push alerts follow assignment: Me only, partner
+  only, or both for Together. Both members retain editing permissions. Silent sync
+  reaches the former assignee to cancel cached reminders when connected.
+- Supabase v143_assignment_scoped_task_notifications deployed. Synthetic rollback
+  tests passed: both individual assignments, Together, reassignment cancellation,
+  stale recipient rejection, silent sync, list independence, opt-out and completion.
+- 54 selected tests and then the full 183-test suite passed. Signed release pending.
+- Release evidence and device acceptance: verification/v143.md.
+
+# Earlier project state — v1.4.2 (2026-10-31)
 
 - Working checkout: D:\Krisative\Coding\Pipo2doo App\Pipo2doo-Mobible-App.
 - Android Kotlin / Jetpack Compose; version 1.4.2, version code 152.

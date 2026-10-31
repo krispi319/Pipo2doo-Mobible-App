@@ -50,7 +50,7 @@ class TaskScheduleTest {
   assertEquals(mine.dueAt()-1800000,mine.reminderAt());assertEquals(mine.reminderAt(),his.reminderAt())
  }
  @Test fun reminderKeyIgnoresDisplayZone() {val mine=task();assertEquals(mine.reminderKey,mine.inTaskZone(india).reminderKey)}
- @Test fun remindersIncludeBothAssignees() {for(owner in Owner.entries) assertTrue(task().copy(owner=owner).isOwnReminder());assertFalse(task().copy(status=TaskStatus.Done).isOwnReminder());assertFalse(task().copy(reminder=false).isOwnReminder())}
+ @Test fun remindersFollowAssignment() {assertTrue(task().copy(owner=Owner.Me).isOwnReminder());assertTrue(task().copy(owner=Owner.Together).isOwnReminder());assertFalse(task().copy(owner=Owner.You).isOwnReminder());assertFalse(task().copy(status=TaskStatus.Done).isOwnReminder());assertFalse(task().copy(reminder=false).isOwnReminder())}
  @Test fun recurrencePreservesAnchorAcrossDaylightSaving() {
   val mine=task("2026-10-24",1080).copy(repeat=Repeat.Daily)
   val next=nextOccurrence(mine,Instant.parse("2026-10-24T17:00:00Z").toEpochMilli())!!

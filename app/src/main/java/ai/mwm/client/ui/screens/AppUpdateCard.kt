@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalInspectionMode
@@ -21,7 +22,7 @@ import java.util.Locale
 
 @Composable internal fun AppUpdateCard(modifier:Modifier=Modifier) {
     val vm:AppUpdater?=if(LocalInspectionMode.current)null else viewModel()
-    val state=vm?.state?.collectAsState()?.value ?: UpdateState(installed="1.4.1")
+    val state=vm?.state?.collectAsState()?.value ?: UpdateState(installed=ai.mwm.client.BuildConfig.VERSION_NAME)
     val c=AppTheme.colors
     val lifecycle=LocalLifecycleOwner.current.lifecycle
     var open by remember {mutableStateOf(false)}
@@ -31,7 +32,7 @@ import java.util.Locale
         lifecycle.addObserver(observer)
         onDispose {lifecycle.removeObserver(observer)}
     }
-    Surface(onClick={open=true;vm?.startUpdate()},modifier=modifier,shape=RoundedCornerShape(20.dp),color=c.surface,border=BorderStroke(1.dp,c.separator),shadowElevation=1.dp) {
+    Surface(onClick={open=true;vm?.check()},modifier=modifier,shape=RoundedCornerShape(20.dp),color=c.surface,border=BorderStroke(1.dp,c.separator),shadowElevation=1.dp) {
         Column(Modifier.padding(12.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(8.dp,Alignment.CenterVertically)) {
             Surface(shape=RoundedCornerShape(15.dp),color=c.secondary.copy(alpha=.5f).compositeOver(c.surface)) {
                 Box(Modifier.size(48.dp),contentAlignment=Alignment.Center) {
@@ -43,7 +44,7 @@ import java.util.Locale
             PText("v${state.installed}",style=MaterialTheme.typography.labelSmall,muted=true)
         }
     }
-    if(open && vm!=null)UpdateDialog(vm,state){open=false}
+    if(open && vm!=null)UpdateDialog(vm,state){open=false;if(!state.busy)vm.deferInstallation()}
 }
 @Composable private fun UpdateDialog(vm:AppUpdater,state:UpdateState,onClose:()->Unit) {
     val c=AppTheme.colors
@@ -61,11 +62,35 @@ import java.util.Locale
             if(state.busy) {LinearProgressIndicator(modifier=Modifier.fillMaxWidth());state.progress?.let {PText("$it%",style=MaterialTheme.typography.labelSmall)}}
             if(state.message.isNotBlank())Text(state.message,color=if(state.error)c.error else c.textSecondary,style=MaterialTheme.typography.bodySmall)
             PText(if(state.busy && state.progress!=null)"You can close this window while the download continues." else "Your account and data stay. Android asks before installing.",style=MaterialTheme.typography.labelSmall,muted=true)
-            if(!state.busy && state.ready)TextButton({vm.startUpdate()}) {PText("Check for a newer release",style=MaterialTheme.typography.labelSmall)}
+            if(!state.busy && state.ready)TextButton({vm.check()}) {PText("Check for a newer release",style=MaterialTheme.typography.labelSmall)}
         }},confirmButton={
             if(state.busy)OutlinedButton({vm.cancel()}) {PText(if(state.progress!=null)"Cancel download" else "Cancel check")}
-            else Button(onClick={if(state.ready)vm.install() else vm.startUpdate()}) {
-                PText(when {state.ready->"Install update";state.error->"Retry";state.release!=null->"Download update";else->"Check for updates"})
+            else Button(onClick={if(state.ready)vm.install() else if(state.release!=null)vm.startUpdate() else vm.check()}) {
+                PText(when {state.ready->"Install update";state.error->"Retry";state.release!=null->"Update now";else->"Check for updates"})
             }
         },dismissButton={OutlinedButton(onClose){PText(if(state.busy)"Close" else "Not now")}},containerColor=c.surface,shape=RoundedCornerShape(28.dp))
+}
+
+/** Shares the settings updater. Only an explicit update request may open the installer. */
+@Composable internal fun AppUpdatePrompt(showNotice:Boolean) {
+    if(LocalInspectionMode.current)return
+    val vm:AppUpdater=viewModel()
+    val state by vm.state.collectAsState()
+    val lifecycle=LocalLifecycleOwner.current.lifecycle
+    var foreground by remember {mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))}
+    var dismissedTag by rememberSaveable {mutableStateOf("")}
+    LaunchedEffect(Unit){vm.checkOnce()}
+    DisposableEffect(lifecycle,vm) {
+        val observer=LifecycleEventObserver {_,event->
+            foreground=lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+            if(event==Lifecycle.Event.ON_RESUME)vm.resumeInstaller()
+        }
+        lifecycle.addObserver(observer)
+        onDispose {lifecycle.removeObserver(observer)}
+    }
+    LaunchedEffect(state.installPending,state.ready,state.busy,state.error,foreground) {
+        if(shouldOpenUpdateInstaller(state,foreground))vm.install()
+    }
+    if(showNotice && foreground && state.release!=null && !state.error && state.release!!.tag!=dismissedTag)
+        UpdateDialog(vm,state){dismissedTag=state.release?.tag.orEmpty();if(!state.busy)vm.deferInstallation()}
 }

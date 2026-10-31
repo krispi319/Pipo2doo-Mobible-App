@@ -47,11 +47,12 @@ object TaskPushNotifications {
                 TaskReminders.sync(context,current.copy(tasks=current.tasks.filterNot {it.id==task.id}+if(task.done) emptyList() else listOf(task)))
             }
             if(data.getString("kind") == "due") {
-                if(task.done || !task.reminder) return true
+                if(task.done || !task.isOwnReminder()) return true
                 // Shares TaskReminders' delivery key with the local alarm: one visible reminder, no double sound.
                 if(account == AccountScope.current(context)) TaskReminders.sync(context,current.copy(tasks=current.tasks.filterNot {it.id==task.id}+task))
                 return true
             }
+            if(task.owner==Owner.You || task.done || data.optBoolean("deleted"))return true
             NotificationSounds.ensure(context,CHANNEL,"Task assignments",NotificationManager.IMPORTANCE_HIGH,"New and reassigned tasks in your couple workspace")
             if(!PartnerPokeService.allowed(context,CHANNEL)) return true
             val actor = data.optString("actor").takeUnless {it == "null" || it.isBlank()}

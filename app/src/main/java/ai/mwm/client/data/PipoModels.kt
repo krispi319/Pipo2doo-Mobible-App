@@ -61,8 +61,8 @@ internal fun requireOwnPreferencesUpdate(current: Preferences, next: Preferences
     }
 }
 
-/** Both members may receive a reminder; editing permissions remain separate. */
-fun Task.isOwnReminder(): Boolean = reminder && !done
+/** Only the assignee receives reminders; Together includes both members. Editing stays shared. */
+fun Task.isOwnReminder(): Boolean = reminder && !done && owner!=Owner.You
 
 data class PipoState(val tasks: List<Task> = emptyList(), val lists: List<SharedList> = emptyList(), val tags: List<Tag> = emptyList(), val notes: List<Appreciation> = emptyList(), val preferences: Preferences = Preferences(), val skippedDaily: Set<String> = emptySet())
 

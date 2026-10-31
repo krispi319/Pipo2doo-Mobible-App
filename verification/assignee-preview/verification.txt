@@ -1,0 +1,9 @@
+Avatar and time-button preview checks — 2026-10-31
+
+ai.mwm.client.ui.screens.AssigneeAvatarPreviewTest : tests=4, failures=0, errors=0
+ai.mwm.client.ui.screens.TaskReleaseUiTest : tests=3, failures=0, errors=0
+Build successful, exit code 0.
+Sample photos and deliberately long names used for previews.
+Time label tested on 320dp screen with fontScale=1.5.
+Scope: avatar content in detail/editor assignee circles; flexible padding/height for detail time button.
+No version bump, commit, push or release publication performed.

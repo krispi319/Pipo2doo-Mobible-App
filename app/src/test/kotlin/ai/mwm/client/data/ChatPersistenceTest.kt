@@ -3,7 +3,13 @@ package ai.mwm.client.data
 import org.json.JSONArray
 import org.junit.Assert.*
 import org.junit.Test
+import android.app.Application
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk=[28],application=Application::class)
 class ChatPersistenceTest {
     private val owner="account-a"
     private val space="space-a"

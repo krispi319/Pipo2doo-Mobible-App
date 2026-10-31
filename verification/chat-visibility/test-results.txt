@@ -1,0 +1,14 @@
+Chat badge and visibility verification — 2026-10-31
+BUILD SUCCESSFUL; exit code 0.
+
+ai.mwm.client.data.ChatComposerPolicyTest: tests=9, failures=0, errors=0
+ai.mwm.client.data.ChatPresenceTest: tests=3, failures=0, errors=0
+ai.mwm.client.data.ChatPresentationTest: tests=4, failures=0, errors=0
+ai.mwm.client.data.ChatReadObserverTest: tests=2, failures=0, errors=0
+ai.mwm.client.data.ChatReadStateTest: tests=1, failures=0, errors=0
+ai.mwm.client.ui.screens.AssigneeAvatarPreviewTest: tests=4, failures=0, errors=0
+ai.mwm.client.ui.screens.ChatVisibilityUiTest: tests=3, failures=0, errors=0
+ai.mwm.client.ui.screens.TaskReleaseUiTest: tests=3, failures=0, errors=0
+Total: 29 tests, 0 failures.
+Supabase schema/RLS/role-privilege checks passed; advisor categories/counts unchanged.
+Full synthetic database behavior test NOT executed: Supabase SQL confirmation declined/expired.

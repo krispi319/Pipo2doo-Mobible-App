@@ -234,7 +234,7 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
                                 val allowed = TaskReminders.allowed(context)
                                 Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Box(Modifier.size(8.dp).background(if(allowed) c.success else c.warning, CircleShape))
-                                    PText(if(allowed) "Android notifications allowed · Shared task reminders on both phones" else "Android notifications off", style = MaterialTheme.typography.bodySmall, muted = true)
+                                    PText(if(allowed) "Android notifications allowed · Reminders follow task assignment" else "Android notifications off", style = MaterialTheme.typography.bodySmall, muted = true)
                                 }
                                 if(!allowed) TaskQuietAction("Enable notifications", requestNotifications)
                                 if(state.preferences.quietEnabled) PText("Task reminders arrive silently during your quiet hours.", style = MaterialTheme.typography.bodySmall, muted = true)

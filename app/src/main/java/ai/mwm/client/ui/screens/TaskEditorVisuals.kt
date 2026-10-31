@@ -18,6 +18,8 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -55,7 +57,7 @@ import androidx.compose.ui.unit.*
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(22.dp, Alignment.CenterHorizontally)) {
         listOf(Owner.Me, Owner.Together, Owner.You).forEach { value ->
             val color = ownerColor(value)
-            Column(Modifier.width(76.dp).selectable(value == owner, role = Role.RadioButton) { onChange(value) }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.width(76.dp).selectable(value == owner, role = Role.RadioButton) { onChange(value) }.semantics {contentDescription="Assign to ${ownerName(value,preferences)}"}, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box(Modifier.size(70.dp).drawBehind {
                     // The ring sits outside the fixed circle; selection never changes its bounds.
                     if(value == owner) drawCircle(color, size.width / 2 + 4.dp.toPx(), style = Stroke(2.dp.toPx()))
@@ -65,7 +67,8 @@ import androidx.compose.ui.unit.*
                         drawCircle(ink, 6.dp.toPx() - .75.dp.toPx(), Offset(6.dp.toPx(), 6.dp.toPx()), style = Stroke(1.5.dp.toPx()))
                         drawCircle(ink, 6.dp.toPx() - .75.dp.toPx(), Offset(16.dp.toPx(), 6.dp.toPx()), style = Stroke(1.5.dp.toPx()))
                     }
-                    Column(Modifier.padding(top = if(value == Owner.Together) 10.dp else 0.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    if(value!=Owner.Together) OwnerAvatar(value,preferences,Modifier.fillMaxSize().padding(4.dp))
+                    else Column(Modifier.padding(top = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         PText(if(value == Owner.Together) "Us" else value.label, style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp, lineHeight = 18.sp, fontWeight = if(value == owner) FontWeight.SemiBold else FontWeight.Medium))
                         PText(when(value) { Owner.Me -> preferences.myName; Owner.You -> preferences.partnerName; Owner.Together -> "Both" }, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 13.sp), align = TextAlign.Center)
                     }

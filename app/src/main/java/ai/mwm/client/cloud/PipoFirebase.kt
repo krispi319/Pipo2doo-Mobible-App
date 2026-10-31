@@ -17,6 +17,14 @@ class PipoFirebase private constructor(context: Context) {
     private val client=SupabaseClient(context)
     private val appContext=context.applicationContext
     suspend fun hasSession()=client.hasSession()
+    suspend fun chatPresence(expectedUid:String,expectedSpace:String,device:String,active:Boolean,visible:Boolean?=null):ChatPresence {
+        check(client.uid()==expectedUid) {"Account changed. Reopen your chat settings."}
+        val body=JSONObject().put("p_space",expectedSpace).put("p_device",device).put("p_active",active).put("p_expected_user",expectedUid)
+        if(visible!=null)body.put("p_visible",visible)
+        val response=obj(client.rpc("update_chat_presence",body))
+        check(client.uid()==expectedUid) {"Account changed. Reopen your chat settings."}
+        return ChatPresence(visible=response.getBoolean("visible"),partnerOnline=response.getBoolean("partner_online"),known=true)
+    }
     suspend fun authenticate(email: String,password: String,signup: Boolean)=client.authenticate(email,password,signup)
     suspend fun signOut()=client.signOut()
     private fun obj(value: Any?)=value as? JSONObject ?: error("Invalid Supabase response")

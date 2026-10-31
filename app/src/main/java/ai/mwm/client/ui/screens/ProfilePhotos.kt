@@ -31,7 +31,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
-@Composable fun ProfilePhoto(photo: String, me: Boolean, modifier: Modifier = Modifier, preset: Int = -1) {
+@Composable fun ProfilePhoto(photo: String, me: Boolean, modifier: Modifier = Modifier, preset: Int = -1, allowRetry: Boolean = true) {
     val context = LocalContext.current
     val connection=ai.mwm.client.cloud.LocalPartnerConnection.current
     val image=rememberSharedImage(photo,512)
@@ -41,7 +41,7 @@ import java.io.File
         if(bundledPicture(photo) != null) Image(painterResource(bundledPicture(photo)!!), "Sample profile photo", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         else if(bitmap != null) Image(bitmap.asImageBitmap(), "Profile photo", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         else if(image.result.loading) CircularProgressIndicator(Modifier.align(Alignment.Center).size(24.dp),strokeWidth=2.dp)
-        else if(image.result.failed) IconButton(image.retry,Modifier.align(Alignment.Center)) {Icon(Icons.Outlined.Refresh,"Retry profile picture")}
+        else if(image.result.failed && allowRetry) IconButton(image.retry,Modifier.align(Alignment.Center)) {Icon(Icons.Outlined.Refresh,"Retry profile picture")}
         else if(selectedPreset >= 0) KittyAvatar(Modifier.fillMaxSize().padding(4.dp), variant = selectedPreset)
         else Icon(Icons.Outlined.PersonOutline, localized("Empty avatar", LocalAppLanguage.current), Modifier.fillMaxSize().padding(12.dp), tint = AppTheme.colors.textSecondary)
     }

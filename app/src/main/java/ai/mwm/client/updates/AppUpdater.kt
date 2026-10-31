@@ -24,7 +24,7 @@ private const val MAX_APK_BYTES=262_144_000L
 private const val MAX_METADATA_BYTES=2_000_000
 
 data class UpdateState(val repository:String="",val installed:String="",val busy:Boolean=false,val progress:Int?=null,
-    val release:UpdateRelease?=null,val ready:Boolean=false,val message:String="",val error:Boolean=false)
+    val release:UpdateRelease?=null,val ready:Boolean=false,val message:String="",val error:Boolean=false,val installPending:Boolean=false)
 
 /** Public GitHub Releases only. An APK never replaces or exports account data. */
 class AppUpdater(app:Application):AndroidViewModel(app) {
@@ -39,12 +39,14 @@ class AppUpdater(app:Application):AndroidViewModel(app) {
     val state:StateFlow<UpdateState> = mutable
     private var checked=false
     private var downloadRequested=false
+    private var installAfterDownload=false
+    private var waitingForInstallPermission=false
     private var work:Job?=null
     @Volatile private var activeConnection:HttpURLConnection?=null
 
     /** Passive card composition only checks; an explicit tap also downloads the newer APK. */
     fun checkOnce(){if(!checked)check()}
-    fun startUpdate()=check(autoDownload=true)
+    fun startUpdate(){installAfterDownload=true;check(autoDownload=true)}
     fun check(autoDownload:Boolean=false) {
         if(mutable.value.busy){if(autoDownload)downloadRequested=true;return}
         downloadRequested=autoDownload
@@ -74,21 +76,26 @@ class AppUpdater(app:Application):AndroidViewModel(app) {
                 if(downloadRequested && !ready)downloadRelease(release)
             }catch(e:CancellationException){mutable.value=mutable.value.copy(progress=null,error=false,message="Update check or download cancelled");throw e}
             catch(e:Exception){mutable.value=mutable.value.copy(progress=null,error=true,message=e.message ?: "Could not check updates. Please retry.")}
-            finally {mutable.value=mutable.value.copy(busy=false);work=null;downloadRequested=false}
+            finally {
+                mutable.value=mutable.value.copy(busy=false,installPending=installAfterDownload && mutable.value.ready && !mutable.value.error)
+                work=null;downloadRequested=false;installAfterDownload=false
+            }
         }
     }
     fun download() {
         val release=mutable.value.release ?: return
         if(mutable.value.busy || mutable.value.ready)return
+        installAfterDownload=true
         mutable.value=mutable.value.copy(busy=true,error=false)
         work=viewModelScope.launch {
             try {downloadRelease(release)}
             catch(e:CancellationException){mutable.value=mutable.value.copy(progress=null,error=false,message="Download cancelled · Tap Retry when you’re ready");throw e}
             catch(e:Exception){mutable.value=mutable.value.copy(progress=null,error=true,message=e.message ?: "Download failed. Please retry.")}
-            finally {mutable.value=mutable.value.copy(busy=false);work=null;downloadRequested=false}
+            finally {mutable.value=mutable.value.copy(busy=false,installPending=installAfterDownload && mutable.value.ready && !mutable.value.error);work=null;downloadRequested=false;installAfterDownload=false}
         }
     }
-    fun cancel(){if(mutable.value.busy){work?.cancel();runCatching {activeConnection?.disconnect()}}}
+    fun cancel(){installAfterDownload=false;waitingForInstallPermission=false;mutable.value=mutable.value.copy(installPending=false);if(mutable.value.busy){work?.cancel();runCatching {activeConnection?.disconnect()}}}
+    fun deferInstallation(){installAfterDownload=false;waitingForInstallPermission=false;mutable.value=mutable.value.copy(installPending=false)}
     private suspend fun downloadRelease(release:UpdateRelease) {
         mutable.value=mutable.value.copy(progress=0,ready=false,error=false,message="Downloading update…")
         withContext(Dispatchers.IO) {
@@ -152,14 +159,20 @@ class AppUpdater(app:Application):AndroidViewModel(app) {
         val problem=updatePackageProblem(current.packageName,code(current),signers(current),next.packageName,code(next),signers(next),releaseTag,next.versionName.orEmpty())
         require(problem==null){problem ?: "Update verification failed."}
     }
-    /** Called on return from Android's permission screen; installation remains a visible tap. */
+    /** Continue an explicit update after permission; Android still asks for confirmation. */
     fun resumeInstaller() {
-        if(mutable.value.ready && !mutable.value.busy)mutable.value=mutable.value.copy(error=false,message=if(Build.VERSION.SDK_INT<26 || context.packageManager.canRequestPackageInstalls())"Ready · Tap Install update to continue" else "Allow Pipo2doo to install updates, then return here")
+        if(mutable.value.ready && !mutable.value.busy) {
+            val allowed=Build.VERSION.SDK_INT<26 || context.packageManager.canRequestPackageInstalls()
+            val resume=waitingForInstallPermission && allowed
+            if(resume)waitingForInstallPermission=false
+            mutable.value=mutable.value.copy(error=false,installPending=mutable.value.installPending || resume,
+                message=if(allowed)"Ready to install · Android will ask for confirmation" else "Allow Pipo2doo to install updates, then return here")
+        }
     }
     fun install() {
         val release=mutable.value.release ?: return
         if(!mutable.value.ready || mutable.value.busy)return
-        mutable.value=mutable.value.copy(busy=true,progress=null,error=false,message="Checking the downloaded update…")
+        mutable.value=mutable.value.copy(busy=true,progress=null,error=false,installPending=false,message="Checking the downloaded update…")
         work=viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO){
@@ -167,8 +180,9 @@ class AppUpdater(app:Application):AndroidViewModel(app) {
                     require(sameUpdateAsset(saved,release)){"The downloaded update changed. Tap Retry to check again."}
                 }
                 if(Build.VERSION.SDK_INT>=26 && !context.packageManager.canRequestPackageInstalls()) {
+                    waitingForInstallPermission=true
                     context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    mutable.value=mutable.value.copy(message="Allow Pipo2doo to install updates, return here, then tap Install update.")
+                    mutable.value=mutable.value.copy(message="Allow Pipo2doo to install updates, then return here to continue.")
                     return@launch
                 }
                 val uri=FileProvider.getUriForFile(context,context.packageName+".updates",apk)

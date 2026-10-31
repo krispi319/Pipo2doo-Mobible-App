@@ -84,7 +84,7 @@ import kotlinx.coroutines.launch
 private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/60,minute%60)
 
 @OptIn(ExperimentalLayoutApi::class)
-@Composable fun SettingsScreen(state: PipoState, notificationsAllowed: Boolean, onPreferences: ((Preferences) -> Preferences) -> Unit, onEnable: () -> Unit, onTestReminder: () -> Unit, onTags: () -> Unit, onLeave: () -> Unit, onCare: () -> Unit = {}, onReset: () -> Unit = {}, onPair: () -> Unit = {}, onCheck: () -> Unit = {}, onBackup: () -> Unit = {},onTogetherDate:(Long,Long,(String?)->Unit)->Unit={day,_,done->onPreferences {it.copy(togetherSince=day)};done(null)},onSaveName:(String,(String?)->Unit)->Unit={_,done->done("Name saving is unavailable. Reopen your account settings.")}) {
+@Composable fun SettingsScreen(state: PipoState, notificationsAllowed: Boolean, onPreferences: ((Preferences) -> Preferences) -> Unit, onEnable: () -> Unit, onTestReminder: () -> Unit, onTags: () -> Unit, onLeave: () -> Unit, onCare: () -> Unit = {}, onReset: () -> Unit = {}, onPair: () -> Unit = {}, onCheck: () -> Unit = {}, onBackup: () -> Unit = {},onTogetherDate:(Long,Long,(String?)->Unit)->Unit={day,_,done->onPreferences {it.copy(togetherSince=day)};done(null)},onSaveName:(String,(String?)->Unit)->Unit={_,done->done("Name saving is unavailable. Reopen your account settings.")},onChatVisibility:(Boolean)->Unit={}) {
     ApprovedDesign {
     val context=LocalContext.current
     val connection=ai.mwm.client.cloud.LocalPartnerConnection.current
@@ -250,6 +250,25 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
                         val minute=if(start) p.quietStart else p.quietEnd
                         Surface(onClick={pickTime(context,minute) {value->onPreferences {if(start) it.copy(quietStart=value) else it.copy(quietEnd=value)}}},modifier=Modifier.weight(1f).semantics {contentDescription="Quiet hours ${if(start) "start" else "end"}, ${clock(minute)}"},shape=RoundedCornerShape(14.dp),color=c.surface,border=BorderStroke(1.dp,c.separator)) {Column(Modifier.padding(14.dp,8.dp),horizontalAlignment=if(start) Alignment.Start else Alignment.End) {PText(if(start) "From" else "Until",style=MaterialTheme.typography.labelSmall,muted=true);PText(clock(minute),style=MaterialTheme.typography.headlineSmall)}}
                     }
+                }
+            }
+        }}
+        item {SettingsGroup("Chat visibility","Online or invisible") {
+            SettingsRow(Icons.Outlined.ChatBubbleOutline,"Show online status",when {
+                !connection.paired -> "Connect your partner to choose your visibility"
+                connection.chatPresence.saving -> "Saving visibility…"
+                !connection.chatPresence.known -> "Checking online status…"
+                connection.chatPresence.visible -> "Online while this app is active and connected"
+                else -> "Invisible · Your partner won't see when you're online"
+            },c.secondary) {
+                Switch(connection.chatPresence.visible,onChatVisibility,enabled=connection.paired && connection.online && connection.chatPresence.known && !connection.chatPresence.saving,
+                    modifier=Modifier.semantics {contentDescription="Show online status"})
+            }
+            SettingsStack {
+                PText("Invisible hides your activity on all your devices. Your partner sees Offline. Messages and read receipts still work normally.",style=MaterialTheme.typography.bodySmall,muted=true)
+                if(connection.chatPresence.error.isNotBlank()) {
+                    PText(connection.chatPresence.error,style=MaterialTheme.typography.bodySmall)
+                    TextButton(onCheck,enabled=!connection.chatPresence.saving) {PText("Retry status")}
                 }
             }
         }}

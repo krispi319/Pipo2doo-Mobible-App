@@ -24,9 +24,10 @@ class TaskModelRegressionTest {
     @Test fun invalidDefaultIsClamped() {
         assertEquals(at(1439), Task(day = day).reminderAt(9000, zone))
     }
-    @Test fun bothMembersCanReceiveTaskReminders() {
-        assertTrue(Task(owner = Owner.You, reminder = true).isOwnReminder())
+    @Test fun onlyAssignedMemberOrTogetherReceivesTaskReminders() {
+        assertFalse(Task(owner = Owner.You, reminder = true).isOwnReminder())
         assertTrue(Task(owner = Owner.Me, reminder = true).isOwnReminder())
+        assertTrue(Task(owner = Owner.Together, reminder = true).isOwnReminder())
         assertFalse(Task(owner = Owner.Me, reminder = true, status = TaskStatus.Done).isOwnReminder())
     }
     @Test fun onceHasNoNextOccurrence() {

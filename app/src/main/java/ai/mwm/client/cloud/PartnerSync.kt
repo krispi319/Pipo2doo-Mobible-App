@@ -10,7 +10,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /** No demo imports, no health serialization, no persistent partner-data cache. */
-data class PartnerConnection(val busy: Boolean=false,val restoring: Boolean=false, val spaceId: String="", val uid: String="", val partnerUid: String="", val generation: String="", val code: String="", val expiresAt: Long=0, val message: String="Local mode · Sign in to connect with your partner", val online: Boolean=false, val pokeCooldowns: Map<String,Long> = emptyMap(), val needsAuth: Boolean=false, val pairingMessage: String="", val retryAt: Long=0, val authenticated: Boolean=false, val role: String="", val partnerRole: String="", val selectedRole: String="", val accountEmail: String="", val partnerAvatar: Int = -1,val togetherDateVersion:Long=0,val togetherDateKnown:Boolean=false,val lastSyncedAt:Long=0) {
+data class PartnerConnection(val busy: Boolean=false,val restoring: Boolean=false, val spaceId: String="", val uid: String="", val partnerUid: String="", val generation: String="", val code: String="", val expiresAt: Long=0, val message: String="Local mode · Sign in to connect with your partner", val online: Boolean=false, val pokeCooldowns: Map<String,Long> = emptyMap(), val needsAuth: Boolean=false, val pairingMessage: String="", val retryAt: Long=0, val authenticated: Boolean=false, val role: String="", val partnerRole: String="", val selectedRole: String="", val accountEmail: String="", val partnerAvatar: Int = -1,val togetherDateVersion:Long=0,val togetherDateKnown:Boolean=false,val lastSyncedAt:Long=0,val chatPresence:ChatPresence=ChatPresence()) {
     val connected get() = spaceId.isNotBlank()
     val paired get() = connected && partnerUid.isNotBlank()
 }
@@ -48,6 +48,37 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
     private var listVersions=mapOf<String,Long>()
     private var tagVersions=mapOf<String,Long>()
     private var polling: Job?=null
+    private var presenceJob: Job?=null
+    @Volatile private var appForeground=false
+    private val presenceLock=Mutex()
+    private val presenceDevice by lazy {
+        val prefs=context.getSharedPreferences("pipo_presence_device",Context.MODE_PRIVATE)
+        prefs.getString("id",null) ?: newId().also {check(prefs.edit().putString("id",it).commit()) {"Could not save chat device identity."}}
+    }
+    private suspend fun refreshPresence(visible:Boolean?=null,expectedUid:String?=null,expectedSpace:String?=null,expectedAccount:String?=null)=presenceLock.withLock {
+        val c=mutable.value
+        if(expectedUid!=null)check(c.uid==expectedUid && c.spaceId==expectedSpace && AccountScope.current(context)==expectedAccount) {"Account or partner changed. Reopen chat settings."}
+        if(!c.paired || !c.authenticated)return@withLock
+        val account=AccountScope.current(context)
+        if(visible!=null)mutable.value=mutable.value.copy(chatPresence=c.chatPresence.copy(saving=true,error=""))
+        try {
+            val result=api.chatPresence(c.uid,c.spaceId,presenceDevice,appForeground && c.online,visible)
+            if(account==AccountScope.current(context) && mutable.value.uid==c.uid && mutable.value.spaceId==c.spaceId)
+                mutable.value=mutable.value.copy(chatPresence=result)
+        } catch(e:CancellationException) {throw e} catch(e:Exception) {
+            if(account==AccountScope.current(context) && mutable.value.uid==c.uid && mutable.value.spaceId==c.spaceId)
+                mutable.value=mutable.value.copy(chatPresence=mutable.value.chatPresence.copy(known=false,partnerOnline=false,saving=false,error="Online status could not be refreshed. Retry when connected."))
+            throw e
+        } finally {
+            if(mutable.value.uid==c.uid && mutable.value.spaceId==c.spaceId && mutable.value.chatPresence.saving)
+                mutable.value=mutable.value.copy(chatPresence=mutable.value.chatPresence.copy(saving=false))
+        }
+    }
+    fun retryPresence(){scope.launch(Dispatchers.IO) {runCatching {refreshPresence()}}}
+    suspend fun setChatVisibility(visible:Boolean,expectedUid:String,expectedSpace:String,expectedAccount:String) {
+        check(mutable.value.paired && mutable.value.online) {"Reconnect to your partner before changing online visibility."}
+        refreshPresence(visible,expectedUid,expectedSpace,expectedAccount)
+    }
     private var maintenance: Job?=null
     private var maintenanceAt=0L
     private var maintenanceOwner=""
@@ -92,7 +123,7 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
         if(!mutable.value.needsAuth) {val pending=pendingAction;pendingAction=null;if(pending!=null)connect(pending.first,pending.second)}
         }
     }
-    fun signOut() {if(mutable.value.busy)return;maintenance?.cancel();scope.launch {lock.withLock {runCatching {api.revokeDevice()};api.signOut();repository.activateAccount("");repository.restoreLocal();taskVersions=emptyMap();listVersions=emptyMap();tagVersions=emptyMap();pendingAction=null;mutable.value=PartnerConnection(message="Signed out · Your local workspace is preserved");PartnerPokeService.clear(context)}}}
+    fun signOut() {if(mutable.value.busy)return;maintenance?.cancel();scope.launch {lock.withLock {mutable.value=mutable.value.copy(online=false);runCatching {refreshPresence()};runCatching {api.revokeDevice()};api.signOut();repository.activateAccount("");repository.restoreLocal();taskVersions=emptyMap();listVersions=emptyMap();tagVersions=emptyMap();pendingAction=null;mutable.value=PartnerConnection(message="Signed out · Your local workspace is preserved");PartnerPokeService.clear(context)}}}
     fun check() {if(mutable.value.busy)return;scope.launch {lock.withLock {mutable.value=mutable.value.copy(busy=true);try {api.probe();refresh()} catch(e: CancellationException){throw e} catch(e: Exception){mutable.value=mutable.value.copy(message=connectionError(e),needsAuth=e is SignInRequired)} finally {mutable.value=mutable.value.copy(busy=false)}}}}
     fun connect(action: String, code: String="") {
         if(mutable.value.busy)return
@@ -142,19 +173,28 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
         }}
     }
     fun resume() {
+        appForeground=true
+        if(presenceJob?.isActive!=true)presenceJob=scope.launch(Dispatchers.IO) {
+            while(isActive) {
+                val c=mutable.value
+                if(c.paired && c.online)try {refreshPresence()} catch(e:CancellationException){throw e} catch(_:Exception) { /* Status has its own retry; shared sync is independent. */ }
+                else if(c.chatPresence.known)mutable.value=mutable.value.copy(chatPresence=c.chatPresence.copy(known=false,partnerOnline=false))
+                delay(if(c.paired)20_000 else 1500)
+            }
+        }
         if(polling?.isActive==true)return
         polling=scope.launch {while(isActive){lock.withLock {
             if(api.hasSession()) try {refresh()} catch(e: CancellationException){throw e} catch(e: Exception){mutable.value=mutable.value.copy(online=false,message=connectionError(e));if(e is SignInRequired){mutable.value=mutable.value.copy(online=false,needsAuth=true,message=connectionError(e))}}
         };delay(6000)}}
     }
-    fun pause(){polling?.cancel();polling=null}
+    fun pause(){appForeground=false;presenceJob?.cancel();presenceJob=null;polling?.cancel();polling=null;retryPresence()}
     private fun maps(value: Any?): List<Map<String,Any?>> { @Suppress("UNCHECKED_CAST") return (value as? List<*>)?.mapNotNull {it as? Map<String,Any?>} ?: emptyList() }
     private fun n(r: Map<String,Any?>,key: String,default: Long=0)=(r[key] as? Number)?.toLong() ?: default
     private fun owner(r: Map<String,Any?>,uid: String)=when(r["assigneeUid"]){null->Owner.Together;uid->Owner.Me;else->Owner.You}
     private suspend fun refresh() {
         activateIdentity()
         // Account backup runs after the shared snapshot, outside the startup critical path.
-        val r=try {api.snapshot()} catch(e: NoMembership) {PartnerPokeService.clear(context);repository.restoreLocal();taskVersions=emptyMap();listVersions=emptyMap();tagVersions=emptyMap();mutable.value=mutable.value.copy(spaceId="",partnerUid="",togetherDateKnown=false,togetherDateVersion=0,partnerAvatar=-1,role="",partnerRole="",code="",expiresAt=0,online=true,authenticated=true,restoring=false,message="Signed in · Create a space or join your partner's code");maintain(mutable.value.uid,"");return}
+        val r=try {api.snapshot()} catch(e: NoMembership) {PartnerPokeService.clear(context);repository.restoreLocal();taskVersions=emptyMap();listVersions=emptyMap();tagVersions=emptyMap();mutable.value=mutable.value.copy(spaceId="",partnerUid="",chatPresence=ChatPresence(),togetherDateKnown=false,togetherDateVersion=0,partnerAvatar=-1,role="",partnerRole="",code="",expiresAt=0,online=true,authenticated=true,restoring=false,message="Signed in · Create a space or join your partner's code");maintain(mutable.value.uid,"");return}
         val uid=r["uid"] as String;val partner=r["partnerUid"] as? String ?: "";val sid=r["spaceId"] as String;val generation=r["generation"] as String
         val role=r["role"] as String;val partnerRole=r["partnerRole"] as String
         check(uid!=partner){"You and your partner must sign in with separate accounts."}
@@ -178,7 +218,7 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
         val legacyTags=tasks.flatMap {it.tags}.distinct().filter {id -> savedTags.none {it.id==id} }.map {Tag(it,it)}
         repository.importRemote(current.copy(tasks=tasks,lists=lists,notes=notes,tags=savedTags+legacyTags,preferences=p))
         mutable.value=mutable.value.copy(lastSyncedAt=System.currentTimeMillis())
-        mutable.value=mutable.value.copy(togetherDateVersion=together?.let {n(it,"version")} ?: 0,togetherDateKnown=together!=null,role=role,partnerRole=partnerRole,selectedRole=role,spaceId=sid,uid=uid,partnerUid=partner,generation=generation,restoring=false,partnerAvatar=(other?.get("avatar") as? Number)?.toInt() ?: -1,authenticated=true,online=true,message=(if(partner.isBlank()) "Space created · Waiting for your partner" else "Partner connected · Synced")+profileNotice,code=if(partner.isBlank())mutable.value.code else "",expiresAt=if(partner.isBlank())mutable.value.expiresAt else 0)
+        mutable.value=mutable.value.copy(chatPresence=if(mutable.value.spaceId==sid && mutable.value.partnerUid==partner)mutable.value.chatPresence else ChatPresence(),togetherDateVersion=together?.let {n(it,"version")} ?: 0,togetherDateKnown=together!=null,role=role,partnerRole=partnerRole,selectedRole=role,spaceId=sid,uid=uid,partnerUid=partner,generation=generation,restoring=false,partnerAvatar=(other?.get("avatar") as? Number)?.toInt() ?: -1,authenticated=true,online=true,message=(if(partner.isBlank()) "Space created · Waiting for your partner" else "Partner connected · Synced")+profileNotice,code=if(partner.isBlank())mutable.value.code else "",expiresAt=if(partner.isBlank())mutable.value.expiresAt else 0)
         maintain(uid,sid,own==null)
     }
     /** One background maintenance pass per minute; never changes a shared workspace to local. */

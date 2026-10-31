@@ -4,7 +4,13 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import android.app.Application
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk=[28],application=Application::class)
 class UpdateReleaseTest {
     private val url="https://github.com/$DEFAULT_UPDATE_REPOSITORY/releases/download/v1.4.2/Pipo2doo.apk"
     private fun asset(name:String="Pipo2doo.apk",link:String=url)=JSONObject().put("name",name).put("browser_download_url",link).put("size",42_000_000).put("id",42).put("updated_at","2026-10-30T12:00:00Z").put("digest","sha256:"+"a".repeat(64))
