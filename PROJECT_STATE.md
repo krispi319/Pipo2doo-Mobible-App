@@ -1,7 +1,7 @@
-# v1.4.3 release preparation — 2026-10-31
+# Published v1.4.3 — 2026-10-31
 
 - Published release v1.4.2 points to ae9f669; build-script lint fix and signed APK
-  publication succeeded. Current local version is 1.4.3 / 153; publication is pending.
+  publication succeeded. Current version 1.4.3 / 153 published from 770e61d.
 - Pending source includes the avatar-only assignee circles and padded time button;
   their existing previews are in verification/assignee-preview.
 - Chat unread badge now observes persisted markers, clears existing incoming IDs when
@@ -29,7 +29,10 @@
 - Supabase v143_assignment_scoped_task_notifications deployed. Synthetic rollback
   tests passed: both individual assignments, Together, reassignment cancellation,
   stale recipient rejection, silent sync, list independence, opt-out and completion.
-- 54 selected tests and then the full 183-test suite passed. Signed release pending.
+- 54 selected tests and then the full 183-test suite passed. Signed release build,
+  release lint, APK version/signature verification and publication succeeded.
+- Release: https://github.com/krispi319/Pipo2doo-Mobible-App/releases/tag/v1.4.3
+- Workflow: https://github.com/krispi319/Pipo2doo-Mobible-App/actions/runs/41208319985
 - Release evidence and device acceptance: verification/v143.md.
 
 # Earlier project state — v1.4.2 (2026-10-31)
