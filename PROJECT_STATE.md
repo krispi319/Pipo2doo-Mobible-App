@@ -1,4 +1,11 @@
-# v1.4.4 release candidate (build 155) — 2026-11-01
+# Published v1.4.4 (build 155) — 2026-11-01
+
+- Published release ID 430493215 from 75b4dbca59eae883fb4736fb64fc914d600f73d7.
+  Signed build workflow 41295097160 succeeded. Public APK downloaded independently:
+  version 1.4.4 / 155, original application ID, checksum and signature verified;
+  signing certificate matches the downloaded v1.4.3 APK. Evidence:
+  verification/v144/published-artifact.json. Full final suite: 201 passed,
+  no failures/errors/skips; verification/v144/release-test-results.csv.
 
 - User requested publication of v1.4.4 and rejected the Lists redesign. Existing
   Lists source is unchanged. Preview-only Lists/editor concept tests and concept
@@ -11,7 +18,7 @@
   options still expand when enabled; existing notes start expanded. Full Create
   task form, other pages and task mutation behavior are preserved. Original
   concept images remain in verification/v144/. Other-page recommendations are
-  discussion only and require agreement before implementation. No release.
+  discussion only and require agreement before implementation.
 - Approved visual refinement verified with nine passing UI checks covering full
   Create task saving, Today avatar/timezone visibility, series selection/save,
   delete cancellation/failure/retry and avatar previews. Current renders:
@@ -49,8 +56,8 @@
   original timezone/DST and template assignee preservation.
   UI previews and evidence: verification/v144/;
   acceptance guide: verification/v144.md. Existing Today/Create task layouts retained.
-- Prepared version 1.4.4 / 155 only; no new release, tag, APK publication or live
-  user-task deletion/rename performed. Unrelated IDE changes preserved.
+- Published version 1.4.4 / 155 with APK/checksum and user-facing release notes.
+  No live user-task deletion/rename performed. Unrelated IDE changes preserved.
 
 # Published corrected v1.4.3 (build 154) — 2026-10-31
 

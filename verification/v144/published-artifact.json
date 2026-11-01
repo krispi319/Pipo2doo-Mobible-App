@@ -1,0 +1,14 @@
+{
+  "releaseId": 430493215,
+  "sourceCommit": "75b4dbca59eae883fb4736fb64fc914d600f73d7",
+  "workflowRun": 41295097160,
+  "versionName": "1.4.4",
+  "versionCode": 155,
+  "sha256": "21e21460b81355fac7e2254d781947b8e5a6f2a67e89bff8606e28b4f59349a7",
+  "size": 36324623,
+  "signatureVerified": true,
+  "certificateMatchesV143": true,
+  "certificateSha256": "70e18b2ee897e33cf4fa8103def649f324346c07a2f930ba6de25aeb9b487260",
+  "package": "package: name='ai.mwm.android_2ebb28d1_fa04_4d16_89bf_06b0a18eff09' versionCode='155' versionName='1.4.4' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'",
+  "url": "https://github.com/krispi319/Pipo2doo-Mobible-App/releases/tag/v1.4.4"
+}
