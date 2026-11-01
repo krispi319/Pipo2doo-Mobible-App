@@ -62,7 +62,7 @@ import java.util.Locale
     }
 }
 
-@Composable fun TaskDetailScreen(task: Task, state: PipoState, onBack: () -> Unit, onEdit: () -> Unit, onToggle: () -> Unit, onSave: (Task,Task,(String?)->Unit) -> Unit, onDelete: ((String?) -> Unit) -> Unit, onThanks: (String) -> Unit) {
+@Composable fun TaskDetailScreen(task: Task, state: PipoState, onBack: () -> Unit, onEdit: () -> Unit, onToggle: () -> Unit, onSave: (Task,Task,(String?)->Unit) -> Unit, onDelete: ((String?) -> Unit) -> Unit, onThanks: (String) -> Unit,onDeleteSeries:(TaskDeleteScope,(String?)->Unit)->Unit={scope,done->if(scope==TaskDeleteScope.Occurrence)onDelete(done) else done("Series deletion unavailable. Reopen this task.")}) {
     val connection=ai.mwm.client.cloud.LocalPartnerConnection.current
     var saving by remember(task.id) {mutableStateOf(false)}
     var saveError by remember(task.id) {mutableStateOf<String?>(null)}
@@ -104,6 +104,11 @@ import java.util.Locale
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
     var deleting by remember(task.id) {mutableStateOf(false)}
     var deleteError by remember(task.id) {mutableStateOf<String?>(null)}
+    var deleteScope by rememberSaveable(task.id) {mutableStateOf(TaskDeleteScope.Occurrence.name)}
+    val recurring=remember(task.id,state.tasks) {state.hasRecurrence(task.id)}
+    val selectedDeleteScope=TaskDeleteScope.valueOf(deleteScope)
+    val deleteCount=state.taskDeletionTargets(task.id,selectedDeleteScope).size
+    val canStopRepeats=selectedDeleteScope!=TaskDeleteScope.Occurrence && state.recurringFamily(task.id).any {it.repeat!=Repeat.Once}
     var scheduleExpanded by rememberSaveable { mutableStateOf(false) }
     var noteEditor by rememberSaveable(task.id) { mutableStateOf(false) }
     var noteDraft by rememberSaveable(task.id) { mutableStateOf("") }
@@ -208,15 +213,39 @@ import java.util.Locale
     if(confirmNoteDelete) AlertDialog(onDismissRequest = { if(!saving)confirmNoteDelete = false }, title = { PText("Delete this note?") }, text = {
         Column {PText("The task will stay. Only its little note will be removed.");saveError?.let {PText(it,style=MaterialTheme.typography.bodySmall)}}
     }, confirmButton = { OutlinedButton({ saveChange(task.copy(note=""),onSuccess={confirmNoteDelete=false;noteEditor=false}) },enabled=canInteract) { PText(if(saving)"Saving…" else "Delete note") } }, dismissButton = { OutlinedButton({ confirmNoteDelete = false },enabled=!saving) { PText("Keep note") } })
-    if(confirmDelete) AlertDialog(onDismissRequest = { if(!deleting)confirmDelete = false }, title = { PText("Delete this task?") }, text = {
-        Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-            PText("Delete “${task.title}” from the shared space for both partners? Its reminder will be cleared. Other existing occurrences will stay.")
-            deleteError?.let {PText(it,style=MaterialTheme.typography.bodySmall)}
+    if(confirmDelete) androidx.compose.ui.window.Dialog(onDismissRequest={if(!deleting)confirmDelete=false}) {
+        val dc=AppTheme.colors
+        Surface(Modifier.fillMaxWidth(),shape=RoundedCornerShape(20.dp),color=dc.surface) {
+            Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                PText(if(selectedDeleteScope==TaskDeleteScope.Series)"Delete series?" else "Delete task?",style=MaterialTheme.typography.titleSmall)
+                Text(task.title,style=MaterialTheme.typography.bodySmall,color=dc.textSecondary,maxLines=2,overflow=TextOverflow.Ellipsis)
+                if(recurring)RecurringScopeOptions(listOf("This task","From here","Series"),listOf("Only this occurrence","This and future occurrences","Entire series"),selectedDeleteScope.ordinal,!deleting) {deleteScope=TaskDeleteScope.entries[it].name;deleteError=null}
+                Surface(color=dc.surfaceSunken,shape=RoundedCornerShape(10.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal=10.dp,vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.DeleteOutline,null,Modifier.size(18.dp),tint=dc.error)
+                        Column(verticalArrangement=Arrangement.spacedBy(2.dp)) {
+                            PText(if(deleteCount==0)"Stop future repeats" else "Remove $deleteCount ${if(deleteCount==1)"task" else "tasks"}",style=MaterialTheme.typography.labelMedium)
+                            PText(if(selectedDeleteScope==TaskDeleteScope.Occurrence)"For both · Other dates stay" else "For both · Stops repeats",style=MaterialTheme.typography.labelSmall,muted=true)
+                        }
+                    }
+                }
+                Row(horizontalArrangement=Arrangement.spacedBy(5.dp),verticalAlignment=Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.CheckCircleOutline,null,Modifier.size(14.dp),tint=dc.success)
+                    PText(if(selectedDeleteScope==TaskDeleteScope.Occurrence)"Reminders clear after sync" else "Completed history stays",style=MaterialTheme.typography.labelSmall,muted=true)
+                }
+                deleteError?.let {PText(it,style=MaterialTheme.typography.bodySmall)}
+                Row(Modifier.fillMaxWidth().padding(top=2.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton({confirmDelete=false},Modifier.weight(1f),enabled=!deleting,contentPadding=PaddingValues(horizontal=10.dp,vertical=6.dp)) {PText("Cancel",style=MaterialTheme.typography.labelLarge)}
+                    Button({
+                        deleting=true;deleteError=null
+                        onDeleteSeries(selectedDeleteScope) {failure->deleting=false;if(failure==null)confirmDelete=false else deleteError=failure}
+                    },Modifier.weight(1f),enabled=!deleting && (deleteCount>0 || canStopRepeats),colors=ButtonDefaults.buttonColors(containerColor=dc.error,contentColor=Color.White),contentPadding=PaddingValues(horizontal=10.dp,vertical=6.dp)) {
+                        Text(appDisplayText(if(deleting)"Deleting…" else if(selectedDeleteScope==TaskDeleteScope.Occurrence)"Delete" else if(deleteCount==0)"Stop repeats" else "Delete $deleteCount tasks"),style=MaterialTheme.typography.labelLarge)
+                    }
+                }
+            }
         }
-    }, confirmButton = { OutlinedButton({
-        deleting=true;deleteError=null
-        onDelete {failure->deleting=false;if(failure==null)confirmDelete=false else deleteError=failure}
-    },enabled=!deleting) { PText(if(deleting) "Deleting…" else "Delete for both") } }, dismissButton = { OutlinedButton({ confirmDelete = false },enabled=!deleting) { PText("Cancel") } })
+    }
 }
 
 @Composable fun ProgressScreen(state: PipoState, onTask: (String) -> Unit, onThanks: () -> Unit) {

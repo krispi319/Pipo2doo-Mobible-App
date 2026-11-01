@@ -20,6 +20,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -30,6 +32,23 @@ import androidx.compose.ui.unit.*
 // the app's generic pills/cards: their padding and typography differ here.
 @Composable internal fun TaskCaption(text: String, modifier: Modifier = Modifier) {
     PText(text, modifier, MaterialTheme.typography.labelSmall.copy(letterSpacing = .6.sp), muted = true)
+}
+@OptIn(ExperimentalLayoutApi::class)
+@Composable internal fun RecurringScopeOptions(labels:List<String>,descriptions:List<String>,selected:Int,enabled:Boolean,modifier:Modifier=Modifier.fillMaxWidth(),onSelect:(Int)->Unit) {
+    val c=AppTheme.colors
+    FlowRow(modifier,horizontalArrangement=Arrangement.spacedBy(4.dp),verticalArrangement=Arrangement.spacedBy(0.dp)) {
+        labels.forEachIndexed {index,label->
+            Box(Modifier.defaultMinSize(minWidth=48.dp,minHeight=48.dp).selectable(index==selected,enabled=enabled,role=Role.RadioButton) {onSelect(index)}
+                .semantics {contentDescription=descriptions[index]},contentAlignment=Alignment.Center) {
+                Surface(shape=CircleShape,color=if(index==selected)c.secondary else c.surface,border=BorderStroke(1.dp,if(index==selected)c.secondary else c.separator)) {
+                    Row(Modifier.padding(horizontal=8.dp,vertical=3.dp),horizontalArrangement=Arrangement.spacedBy(3.dp),verticalAlignment=Alignment.CenterVertically) {
+                        if(index==selected)Icon(Icons.Outlined.Check,null,Modifier.size(12.dp),tint=c.textPrimary)
+                        Text(appDisplayText(label),style=MaterialTheme.typography.labelSmall.copy(lineHeight=14.sp,fontWeight=if(index==selected)FontWeight.SemiBold else FontWeight.Medium),color=c.textPrimary,textAlign=TextAlign.Center,maxLines=1,softWrap=false)
+                    }
+                }
+            }
+        }
+    }
 }
 @Composable internal fun TaskSectionLabel(label: String, action: @Composable RowScope.() -> Unit = {}) {
     Row(Modifier.fillMaxWidth().heightIn(min = 24.dp).padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -52,28 +71,28 @@ import androidx.compose.ui.unit.*
         }
     }
 }
-@Composable internal fun TaskOwnerCircles(owner: Owner, preferences: Preferences, onChange: (Owner) -> Unit) {
+@Composable internal fun TaskOwnerCircles(owner: Owner, preferences: Preferences, compact:Boolean=false,onChange: (Owner) -> Unit) {
     val c = AppTheme.colors
-    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(22.dp, Alignment.CenterHorizontally)) {
+    Row(Modifier.fillMaxWidth().padding(vertical = if(compact)4.dp else 8.dp), horizontalArrangement = Arrangement.spacedBy(if(compact)16.dp else 22.dp, Alignment.CenterHorizontally)) {
         listOf(Owner.Me, Owner.Together, Owner.You).forEach { value ->
             val color = ownerColor(value)
-            Column(Modifier.width(76.dp).selectable(value == owner, role = Role.RadioButton) { onChange(value) }.semantics {contentDescription="Assign to ${ownerName(value,preferences)}"}, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(Modifier.size(70.dp).drawBehind {
+            Column(Modifier.width(if(compact)64.dp else 76.dp).selectable(value == owner, role = Role.RadioButton) { onChange(value) }.semantics {contentDescription="Assign to ${ownerName(value,preferences)}"}, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(if(compact)6.dp else 10.dp)) {
+                Box(Modifier.size(if(compact)56.dp else 70.dp).drawBehind {
                     // The ring sits outside the fixed circle; selection never changes its bounds.
                     if(value == owner) drawCircle(color, size.width / 2 + 4.dp.toPx(), style = Stroke(2.dp.toPx()))
                 }.background(color, CircleShape), contentAlignment = Alignment.Center) {
-                    if(value == Owner.Together) Canvas(Modifier.align(Alignment.TopCenter).padding(top = 8.dp).size(22.dp, 12.dp)) {
+                    if(value == Owner.Together) Canvas(Modifier.align(Alignment.TopCenter).padding(top = if(compact)4.dp else 8.dp).size(22.dp, 12.dp)) {
                         val ink = c.textPrimary.copy(alpha = .7f)
                         drawCircle(ink, 6.dp.toPx() - .75.dp.toPx(), Offset(6.dp.toPx(), 6.dp.toPx()), style = Stroke(1.5.dp.toPx()))
                         drawCircle(ink, 6.dp.toPx() - .75.dp.toPx(), Offset(16.dp.toPx(), 6.dp.toPx()), style = Stroke(1.5.dp.toPx()))
                     }
                     if(value!=Owner.Together) OwnerAvatar(value,preferences,Modifier.fillMaxSize().padding(4.dp))
-                    else Column(Modifier.padding(top = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        PText(if(value == Owner.Together) "Us" else value.label, style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp, lineHeight = 18.sp, fontWeight = if(value == owner) FontWeight.SemiBold else FontWeight.Medium))
-                        PText(when(value) { Owner.Me -> preferences.myName; Owner.You -> preferences.partnerName; Owner.Together -> "Both" }, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 13.sp), align = TextAlign.Center)
+                    else Column(Modifier.padding(top = if(compact)8.dp else 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        PText(if(value == Owner.Together) "Us" else value.label, style = MaterialTheme.typography.bodyMedium.copy(fontSize = if(compact)13.sp else 15.sp, lineHeight = if(compact)16.sp else 18.sp, fontWeight = if(value == owner) FontWeight.SemiBold else FontWeight.Medium))
+                        PText(when(value) { Owner.Me -> preferences.myName; Owner.You -> preferences.partnerName; Owner.Together -> "Both" }, style = MaterialTheme.typography.labelSmall.copy(fontSize = if(compact)9.sp else 10.sp, lineHeight = if(compact)11.sp else 13.sp), align = TextAlign.Center)
                     }
                 }
-                Box(Modifier.size(22.dp).background(if(value == owner) color else Color.Transparent, CircleShape).then(if(value != owner) Modifier.border(1.5.dp, c.separator, CircleShape) else Modifier), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(if(compact)18.dp else 22.dp).background(if(value == owner) color else Color.Transparent, CircleShape).then(if(value != owner) Modifier.border(1.5.dp, c.separator, CircleShape) else Modifier), contentAlignment = Alignment.Center) {
                     if(value == owner) Icon(Icons.Outlined.Check, null, Modifier.size(13.dp), tint = c.textPrimary)
                 }
             }

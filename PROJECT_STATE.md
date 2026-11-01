@@ -1,3 +1,57 @@
+# v1.4.4 release candidate (build 155) — 2026-11-01
+
+- User requested publication of v1.4.4 and rejected the Lists redesign. Existing
+  Lists source is unchanged. Preview-only Lists/editor concept tests and concept
+  artifacts remain local and are excluded from the release commit. Only the
+  agreed recurring-series fixes and approved edit/delete adjustments are included.
+
+- User approved the title-first recurring editor and clearer delete action on
+  2026-11-01. Applied title-first ordering, reduced helper copy, selected-pill
+  checkmarks, optional private-note expansion and red Delete styling. Reminder
+  options still expand when enabled; existing notes start expanded. Full Create
+  task form, other pages and task mutation behavior are preserved. Original
+  concept images remain in verification/v144/. Other-page recommendations are
+  discussion only and require agreement before implementation. No release.
+- Approved visual refinement verified with nine passing UI checks covering full
+  Create task saving, Today avatar/timezone visibility, series selection/save,
+  delete cancellation/failure/retry and avatar previews. Current renders:
+  verification/v144/approved-editor.png and approved-delete.png; results:
+  verification/v144/approved-ui-test-results.csv.
+- User requested less text and compact presentation. Edit scope now uses one
+  three-option row (This task / From here / All open), a one-line summary, and
+  optional info help. Delete uses the same row, a count card and history note.
+  Cream theme retained. Nine UI checks passed; compact previews in verification/v144/.
+- Follow-up sizing: smaller scope labels/padding, recurring-only 56dp avatars,
+  12dp section gaps, and a tighter delete dialog with 16dp padding. Create task
+  keeps its existing sizing. Nine UI checks passed; latest previews use -tight.png.
+- Latest scope-button redesign: three content-width pills with roughly 70% less
+  visible area, readable labels and separate 48dp tap targets. No full-width bar.
+  Nine UI checks passed. Latest previews use -mini.png in verification/v144/.
+- User requested editing/deleting the entire linked recurring series, including
+  already generated and planned tasks. User chose to keep completed history.
+- Added All unfinished occurrences for title/assignee/list/tag edits, alongside
+  Only this occurrence and This and future occurrences. Includes earlier overdue
+  copies and updates the active template so later generated tasks inherit changes.
+- Saved series/parent links identify membership; matching titles never merge tasks.
+  Linked Once occurrences retain series controls. Future edits retain family links.
+- Delete dialog now offers one occurrence, this/future, or Entire series, with a
+  reviewed count and confirmation. Bulk deletion keeps completed content/status,
+  stops generation, and keeps failures open for retry. Single-template deletion
+  promotes another occurrence so the remainder continues normally.
+- Added SECURITY INVOKER mutate_recurring_tasks, delegating every write to existing
+  task/version RPCs. Checks the complete linked ID set under the generator's lock;
+  changed sets/conflicts fail atomically. Existing permissions and tables unchanged.
+- Supabase v144_guarded_recurring_task_operations deployed. Synthetic rollback
+  tests passed, including actual authenticated-role access, paired edits, isolation,
+  conflict rollback, concurrent generation, history, no regeneration and alerts.
+- Full 200-test unit/Compose suite passed, followed by the final recurrence-only
+  regression rerun. Includes already-corrected title sync, partner field changes,
+  original timezone/DST and template assignee preservation.
+  UI previews and evidence: verification/v144/;
+  acceptance guide: verification/v144.md. Existing Today/Create task layouts retained.
+- Prepared version 1.4.4 / 155 only; no new release, tag, APK publication or live
+  user-task deletion/rename performed. Unrelated IDE changes preserved.
+
 # Published corrected v1.4.3 (build 154) — 2026-10-31
 
 - Compact Today preview accepted by user. Restored full Create task form as the

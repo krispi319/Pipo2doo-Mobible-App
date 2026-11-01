@@ -1,0 +1,4 @@
+"Name","Tests","Failures","Errors"
+"ai.mwm.client.data.DailyOccurrencesTest","17","0","0"
+"ai.mwm.client.data.RecurringTaskEditingTest","11","0","0"
+"ai.mwm.client.data.RecurringTaskSeriesTest","16","0","0"

@@ -1,0 +1,4 @@
+"Suite","Tests","Failures","Errors","Skipped"
+"ai.mwm.client.ui.screens.AssigneeAvatarPreviewTest","4","0","0","0"
+"ai.mwm.client.ui.screens.RecurringSeriesUiTest","2","0","0","0"
+"ai.mwm.client.ui.screens.TaskReleaseUiTest","3","0","0","0"

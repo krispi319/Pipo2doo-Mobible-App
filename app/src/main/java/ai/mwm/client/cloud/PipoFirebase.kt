@@ -149,7 +149,7 @@ class PipoFirebase private constructor(context: Context) {
         val canonical = task.canonicalSchedule()
         return write(task.id,"task",mapOf("seriesId" to task.seriesId,"scheduledAt" to canonical.scheduledAt,"scheduleZone" to canonical.scheduleZone,"title" to task.title,"listId" to task.listId,"day" to canonical.day,"minute" to canonical.minute,"repeat" to task.repeat.name,"status" to task.status.name,"tags" to task.tags,"parentId" to task.parentId,"completedAt" to task.completedAt),version,parent=task.parentId.ifBlank {task.listId}.takeIf {runCatching {UUID.fromString(it)}.isSuccess},assigned=assigned(task.owner,uid,partner))
     }
-    suspend fun saveTaskBatch(changed: List<Task>, deleted: List<Task>, uid: String, partner: String?, versions: Map<String,Long>, deletedLists: List<SharedList> = emptyList(), listVersions: Map<String,Long> = emptyMap()) {
+    suspend fun saveTaskBatch(changed: List<Task>, deleted: List<Task>, uid: String, partner: String?, versions: Map<String,Long>, deletedLists: List<SharedList> = emptyList(), listVersions: Map<String,Long> = emptyMap(),seriesTaskId:String?=null,expectedSeriesIds:List<String> = emptyList()) {
         check(uid==client.uid()) {"Account changed. Reopen this task."}
         val changes=JSONArray()
         for(t in changed+deleted) {
@@ -166,7 +166,11 @@ class PipoFirebase private constructor(context: Context) {
             .put("payload",JSONObject().put("name",list.name).put("emoji",list.emoji).put("pinned",list.pinned).put("pictures",JSONArray(list.pictures)))
             .put("parent",JSONObject.NULL).put("assigned",assigned(list.owner,uid,partner) ?: JSONObject.NULL)
             .put("version",listVersions[list.id] ?: 0).put("mutation",UUID.randomUUID().toString()).put("deleted",true))
-        client.rpc("mutate_shared_tasks",JSONObject().put("p_space",space()).put("p_changes",changes))
+        val arguments=JSONObject().put("p_space",space()).put("p_changes",changes)
+        if(seriesTaskId!=null) {
+            arguments.put("p_task",seriesTaskId).put("p_expected_ids",JSONArray(expectedSeriesIds))
+            client.rpc("mutate_recurring_tasks",arguments)
+        } else client.rpc("mutate_shared_tasks",arguments)
     }
     private suspend fun delete(id: String,kind: String,version: Long): Map<String,Any?> {
         val r=records(space()).firstOrNull {it.getString("id")==id} ?: return emptyMap()

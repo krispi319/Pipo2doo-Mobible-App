@@ -246,7 +246,7 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
     }
     fun backupNow(){scope.launch {maintenance?.join();val c=mutable.value;if(c.authenticated)maintain(c.uid,c.spaceId,force=true)}}
     /** Network-first edits: rejected/conflicting/offline writes never masquerade as synced. */
-    suspend fun mutate(showBusy: Boolean = true, forceProfile:Boolean=false, block: () -> Unit)=lock.withLock {
+    suspend fun mutate(showBusy: Boolean = true, forceProfile:Boolean=false, seriesTaskId:String?=null, block: () -> Unit)=lock.withLock {
         check(!mutable.value.busy){"Please wait for the current account operation."}
         if(!mutable.value.connected){check(!repository.isRemote){"Shared space is still reconnecting. Wait for a fresh server response."};block();return@withLock}
         check(mutable.value.online){"Offline · Change not sent. Reconnect and try again."}
@@ -264,7 +264,8 @@ class PartnerSync(private val context: Context, private val repository: PipoRepo
             val changedTasks=next.tasks.filter {t->old.tasks.find {it.id==t.id}?.let {sharedTask(it)==sharedTask(t)}!=true}
             val deletedTasks=old.tasks.filter {before->next.tasks.none {it.id==before.id}}.sortedByDescending(::depth)
             val deletedLists=old.lists.filter {before->next.lists.none {it.id==before.id}}
-            if(changedTasks.size+deletedTasks.size+deletedLists.size>1) api.saveTaskBatch(changedTasks,deletedTasks,c.uid,c.partnerUid.ifBlank {null},taskVersions,deletedLists,listVersions)
+            if(seriesTaskId!=null && changedTasks.size+deletedTasks.size>0) api.saveTaskBatch(changedTasks,deletedTasks,c.uid,c.partnerUid.ifBlank {null},taskVersions,seriesTaskId=seriesTaskId,expectedSeriesIds=old.recurringFamily(seriesTaskId).map {it.id})
+            else if(changedTasks.size+deletedTasks.size+deletedLists.size>1) api.saveTaskBatch(changedTasks,deletedTasks,c.uid,c.partnerUid.ifBlank {null},taskVersions,deletedLists,listVersions)
             else {
                 for(t in changedTasks) api.saveTask(t,c.uid,c.partnerUid.ifBlank {null},taskVersions[t.id] ?: 0)
                 for(t in deletedTasks) api.deleteTask(t.id,taskVersions[t.id] ?: 0)

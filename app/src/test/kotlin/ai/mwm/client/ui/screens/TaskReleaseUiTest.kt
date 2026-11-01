@@ -58,7 +58,7 @@ class TaskReleaseUiTest {
         compose.setContent {MyApplicationTheme {
             TaskEditor(task,state.copy(tasks=listOf(task)),null,{}, {_,scope,done->savedScope=scope;done(null)}, {_,done->done(null)}, {}, {}, {})
         }}
-        compose.onNodeWithText("This and future occurrences").performClick()
+        compose.onNodeWithContentDescription("This and future occurrences").performClick()
         compose.waitForIdle()
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/v142-repeat-editor.png")
         compose.onNodeWithText("Save task").performClick()

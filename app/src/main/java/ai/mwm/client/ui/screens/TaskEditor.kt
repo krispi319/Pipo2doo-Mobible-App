@@ -62,6 +62,7 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
     val c = AppTheme.colors
     val today = LocalDate.now(clockZone(state.preferences.clockZone)).toEpochDay()
     var draft by rememberSaveable(task?.id, stateSaver = TaskDraftSaver) { mutableStateOf(task ?: Task(listId = defaultList ?: state.lists.firstOrNull()?.id ?: "home", status = initialStatus, day = today, minute = null, reminder = true, offset = 0)) }
+    val seriesEditBase=rememberSaveable(task?.id,saver=TaskDraftSaver) {task ?: draft}
     var confirmClearNote by rememberSaveable { mutableStateOf(false) }
     var tagPicker by rememberSaveable { mutableStateOf(false) }
     var newTagName by rememberSaveable { mutableStateOf("") }
@@ -70,6 +71,10 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
     var tagError by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
     var editScope by rememberSaveable(task?.id) {mutableStateOf(TaskEditScope.Occurrence.name)}
+    var seriesHelp by remember {mutableStateOf(false)}
+    val recurring=remember(task?.id,state.tasks) {task!=null && state.hasRecurrence(task.id)}
+    var noteExpanded by rememberSaveable(task?.id) {mutableStateOf(task?.note?.isNotBlank()==true)}
+    val unfinishedSeriesCount=remember(task?.id,state.tasks) {state.recurringFamily(task?.id.orEmpty()).count {!it.done}}
     var saveError by remember { mutableStateOf<String?>(null) }
     val presetOffsets = listOf(0, 10, 30, 60, 120, 1440, 2880)
     var customReminder by rememberSaveable { mutableStateOf(draft.offset !in presetOffsets) }
@@ -97,46 +102,55 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
     fun submit() {
         if(saving)return
         focus.clearFocus();saving=true;saveError=null
-        val submitted=draft.copy(tags=draft.tags.filter {id->state.tags.any {it.id==id}})
+        val intent=if(task!=null && editScope!=TaskEditScope.Occurrence.name)mergeTaskDetailEdit(task,seriesEditBase,draft) else draft
+        val submitted=intent.copy(tags=intent.tags.filter {id->state.tags.any {it.id==id}})
         onSave(submitted,TaskEditScope.valueOf(editScope)) {failure->
             saving=false
             if(failure==null){if(submitted.reminder)requestNotifications();onClose()} else saveError=failure
         }
     }
+    if(seriesHelp) AlertDialog(onDismissRequest={seriesHelp=false},title={PText("Series edits")},text={PText("Sync the title, assignee, list and tags across linked unfinished tasks. To copy an already corrected title, choose All open and Save. Dates, notes and reminders use This task. Completed history stays.")},confirmButton={TextButton({seriesHelp=false}) {PText("Got it")}},containerColor=c.surface)
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = {if(!saving) onClose()}, sheetState = sheet, sheetGesturesEnabled = false, containerColor = c.surface, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp), dragHandle = null) {
         Column(Modifier.fillMaxWidth().fillMaxHeight(.98f).imePadding()) {
             Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 20.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onClose, enabled = !saving, modifier = Modifier.size(48.dp)) { Icon(Icons.Outlined.Close, "Close without saving", Modifier.size(22.dp), tint = c.textPrimary) }
-                Spacer(Modifier.weight(1f)); Duo(22.dp); Spacer(Modifier.width(8.dp)); PText(if(task == null) "Create task" else "Edit task", style = MaterialTheme.typography.titleMedium)
-            }
-            LazyColumn(Modifier.weight(1f).freezeWhileSaving(saving), state=rememberLazyListState(), overscrollEffect=null, contentPadding = PaddingValues(20.dp, 0.dp, 20.dp, 20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                if(task!=null && task.repeat!=Repeat.Once) item {
-                    TaskCaption("Apply changes to")
-                    Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                        FilterChip(selected=editScope==TaskEditScope.Occurrence.name,onClick={editScope=TaskEditScope.Occurrence.name},enabled=!saving,label={PText("Only this occurrence")})
-                        FilterChip(selected=editScope==TaskEditScope.Future.name,onClick={editScope=TaskEditScope.Future.name},enabled=!saving,label={PText("This and future occurrences")})
-                        PText("Future edits apply the title, assignee, list and tags. Dates and personal settings stay individual. Completed tasks keep their content and completion.",style=MaterialTheme.typography.bodySmall,muted=true)
-                    }
+                if(recurring) {
+                    PText("Edit task",Modifier.weight(1f),MaterialTheme.typography.bodyMedium)
+                    Duo(18.dp)
+                    IconButton({seriesHelp=true}) {Icon(Icons.Outlined.Info,"About series edits",Modifier.size(18.dp))}
+                } else {
+                    Spacer(Modifier.weight(1f)); Duo(22.dp); Spacer(Modifier.width(8.dp)); PText(if(task == null) "Create task" else "Edit task", style = MaterialTheme.typography.titleMedium)
                 }
+            }
+            LazyColumn(Modifier.weight(1f).freezeWhileSaving(saving), state=rememberLazyListState(), overscrollEffect=null, contentPadding = PaddingValues(if(recurring)16.dp else 20.dp, 0.dp, if(recurring)16.dp else 20.dp, if(recurring)12.dp else 20.dp), verticalArrangement = Arrangement.spacedBy(if(recurring)12.dp else 20.dp)) {
                 item {
-                    TaskCaption("What needs doing?")
-                    BasicTextField(draft.title, { draft = draft.copy(title = it.take(80)) }, Modifier.fillMaxWidth().drawBehind { drawLine(c.primary, Offset(0f, size.height), Offset(size.width, size.height), 2.dp.toPx()) }.padding(2.dp, 4.dp, 2.dp, 8.dp), textStyle = MaterialTheme.typography.headlineMedium.copy(fontSize = 28.sp, lineHeight = 34.sp, letterSpacing = (-.3).sp, fontWeight = FontWeight.Bold, color = c.textPrimary), enabled = !saving, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences), maxLines = 4, decorationBox = { inner ->
+                    if(!recurring)TaskCaption("What needs doing?")
+                    BasicTextField(draft.title, { draft = draft.copy(title = it.take(80)) }, Modifier.fillMaxWidth().drawBehind { drawLine(c.primary, Offset(0f, size.height), Offset(size.width, size.height), 2.dp.toPx()) }.padding(2.dp, 4.dp, 2.dp, 8.dp), textStyle = MaterialTheme.typography.headlineMedium.copy(fontSize = if(recurring)24.sp else 28.sp, lineHeight = if(recurring)30.sp else 34.sp, letterSpacing = (-.3).sp, fontWeight = FontWeight.Bold, color = c.textPrimary), enabled = !saving, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences), maxLines = 4, decorationBox = { inner ->
                         if(draft.title.isBlank()) PText("E.g. Water the basil", style = MaterialTheme.typography.headlineMedium.copy(fontSize = 28.sp, lineHeight = 34.sp), muted = true)
                         inner()
                     })
                     Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        PText("Required", style = MaterialTheme.typography.bodySmall, muted = true)
+                        PText(if(recurring)"Task title" else "Required", style = MaterialTheme.typography.bodySmall, muted = true)
                         PText("${draft.title.length} / 80", style = MaterialTheme.typography.bodySmall, muted = true)
                     }
                 }
-                item {
-                    TaskSectionLabel("Who's on it") { PText("Tap a circle", style = MaterialTheme.typography.bodySmall, muted = true) }
-                    TaskOwnerCircles(draft.owner, state.preferences) { draft = draft.copy(owner = it) }
-                    PText(when(draft.owner) { Owner.Together -> "Together · Shows on both of your todays"; Owner.Me -> "${state.preferences.myName} · Shows on your today"; Owner.You -> "${state.preferences.partnerName} · Assigned to your partner" }, Modifier.fillMaxWidth().padding(top = 6.dp), MaterialTheme.typography.bodySmall, muted = true, align = TextAlign.Center)
+                if(recurring) item {
+                    FlowRow(verticalArrangement=Arrangement.spacedBy(0.dp),horizontalArrangement=Arrangement.spacedBy(8.dp),itemVerticalAlignment=Alignment.CenterVertically) {
+                        TaskCaption("Apply to")
+                        RecurringScopeOptions(listOf("This task","From here","All open"),listOf("Only this occurrence","This and future occurrences","All unfinished occurrences · $unfinishedSeriesCount"),TaskEditScope.valueOf(editScope).ordinal,!saving,modifier=Modifier) {editScope=TaskEditScope.entries[it].name}
+                    }
                 }
                 item {
-                    TaskSectionLabel("List") { TaskQuietAction("New list", onNewList) }
+                    TaskSectionLabel("Who's on it") { if(!recurring)PText("Tap a circle", style = MaterialTheme.typography.bodySmall, muted = true) }
+                    TaskOwnerCircles(draft.owner, state.preferences,compact=recurring) { draft = draft.copy(owner = it) }
+                    if(!recurring)PText(when(draft.owner) { Owner.Together -> "Together · Shows on both of your todays"; Owner.Me -> "${state.preferences.myName} · Shows on your today"; Owner.You -> "${state.preferences.partnerName} · Assigned to your partner" }, Modifier.fillMaxWidth().padding(top = 6.dp), MaterialTheme.typography.bodySmall, muted = true, align = TextAlign.Center)
+                }
+                item {
+                    TaskSectionLabel("List") {
+                        if(recurring)TextButton(onNewList) {Icon(Icons.Outlined.Add,null,Modifier.size(14.dp));PText("New list",style=MaterialTheme.typography.labelSmall)}
+                        else TaskQuietAction("New list", onNewList)
+                    }
                     if(state.lists.isEmpty()) PText("Create your first list to save this task.", muted = true)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         items(state.lists, key = { it.id }) { list -> TaskChip("${list.emoji} ${list.name}", draft.listId == list.id) { draft = draft.copy(listId = list.id) } }
@@ -150,13 +164,17 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
                         TaskChip("Pick date", draft.day != today && draft.day != today + 1, Icons.Outlined.CalendarToday) { pickDay(context, draft.day) { draft = draft.copy(day = it) } }
                     }
                     Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        TaskTime(draft.minute) { openDueTime() }
+                        if(recurring)TaskChip(timeText(draft.minute),icon=Icons.Outlined.Schedule) {openDueTime()}
+                        else TaskTime(draft.minute) { openDueTime() }
                         TaskSegments(Repeat.entries.map { it.label }, draft.repeat.ordinal, Modifier.weight(1f)) { draft = draft.copy(repeat = Repeat.entries[it]) }
                     }
                     PText(taskScheduleHint(draft,state.preferences),Modifier.fillMaxWidth().padding(top=6.dp),MaterialTheme.typography.bodySmall,muted=true)
                 }
                 item {
-                    TaskSectionLabel("Tags") { TaskQuietAction("Manage tags", onManageTags) }
+                    TaskSectionLabel("Tags") {
+                        if(recurring)TaskChip("Add tag",icon=Icons.Outlined.Add) {tagPicker=true}
+                        else TaskQuietAction("Manage tags", onManageTags)
+                    }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         draft.tags.mapNotNull { id -> state.tags.find { it.id == id } }.forEach { tag ->
                             Surface(shape = CircleShape, color = c.secondary.copy(alpha = .18f).compositeOver(c.surface), border = BorderStroke(1.5.dp, c.separator)) {
@@ -166,7 +184,7 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
                                 }
                             }
                         }
-                        TaskChip("Add tag", icon = Icons.Outlined.Add) { tagPicker = true }
+                        if(!recurring)TaskChip("Add tag", icon = Icons.Outlined.Add) { tagPicker = true }
                     }
                 }
                 item {
@@ -174,8 +192,8 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
                         Column(Modifier.padding(14.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                                 Column(Modifier.weight(1f)) {
-                                    PText(if(draft.reminder) "Gentle nudge" else "No nudge", style = MaterialTheme.typography.titleMedium)
-                                    PText("On for new tasks · You can turn it off", style = MaterialTheme.typography.bodySmall, muted = true)
+                                    PText(if(draft.reminder || recurring) "Gentle nudge" else "No nudge", style = if(recurring)MaterialTheme.typography.bodySmall else MaterialTheme.typography.titleMedium)
+                                    if(!recurring)PText("On for new tasks · You can turn it off", style = MaterialTheme.typography.bodySmall, muted = true)
                                 }
                                 // CSS-sized switch; Material's default switch is wider and taller.
                                 Box(Modifier.size(50.dp, 30.dp).background(if(draft.reminder) c.secondary else c.surface, CircleShape).border(1.5.dp,c.separator,CircleShape).semantics { contentDescription = "Gentle reminder" }.toggleable(value = draft.reminder, role = Role.Switch) { enabled -> draft = draft.copy(reminder = enabled); if(enabled) requestNotifications() }.padding(4.dp), contentAlignment = if(draft.reminder) Alignment.CenterEnd else Alignment.CenterStart) {
@@ -238,8 +256,11 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
                     }
                 }
                 item {
-                    TaskSectionLabel("Private note") { PText("Optional · Only you see it", style = MaterialTheme.typography.bodySmall, muted = true) }
-                    TaskNotePaper(Modifier.padding(start = 2.dp, end = 6.dp)) {
+                    TaskSectionLabel("Private note") {
+                        if(recurring)TextButton({noteExpanded=!noteExpanded}) {Icon(if(noteExpanded)Icons.Outlined.ExpandLess else Icons.Outlined.Add,null,Modifier.size(14.dp));PText(if(noteExpanded)"Hide note" else if(draft.note.isBlank())"Add note" else "Show note",style=MaterialTheme.typography.labelSmall)}
+                        else PText("Optional · Only you see it", style = MaterialTheme.typography.bodySmall, muted = true)
+                    }
+                    if(!recurring || noteExpanded)TaskNotePaper(Modifier.padding(start = 2.dp, end = 6.dp)) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { PText("Just for ${state.preferences.myName}", Modifier.weight(1f), MaterialTheme.typography.bodySmall, muted = true); TaskNoteCat() }
                         BasicTextField(draft.note, { draft = draft.copy(note = it.take(240)) }, Modifier.fillMaxWidth(), enabled = !saving, textStyle = MaterialTheme.typography.bodyMedium.copy(color = c.textPrimary), keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences), decorationBox = { inner -> if(draft.note.isEmpty()) PText("Anything to remember…", muted = true); inner() })
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { PText("${draft.note.length} / 240", Modifier.weight(1f), MaterialTheme.typography.bodySmall, muted = true); TextButton({ confirmClearNote = true }, enabled = draft.note.isNotEmpty()) { Text("Clear note", color = c.error, style = MaterialTheme.typography.labelLarge) } }
@@ -248,7 +269,8 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
             }
             if(saveError!=null) PText(saveError ?: "",Modifier.padding(horizontal=20.dp),MaterialTheme.typography.bodySmall)
             Row(Modifier.fillMaxWidth().padding(20.dp, 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { TaskQuietAction("Cancel", {if(!saving) onClose()}) }
+                if(recurring)OutlinedButton(onClose,Modifier.weight(1f).heightIn(min=52.dp),enabled=!saving) {PText("Cancel")}
+                else Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { TaskQuietAction("Cancel", {if(!saving) onClose()}) }
                 Button({
                     submit()
                 }, enabled = !saving && !creatingTag && draft.title.isNotBlank() && state.lists.any { it.id == draft.listId }, modifier = Modifier.weight(1f).heightIn(min = 52.dp), shape = CircleShape) {

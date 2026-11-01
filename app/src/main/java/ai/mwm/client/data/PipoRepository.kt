@@ -179,13 +179,7 @@ class PipoRepository private constructor(private val context: Context) {
             s.copy(tasks = tasks.map { if(it.id == id) it.copy(status = status, completedAt = 0, events = it.events + TaskEvent(if(task.done) "Reopened this task" else "Started this task")) else it })
         }
     }
-    fun deleteTask(id: String) = change { state ->
-        val deleted = state.tasks.find { it.id == id } ?: return@change state
-        // Keep future occurrences and their history editable after deleting an ancestor.
-        state.copy(skippedDaily=if(deleted.seriesId.isNotBlank()) state.skippedDaily+deleted.id else state.skippedDaily, tasks = state.tasks.filterNot { it.id == id }.map {
-            if(it.parentId == id) it.copy(parentId = deleted.parentId) else it
-        })
-    }
+    fun deleteTask(id: String,scope:TaskDeleteScope=TaskDeleteScope.Occurrence) = change {it.withTaskDeletion(id,scope)}
     companion object {
         @Volatile private var instance: PipoRepository? = null
         fun get(context: Context): PipoRepository = instance ?: synchronized(this) { instance ?: PipoRepository(context.applicationContext).also { instance = it } }
@@ -309,7 +303,7 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val failure=try {
                 withContext(Dispatchers.IO) {
-                    sync.mutate {
+                    sync.mutate(seriesTaskId=task.id.takeIf {scope!=TaskEditScope.Occurrence}) {
                         check(account==AccountScope.current(getApplication()) && space==connection.value.spaceId){"Account or partner changed. Reopen this task before saving."}
                         repository.saveTask(task,scope)
                     }
@@ -337,7 +331,7 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun toggle(task: Task) = status(task.id, if(task.done) TaskStatus.Todo else TaskStatus.Done)
     fun delete(id: String) = act { repository.deleteTask(id) }
-    fun deleteWithResult(id: String, onResult: (String?) -> Unit) = mutationWithResult(onResult,"delete-task:$id") {repository.deleteTask(id)}
+    fun deleteWithResult(id: String, scope:TaskDeleteScope=TaskDeleteScope.Occurrence,onResult: (String?) -> Unit) = mutationWithResult(onResult,"delete-task:$id",seriesTaskId=id.takeIf {scope!=TaskDeleteScope.Occurrence}) {repository.deleteTask(id,scope)}
     fun deleteListWithResult(id: String, onResult: (String?) -> Unit) = mutationWithResult(onResult,"delete-list:$id") {
         repository.change {s->s.copy(lists=s.lists.filterNot {it.id==id},tasks=s.tasks.filterNot {it.listId==id})}
     }
@@ -391,7 +385,7 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteTagWithResult(id: String, onResult: (String?) -> Unit) = mutationWithResult(onResult) {
         repository.change { s -> s.copy(tags = s.tags.filterNot { it.id == id }, tasks = s.tasks.map { it.copy(tags = it.tags - id) }) }
     }
-    private fun mutationWithResult(onResult: (String?) -> Unit, operationKey:String="", forceProfile:Boolean=false, change: () -> Unit) {
+    private fun mutationWithResult(onResult: (String?) -> Unit, operationKey:String="", forceProfile:Boolean=false,seriesTaskId:String?=null, change: () -> Unit) {
         val account=AccountScope.current(getApplication())
         val space=connection.value.spaceId
         val operation="$account:$space:$operationKey"
@@ -399,7 +393,7 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val failure=try {
                 withContext(Dispatchers.IO) {
-                    sync.mutate(forceProfile=forceProfile) {
+                    sync.mutate(forceProfile=forceProfile,seriesTaskId=seriesTaskId) {
                         check(account==AccountScope.current(getApplication()) && space==connection.value.spaceId){"Account or partner changed. Reopen this screen before saving."}
                         change()
                     }
