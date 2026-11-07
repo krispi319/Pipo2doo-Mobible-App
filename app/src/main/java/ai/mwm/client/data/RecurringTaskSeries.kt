@@ -30,7 +30,7 @@ private fun PipoState.nextDailyTemplate(source:Task,day:Long,now:Long):Task {
 
 internal fun PipoState.withRecurringDetails(old:Task,edited:Task,scope:TaskEditScope,now:Long):PipoState {
     require(hasRecurrence(old.id)) {"This task has no linked recurring series."}
-    require(old.day==edited.day && old.minute==edited.minute && old.repeat==edited.repeat && old.note==edited.note && old.reminder==edited.reminder && old.offset==edited.offset) {
+    require(!edited.hasOccurrenceChangesComparedTo(old)) {
         "Series edits change the title, assignee, list and tags. Use Only this occurrence for dates, times, repeat settings, reminders or private notes."
     }
     val unchangedShared=old.title==edited.title && old.owner==edited.owner && old.listId==edited.listId && old.tags==edited.tags

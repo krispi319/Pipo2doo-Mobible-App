@@ -76,6 +76,7 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
     var noteExpanded by rememberSaveable(task?.id) {mutableStateOf(task?.note?.isNotBlank()==true)}
     val unfinishedSeriesCount=remember(task?.id,state.tasks) {state.recurringFamily(task?.id.orEmpty()).count {!it.closed}}
     var saveError by remember { mutableStateOf<String?>(null) }
+    var confirmOccurrenceSave by remember { mutableStateOf(false) }
     val presetOffsets = listOf(0, 10, 30, 60, 120, 1440, 2880)
     var customReminder by rememberSaveable { mutableStateOf(draft.offset !in presetOffsets) }
     var customAmount by rememberSaveable { mutableIntStateOf(draft.offset.coerceAtLeast(1)) }
@@ -99,16 +100,29 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
     LaunchedEffect(state.lists) {
         if(state.lists.isNotEmpty() && state.lists.none { it.id == draft.listId }) draft = draft.copy(listId = state.lists.first().id)
     }
-    fun submit() {
+    fun submit(scope:TaskEditScope=TaskEditScope.valueOf(editScope)) {
         if(saving)return
-        focus.clearFocus();saving=true;saveError=null
-        val intent=if(task!=null && editScope!=TaskEditScope.Occurrence.name)mergeTaskDetailEdit(task,seriesEditBase,draft) else draft
+        focus.clearFocus();saveError=null
+        val intent=if(task!=null)mergeTaskDetailEdit(task,seriesEditBase,draft) else draft
+        if(task!=null && scope!=TaskEditScope.Occurrence && intent.hasOccurrenceChangesComparedTo(task)) {
+            confirmOccurrenceSave=true
+            return
+        }
+        saving=true
         val submitted=intent.copy(tags=intent.tags.filter {id->state.tags.any {it.id==id}})
-        onSave(submitted,TaskEditScope.valueOf(editScope)) {failure->
+        onSave(submitted,scope) {failure->
             saving=false
             if(failure==null){if(submitted.reminder)requestNotifications();onClose()} else saveError=failure
         }
     }
+    if(confirmOccurrenceSave) AlertDialog(
+        onDismissRequest={confirmOccurrenceSave=false},
+        title={PText("Save changes to this task?")},
+        text={PText("Date, time, repeat, reminders and private notes apply to one task. Save your changes to this task, or keep editing to change the title, assignee, list or tags across the series.")},
+        confirmButton={TextButton({confirmOccurrenceSave=false;editScope=TaskEditScope.Occurrence.name;submit(TaskEditScope.Occurrence)}) {PText("Save this task")}},
+        dismissButton={TextButton({confirmOccurrenceSave=false}) {PText("Keep editing")}},
+        containerColor=c.surface
+    )
     if(seriesHelp) AlertDialog(onDismissRequest={seriesHelp=false},title={PText("Series edits")},text={PText("Sync the title, assignee, list and tags across linked unfinished tasks. To copy an already corrected title, choose All open and Save. Dates, notes and reminders use This task. Completed history stays.")},confirmButton={TextButton({seriesHelp=false}) {PText("Got it")}},containerColor=c.surface)
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = {if(!saving) onClose()}, sheetState = sheet, sheetGesturesEnabled = false, containerColor = c.surface, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp), dragHandle = null) {

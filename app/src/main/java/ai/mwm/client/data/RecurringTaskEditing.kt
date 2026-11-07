@@ -6,13 +6,18 @@ enum class TaskEditScope { Occurrence, Future, AllUnfinished }
 fun PipoState.withTaskEdit(task: Task, scope: TaskEditScope, now: Long = System.currentTimeMillis()): PipoState {
     val old=tasks.find {it.id==task.id}
     require(old?.cancelled!=true) {"Cancelled tasks stay in History."}
+    if(old!=null && scope!=TaskEditScope.Occurrence) {
+        // Do not normalize untouched dates/notes before checking the user's series intent.
+        val details=task.copy(title=task.title.trim())
+        require(details.title.isNotBlank()) {"Task title is required."}
+        return withRecurringDetails(old,details,scope,now)
+    }
     val zone=clockZone(preferences.clockZone)
     val saved=task.withSavedSchedule(old,zone).copy(title=task.title.trim(),note=task.note.trim(),
         completedAt=if(task.done) {if(old?.done==true)old.completedAt else now} else 0,
         events=(old?.events ?: emptyList())+TaskEvent(if(old==null) "Created this task" else "Edited this task",now))
     require(saved.title.isNotBlank()) {"Task title is required."}
     if(old==null) return copy(tasks=tasks+saved+if(saved.done && saved.repeat==Repeat.Weekly) listOfNotNull(nextOccurrence(saved,now)) else emptyList())
-    if(scope!=TaskEditScope.Occurrence)return withRecurringDetails(old,saved,scope,now)
     var result=tasks.map {if(it.id==saved.id)saved else it}
     fun details(t:Task)=t.copy(title=if(old.title!=saved.title)saved.title else t.title,
         owner=if(old.owner!=saved.owner)saved.owner else t.owner,

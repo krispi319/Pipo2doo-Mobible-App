@@ -5,6 +5,15 @@ import org.junit.Test
 import java.time.*
 
 class RecurringTaskEditingTest {
+    @Test fun titleOnlySeriesEditPreservesUneditedPrivateNoteWhitespace() {
+        for(scope in listOf(TaskEditScope.Future,TaskEditScope.AllUnfinished)) {
+            val s=daily().let {state->state.copy(tasks=state.tasks.map {it.copy(note="  My private note\n")})}
+            val selected=s.tasks.first()
+            val edited=s.withTaskEdit(selected.copy(title="Water plants"),scope,now)
+            assertTrue(edited.tasks.all {it.title=="Water plants"})
+            assertEquals(s.tasks.map {it.note},edited.tasks.map {it.note})
+        }
+    }
     private val day=LocalDate.of(2026,10,31).toEpochDay()
     private val now=LocalDate.ofEpochDay(day).atTime(12,0).atZone(ZoneId.of("Europe/Berlin")).toInstant().toEpochMilli()
     private val root=Task(id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",title="Watre plants",day=day,repeat=Repeat.Daily,note="Private")

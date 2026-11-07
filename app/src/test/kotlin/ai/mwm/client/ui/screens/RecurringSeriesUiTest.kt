@@ -27,6 +27,49 @@ class RecurringSeriesUiTest {
     private val state=PipoState(tasks=listOf(root,child,history,root.copy(id="unrelated",repeat=Repeat.Once)),
         lists=listOf(SharedList(id="home",name="Home")),preferences=Preferences(myName="Alex",partnerName="Sam",myPhoto="asset:profile_mina",partnerPhoto="asset:profile_partner",started=true))
 
+    private fun verifyOccurrenceRecovery(change:()->Unit,expected:(Task)->Boolean) {
+        var attempts=0;var closed=0;var savedScope:TaskEditScope?=null
+        var result=state
+        compose.setContent {CompositionLocalProvider(LocalInspectionMode provides true) {MyApplicationTheme {
+            TaskEditor(child,state,null,{closed++},{task,scope,done->
+                attempts++;savedScope=scope
+                if(attempts==1)done("Offline · Retry")
+                else {result=state.withTaskEdit(task,scope);done(null)}
+            },{_,done->done(null)}, {}, {}, {})
+        }}}
+        compose.onNodeWithContentDescription("All unfinished occurrences · 2").performClick()
+        change()
+        compose.onNodeWithText("Save task").performClick()
+        compose.onNodeWithText("Save changes to this task?").assertIsDisplayed()
+        compose.runOnIdle {assertEquals(0,attempts)}
+        compose.onNodeWithText("Keep editing").performClick()
+        compose.onNodeWithContentDescription("All unfinished occurrences · 2").assertIsSelected()
+        compose.onNodeWithText("Save task").performClick()
+        compose.onNode(isDialog()).captureRoboImage("build/outputs/roborazzi/v146-save-occurrence-recovery.png")
+        compose.onNodeWithText("Save this task").performClick()
+        compose.onNodeWithText("Offline · Retry").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Only this occurrence").assertIsSelected()
+        compose.runOnIdle {assertEquals(0,closed);assertEquals(TaskEditScope.Occurrence,savedScope)}
+        compose.onNodeWithText("Save task").performClick()
+        compose.runOnIdle {
+            assertEquals(2,attempts);assertEquals(1,closed)
+            assertTrue(expected(result.tasks.single {it.id==child.id}))
+            assertEquals(state.tasks.filter {it.id!=child.id},result.tasks.filter {it.id!=child.id})
+        }
+    }
+    @Test fun seriesDateChangeCanSaveOneTaskAfterConfirmationAndRetry() = verifyOccurrenceRecovery(
+        change={compose.onNodeWithText("Today").performScrollTo().performClick()},
+        expected={it.day==root.day}
+    )
+    @Test fun seriesReminderChangeCanSaveOneTaskAfterConfirmationAndRetry() = verifyOccurrenceRecovery(
+        change={compose.onNodeWithContentDescription("Gentle reminder").performScrollTo().performClick()},
+        expected={!it.reminder}
+    )
+    @Test fun seriesRepeatChangeCanSaveOneTaskAfterConfirmationAndRetry() = verifyOccurrenceRecovery(
+        change={compose.onNodeWithText("Weekly").performScrollTo().performClick()},
+        expected={it.repeat==Repeat.Weekly}
+    )
+
     @Test fun existingOnceOccurrenceOffersWholeSeriesEditAndPassesItsScope() {
         var scope:TaskEditScope?=null
         var submitted:Task?=null

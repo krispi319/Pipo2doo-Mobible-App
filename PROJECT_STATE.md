@@ -1,3 +1,20 @@
+# v1.4.6 / 157 hotfix preparation — 7 November 2026
+
+- Screenshot error traced to series-field validation; user confirmed editing
+  date/time/repeat/reminders. Existing From here / All open scope intentionally
+  supports shared title, assignee, list and tags only.
+- TaskEditor now offers explicit Save this task confirmation for occurrence-only
+  fields; Keep editing retains the draft/scope and failed saves allow retry.
+  Occurrence submissions merge only edited fields into the latest displayed task.
+- Series title edits no longer trim untouched private notes or normalize schedules
+  before validating series intent, fixing false rejection from note whitespace.
+- Main page layouts, completed/cancelled history and backend permissions unchanged.
+- Added note-whitespace regression and three UI confirmation/keep/retry cases for
+  date, reminder and repeat. All 275 local tests passed; CI release checks and
+  publication pending. Evidence: verification/v146/.
+- Local Gradle metadata resolution restored with temporary links to already cached
+  artifacts; no repository dependency/build configuration changed.
+
 # Published v1.4.5 / 156 — 7 November 2026
 
 - Applied approved third love-day design, Celebration first, only in LoveCelebrationOptions.
