@@ -27,4 +27,11 @@ Validation:
 
 Local cached-artifact resolution used a temporary Maven repository linked to
 existing cached artifacts. No source dependency/build configuration was changed.
-No schema or user task data was modified. Release CI/signature checks pending.
+No schema or user task data was modified.
+
+Published release: https://github.com/krispi319/Pipo2doo-Mobible-App/releases/tag/v1.4.6
+Source/tag commit: ab5eeb6eb787e0e509399ece6ba22261d0ed2f11.
+GitHub run 42422505633 passed tests, full release lint, assembly and signing.
+Downloaded APK signature verifies, certificate matches v1.4.5, SHA256 matches
+the checksum, and package/version 1.4.6 / 157 are confirmed. See
+published-artifact.json. Physical-device upgrade testing remains unverified.

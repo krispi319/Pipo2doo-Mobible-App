@@ -1,0 +1,13 @@
+{
+  "sourceCommit": "ab5eeb6eb787e0e509399ece6ba22261d0ed2f11",
+  "workflowRun": 42422505633,
+  "versionName": "1.4.6",
+  "versionCode": 157,
+  "sha256": "7ffffadd9f315620a96dd5a9609f2e8ba8c663af6dfecc9d18531d3ff4af9f48",
+  "size": 36439311,
+  "signatureVerified": true,
+  "certificateMatchesV145": true,
+  "certificateSha256": "70e18b2ee897e33cf4fa8103def649f324346c07a2f930ba6de25aeb9b487260",
+  "package": "package: name='ai.mwm.android_2ebb28d1_fa04_4d16_89bf_06b0a18eff09' versionCode='157' versionName='1.4.6' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'\r",
+  "url": "https://github.com/krispi319/Pipo2doo-Mobible-App/releases/tag/v1.4.6"
+}

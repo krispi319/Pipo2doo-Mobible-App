@@ -1,4 +1,4 @@
-# v1.4.6 / 157 hotfix preparation — 7 November 2026
+# Published v1.4.6 / 157 hotfix — 7 November 2026
 
 - Screenshot error traced to series-field validation; user confirmed editing
   date/time/repeat/reminders. Existing From here / All open scope intentionally
@@ -10,8 +10,11 @@
   before validating series intent, fixing false rejection from note whitespace.
 - Main page layouts, completed/cancelled history and backend permissions unchanged.
 - Added note-whitespace regression and three UI confirmation/keep/retry cases for
-  date, reminder and repeat. All 275 local tests passed; CI release checks and
-  publication pending. Evidence: verification/v146/.
+  date, reminder and repeat. All 275 local tests passed. CI run 42422505633
+  passed tests, release lint, build and signing; published from ab5eeb6.
+  Downloaded APK checksum, package/version and original signing certificate
+  verified. Release: https://github.com/krispi319/Pipo2doo-Mobible-App/releases/tag/v1.4.6
+  Evidence: verification/v146/. No physical device was connected.
 - Local Gradle metadata resolution restored with temporary links to already cached
   artifacts; no repository dependency/build configuration changed.
 
