@@ -1,4 +1,4 @@
-# v1.4.5 release preparation — 7 November 2026
+# Published v1.4.5 / 156 — 7 November 2026
 
 - Applied approved third love-day design, Celebration first, only in LoveCelebrationOptions.
   Live next-milestone card, three compact tabs, persistent draft/note, preview,
@@ -9,7 +9,12 @@
 - Read-only backend check confirms cancellation validator, guard and enabled trigger.
   No schema/user-data changes. Live two-device delivery and encrypted backup
   round-trip testing remain outstanding; no zero-bug or measured speedup claim.
-- Release publication/signature verification pending. Evidence: verification/v145/release/.
+- Published from de01c37 via successful workflow 42403340342. CI tests, full lint,
+  release build and signing passed. Downloaded public APK checksum and original
+  certificate match verified; package/version 1.4.5 / 156 confirmed.
+  Release: https://github.com/krispi319/Pipo2doo-Mobible-App/releases/tag/v1.4.5
+  Evidence: verification/v145/release/. Additional live synthetic recurrence
+  transaction was rejected by automatic approval review and was not executed.
 
 # Prepared v1.4.5 (build 156) — 2026-11-05
 

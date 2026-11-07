@@ -1,0 +1,12 @@
+{
+  "sourceCommit": "de01c37d97005c541a0502abcc324a97779f163b",
+  "workflowRun": 42403340342,
+  "versionName": "1.4.5",
+  "versionCode": 156,
+  "sha256": "60cd4cabb5a251039b98772bdc9723ed08487e1c87829befee02dbc6780af885",
+  "size": 36439311,
+  "signatureVerified": true,
+  "certificateMatchesV144": true,
+  "certificateSha256": "70e18b2ee897e33cf4fa8103def649f324346c07a2f930ba6de25aeb9b487260",
+  "url": "https://github.com/krispi319/Pipo2doo-Mobible-App/releases/tag/v1.4.5"
+}
