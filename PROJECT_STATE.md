@@ -13,8 +13,10 @@
   release build and signing passed. Downloaded public APK checksum and original
   certificate match verified; package/version 1.4.5 / 156 confirmed.
   Release: https://github.com/krispi319/Pipo2doo-Mobible-App/releases/tag/v1.4.5
-  Evidence: verification/v145/release/. Additional live synthetic recurrence
-  transaction was rejected by automatic approval review and was not executed.
+  Evidence: verification/v145/release/. After explicit user approval, the live
+  synthetic recurrence/cancellation transaction passed and rolled back. Follow-up
+  query found zero synthetic test accounts. See live-recurrence-results.json;
+  released APK, persistent production data and schema remain unchanged.
 
 # Prepared v1.4.5 (build 156) — 2026-11-05
 

@@ -16,8 +16,12 @@ personal note, preview and save/retry remain connected to the existing logic.
 Local lint could not resolve Maven artifacts, so the successful Linux CI lint is
 the release lint evidence. No checks were disabled in the published CI build.
 Backend read-only checks confirmed the cancellation validator, guard and enabled
-trigger. Automatic approval review rejected an additional synthetic live database
-rollback test; it was not executed. No production data/schema was changed.
+trigger. After explicit user approval, the additional live synthetic recurrence
+transaction passed and rolled back: paired cancellation, audit fields, old-client
+protection, version conflict, shared read, daily-root re-anchoring, stopping series,
+outsider isolation and notification invalidation. Follow-up query found zero
+synthetic cancellation-test accounts remaining. See live-recurrence-results.json.
+No persistent production data/schema or released APK was changed.
 
 No emulator/phone was connected. Physical two-device notification/recurrence
 delivery and encrypted account-backup restore round trips remain unverified.

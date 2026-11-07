@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-07",
+  "project": "iilrnezrnipufiggltcf",
+  "script": "backend/supabase/v145/task_cancellation_series_tests.sql",
+  "result": "PASS",
+  "checks": [
+    "paired cancellation independent of assignee",
+    "server actor/time/reason and assignment retained",
+    "old-client cancellation metadata protection",
+    "stale-version conflict",
+    "other member can read cancellation",
+    "cancelled daily root retained and next date active",
+    "stop-series removes active daily generators",
+    "outsider cannot read",
+    "pending notification invalidation"
+  ],
+  "transaction": "rolled back",
+  "remainingSyntheticCancelTestAccounts": 0,
+  "appOrSchemaChanges": false
+}

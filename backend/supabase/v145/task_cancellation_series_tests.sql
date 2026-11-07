@@ -1,4 +1,4 @@
--- Extended recurrence check; confirmation expired before execution on 2026-11-07.
+-- Extended recurrence check; executed successfully with explicit approval on 2026-11-07.
 -- Synthetic accounts only; all data and queue events roll back.
 begin;
 create temporary table cancel_ctx(a uuid,b uuid,outsider uuid,sid uuid,code text,lid uuid,tid uuid);
