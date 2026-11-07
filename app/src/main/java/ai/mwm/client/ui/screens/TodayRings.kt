@@ -70,10 +70,10 @@ import kotlinx.coroutines.delay
                 }
             }
         }
-        Surface(onClick={onFilter(Owner.Together.label)},shape=RoundedCornerShape(14.dp),color=c.secondary.copy(alpha=.14f).compositeOver(c.surface),border=BorderStroke(1.dp,c.separator),modifier=Modifier.fillMaxWidth().heightIn(min=48.dp).semantics {selected=filter==Owner.Together.label}) {
-            Row(Modifier.padding(horizontal=12.dp,vertical=9.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                Icon(Icons.Outlined.FavoriteBorder,null,Modifier.size(18.dp))
-                PText("Together · ${tasks.count {it.owner==Owner.Together && it.done}}/${tasks.count {it.owner==Owner.Together}}",Modifier.weight(1f),MaterialTheme.typography.labelMedium)
+        Surface(onClick={onFilter(Owner.Together.label)},shape=RoundedCornerShape(14.dp),color=c.secondary.copy(alpha=.14f).compositeOver(c.surface),border=BorderStroke(1.dp,c.separator),modifier=Modifier.fillMaxWidth().height(32.dp).semantics {selected=filter==Owner.Together.label}) {
+            Row(Modifier.padding(horizontal=10.dp,vertical=4.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                Icon(Icons.Outlined.FavoriteBorder,null,Modifier.size(14.dp))
+                PText("Together · ${tasks.count {it.owner==Owner.Together && it.done}}/${tasks.count {it.owner==Owner.Together}}",Modifier.weight(1f),MaterialTheme.typography.labelSmall)
                 PText("${tasks.count {it.done}}/${tasks.size} overall",style=MaterialTheme.typography.labelSmall,muted=true)
                 Icon(Icons.Outlined.ChevronRight,null,Modifier.size(16.dp))
             }

@@ -42,12 +42,12 @@ internal fun PipoState.withRecurringDetails(old:Task,edited:Task,scope:TaskEditS
     if(unchangedShared && !syncCurrentTitle)return this
     val family=recurringFamily(old.id);val ids=family.mapTo(hashSetOf()) {it.id}
     val boundary=if(scope==TaskEditScope.AllUnfinished)Long.MIN_VALUE else old.day
-    var result=tasks.map {if(it.id in ids && !it.done && it.day>=boundary)details(it) else it}
+    var result=tasks.map {if(it.id in ids && !it.closed && it.day>=boundary)details(it) else it}
     if(family.any {it.repeat==Repeat.Daily && it.seriesId.isBlank()}) {
         // A stopped/edited occurrence can still belong to a daily series. Keep its linkage.
         val source=family.first {it.repeat==Repeat.Daily && it.seriesId.isBlank()}
         val intendedTemplate=details(source)
-        val template=result.filter {it.id in ids && !it.done && it.day>=boundary && it.repeat==Repeat.Daily && it.minute==source.minute && it.scheduleZone==source.scheduleZone &&
+        val template=result.filter {it.id in ids && !it.closed && it.day>=boundary && it.repeat==Repeat.Daily && it.minute==source.minute && it.scheduleZone==source.scheduleZone &&
             it.title==intendedTemplate.title && it.owner==intendedTemplate.owner && it.listId==intendedTemplate.listId && it.tags==intendedTemplate.tags}
             .let {pending->if(scope==TaskEditScope.Future)pending.firstOrNull {it.id==old.id} ?: pending.minByOrNull {it.day} else pending.minByOrNull {it.day}}
             ?: details(nextDailyTemplate(source,maxOf(Instant.ofEpochMilli(now).atZone(clockZone(preferences.clockZone)).toLocalDate().toEpochDay()+1,family.maxOf {it.day}+1),now))
@@ -67,7 +67,7 @@ internal fun PipoState.withRecurringDetails(old:Task,edited:Task,scope:TaskEditS
 fun PipoState.taskDeletionTargets(id:String,scope:TaskDeleteScope):Set<String> {
     val selected=tasks.find {it.id==id} ?: return emptySet()
     if(scope==TaskDeleteScope.Occurrence)return setOf(id)
-    return recurringFamily(id).filter {!it.done && (scope==TaskDeleteScope.Series || it.day>=selected.day)}.mapTo(hashSetOf()) {it.id}
+    return recurringFamily(id).filter {!it.closed && (scope==TaskDeleteScope.Series || it.day>=selected.day)}.mapTo(hashSetOf()) {it.id}
 }
 
 /** Series deletion keeps completed content and stops templates before the server can expand again. */
@@ -79,7 +79,7 @@ fun PipoState.withTaskDeletion(id:String,scope:TaskDeleteScope,now:Long=System.c
     val outsideParent=family.firstOrNull {it.parentId !in familyIds}?.parentId.orEmpty()
     val removedTemplate=family.firstOrNull {it.id in deleted && it.repeat==Repeat.Daily && it.seriesId.isBlank()}
     if(scope==TaskDeleteScope.Occurrence && removedTemplate!=null) {
-        val template=result.filter {it.id in familyIds && !it.done && it.repeat==Repeat.Daily && it.day>removedTemplate.day && it.minute==removedTemplate.minute && it.scheduleZone==removedTemplate.scheduleZone}.minByOrNull {it.day}
+        val template=result.filter {it.id in familyIds && !it.closed && it.repeat==Repeat.Daily && it.day>removedTemplate.day && it.minute==removedTemplate.minute && it.scheduleZone==removedTemplate.scheduleZone}.minByOrNull {it.day}
             ?: nextDailyTemplate(removedTemplate,maxOf(Instant.ofEpochMilli(now).atZone(clockZone(preferences.clockZone)).toLocalDate().toEpochDay()+1,family.maxOf {it.day}+1),now)
         val root=template.copy(seriesId="",parentId=outsideParent,repeat=Repeat.Daily)
         if(result.none {it.id==root.id})result=result+root

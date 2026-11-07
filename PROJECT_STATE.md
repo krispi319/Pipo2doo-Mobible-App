@@ -1,3 +1,142 @@
+# v1.4.5 release preparation — 7 November 2026
+
+- Applied approved third love-day design, Celebration first, only in LoveCelebrationOptions.
+  Live next-milestone card, three compact tabs, persistent draft/note, preview,
+  reminder timing/advance/permission controls and guarded save/retry are retained.
+- Full 271-test suite passed with zero failures/errors/skips; release APK assembled
+  with version 1.4.5 / 156. Screenshot inspected. Local lint could not resolve remote dependencies even after refresh; full lint
+  and tests now gate signed release publication in CI. No physical device connected.
+- Read-only backend check confirms cancellation validator, guard and enabled trigger.
+  No schema/user-data changes. Live two-device delivery and encrypted backup
+  round-trip testing remain outstanding; no zero-bug or measured speedup claim.
+- Release publication/signature verification pending. Evidence: verification/v145/release/.
+
+# Prepared v1.4.5 (build 156) — 2026-11-05
+
+- Applied approved compact Us & settings header/account card in v1.4.5 / 156.
+  New Us-only CompactSettingsProfiles uses live 108 dp photos with edit/lock and
+  milestones action. Text gaps are 30% tighter; date/status/account/actions stay
+  live and the two connection buttons remain equally sized. All source after
+  this card, including shared SettingsOrbit, is unchanged. Full build and 270
+  tests passed. Updated APK installed in place on emulator-5556 with hash match.
+  Evidence: verification/v145/us-compact/. No public release.
+- Applied approved larger avatars only to the Our milestones couple card in
+  v1.4.5 / 156. Portrait frames are 108 dp (50% larger), adapting on narrow
+  screens, with themed rings and a separated date footer. Live photos, own
+  edit/partner lock, names, roles and computed days/date are preserved. Shared
+  SettingsOrbit and other pages remain unchanged. Full build and 267 tests
+  passed; updated APK installed in place on emulator-5556 and hash verified.
+  Evidence: verification/v145/milestones-larger-avatars/. No public release.
+- Applied approved Slim switcher to Period & Care in v1.4.5 / 156. A shared
+  CareSlimHeader presents the compact title, name dropdown, Refresh and cycle
+  summary for solo, unpaired cloud and paired views. Later cards/calendar/forms,
+  reminders, care ownership/sharing rules and page spacing are unchanged.
+  Full debug build and 264 tests passed; four Care UI checks cover local/cloud
+  solo, both paired roles, private/offline partner guards, switching and long
+  names. Solo/paired screenshots match byte for byte. Installed in place on
+  emulator-5556, with APK hash verified and native header controls observed.
+  Evidence: verification/v145/care-slim-switcher/. No public release.
+- Solo/paired recheck (7 November): full debug build and 260 automated tests
+  passed, including offline/signed-in/unpaired-space Cancel visibility, both
+  paired roles, a solo UI save/reload/History flow, and ongoing-notification
+  removal while retaining unrelated notifications. Only regression tests and
+  verification notes changed; production layouts/permissions remain intact.
+  Solo used isolated test data; the active paired account was not switched or
+  modified. Current device reports a subsequent November 7 APK installation;
+  earlier hash matching below records the previous in-place update. Evidence:
+  verification/v145/task-cancellation/solo-paired-recheck-results.csv.
+- Applied approved task cancellation (7 November): matching compact Poke/Cancel
+  pills, occurrence/stop-series confirmation and optional reason. Cancellation
+  retains actor/time/reason in shared history, excludes tasks from overdue,
+  reminders and completion/streak credit. Progress heading is now History;
+  existing completed row styling is retained with cancelled rows added beside it.
+  The guarded shared write remains network-first and conflict checked.
+  Backend cancellation validation is deployed; existing task/list permissions
+  and notification assignment rules are unchanged. Wire status remains Done
+  for older-client compatibility; v1.4.5 uses cancellation metadata to distinguish
+  History entries. Both devices need the updated APK to show cancellation labels.
+  Full Android regression suite: 256 passed; final dialog checks/build recorded
+  in verification/v145/task-cancellation/. No GitHub release. Follow-up paired
+  check: emulator-5556 was still on the November 5 APK despite showing 1.4.5.
+  Updated it in place to the verified cancellation APK; native Today screenshot
+  confirms Cancel beside Poke with the existing account/tasks retained. Installed
+  and local APK SHA256 match (9606f4f8601635dc8e52b8ebd5f7d98482c865879f4c769f34a1087b95d10336).
+  Earlier compact Us header/love-day layout previews remain unapplied.
+- Applied the approved Together progress strip to production: height 32 dp
+  (previously 48), horizontal/vertical padding 10/4 dp, 14 dp heart and compact
+  label. Counts, colours, chevron and tap filter unchanged. Existing Today/locket
+  UI check passed; debug build installed on emulator-5554 with data preserved
+  and live screenshot verified. Evidence: verification/v145/together-strip.png,
+  together-strip-emulator.png and together-strip-ui-result.xml.
+- Task-reminder settings now load concurrently with the shared snapshot instead
+  of afterward. Existing fallback, cancellation, membership checks and reminder
+  rules retained. Fourteen targeted startup/reminder checks passed and debug APK
+  built. Updated emulator-5554 with install -r, preserving app data, and verified
+  a fresh launch reaches Today with existing account/tasks/photos. No matched
+  before/after timing or speedup claimed. See verification/v145/parallel-reminders.md.
+  No GitHub release.
+- Applied compact Our Locket to the production Today screen below avatars/
+  timezones/progress, above tasks, with photos visible by default and one collapse
+  header. Gallery/share/caption/heart callbacks retained; upload times remain in
+  detail views. Backup card now has tighter spacing, equal 36 dp buttons and a
+  header info icon for View status. Four targeted UI checks passed; evidence:
+  verification/v145/locket-backup-ui-results.csv, locket-top.png, backup-compact.png.
+  Task cards, avatar/timezone layouts and other preview-only changes untouched.
+
+- Approved startup trial: first authenticated snapshot opens Today with current
+  tasks/profiles before loading message/locket history independently. Exact-count
+  paging avoids redundant final empty requests and handles server row caps. No
+  SDK initialization or persistent partner-data cache change. Phone timing remains
+  unmeasured. Source rollback checkpoint preserves the earlier uncommitted v1.4.5
+  work: verification/v145/startup-backup-rollback/README.md.
+- Added Account backup → Restore latest, with replacement confirmation and status
+  feedback. Downloads saved private sections without uploading first; validates
+  account/workspace and payloads, serializes edits and attempts local rollback on
+  failure. Shared tasks/lists/profiles/date and shared Care history stay current.
+  Latest-only backup; no historical version selector. No real user backup was
+  restored during tests. See verification/v145/startup-and-restore.md.
+
+- Final full unit/Compose suite: 236 passed, no failures/errors/skips. Latest
+  evidence: verification/v145/startup-restore-test-results.csv. Earlier love-day
+  verification included
+  real save/retry and preview-return draft retention, once-only automatic card,
+  leap-day/DST/quiet-time calculations, notification deduplication and channel/
+  account/workspace isolation. Evidence: verification/v145/full-test-results.csv.
+  Actual app renders: verification/v145/love-*.png and settings-*.png. Real phone
+  delivery/permission flows remain a manual acceptance step. No release.
+- User approved the love-day celebration preview for v1.4.5. Added upcoming
+  100-day/yearly/custom milestones, personal reminder timing/advance notice,
+  cat/hearts/glow effects, sound/haptics, literal optional note, save/retry and
+  celebration-day display. Day-zero count retained; leap-day anniversaries use
+  Feb 28. Counter opens milestones; existing Celebrations card has an Open entry.
+  Custom day input expands inline. Preview/Back preserves unsaved selections and
+  note; successful saving clears the old draft. Milestone photo editing uses the
+  existing picker; the celebration card is read-only. Main avatars/date unchanged.
+- Personal settings persist in the existing account-owned preferences/backup
+  JSON; the shared together date remains the single source of milestone dates.
+  No schema or partner-message change. Local preferences serialize with the
+  shared sync lock to avoid being overwritten by in-flight shared mutations.
+- Love reminders have independent channels, quiet-hour adjustment, deduplication,
+  account/workspace-scoped cache and boot/time-change rescheduling. Notification
+  taps open the milestone view; in-app celebration appears once on an eligible
+  milestone date. No exact delivery promise or foreground service.
+- User approved the final folder-only Settings preview as the first v1.4.5
+  change. Shared-space sync status, profile/device preferences, timezones,
+  gentle reminders, chat visibility, notifications and Period & care now live
+  inside one Settings folder. Existing controls and callbacks are retained.
+- Existing avatar/name/days-together/date card, theme and remaining main-page
+  cards are preserved. Connection details and Check setup have equal dimensions.
+  Main/folder scroll positions are separate; Android Back and the visible Back
+  button return to the main Settings page. Name draft state remains outside
+  the folder content so navigation does not discard it.
+- No Lists redesign or unrelated-page layout change is included. Existing task
+  celebration controls are retained. Version prepared as 1.4.5 / 156; no commit,
+  push or release requested for these changes.
+- Eight targeted UI checks passed: folder contents/care access, equal button
+  sizes, name draft/save after hardware Back, visible Back, chat visibility,
+  unchanged Today clocks and full Create task saving. Evidence and actual app
+  renders: verification/v145/; scope notes: verification/v145.md.
+
 # Published v1.4.4 (build 155) — 2026-11-01
 
 - Published release ID 430493215 from 75b4dbca59eae883fb4736fb64fc914d600f73d7.

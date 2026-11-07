@@ -74,12 +74,12 @@ class SupabaseClient(private val context: Context) {
         if(reply.optString("access_token").isBlank()) false else {epoch++;save(reply);true}
     } }
     suspend fun signOut() = withContext(Dispatchers.IO) { authLock.withLock {load();epoch++;file.delete();session=null;loaded=true} }
-    suspend fun request(path: String, method: String="GET", body: JSONObject?=null): Any? {
+    suspend fun request(path: String, method: String="GET", body: JSONObject?=null,onRange:((String?)->Unit)?=null): Any? {
         val generation=epoch
         val jwt=token()
         check(generation==epoch) {"Account changed. Retry from your current account."}
         return try {
-            val result=raw(path,method,body,jwt)
+            val result=raw(path,method,body,jwt,onRange)
             check(generation==epoch) {"Account changed. A stale response was ignored."}
             result
         } catch(e: SupabaseFailure) {
@@ -88,7 +88,7 @@ class SupabaseClient(private val context: Context) {
                 authLock.withLock {session?.put("expires_at",0)}
                 val refreshed=token()
                 check(generation==epoch) {"Account changed. Retry from your current account."}
-                val result=raw(path,method,body,refreshed)
+                val result=raw(path,method,body,refreshed,onRange)
                 check(generation==epoch) {"Account changed. A stale response was ignored."}
                 return result
             }
@@ -142,13 +142,14 @@ class SupabaseClient(private val context: Context) {
             } finally {connection.disconnect()}
         }
     }
-    private suspend fun raw(path: String, method: String, body: JSONObject?, jwt: String?): Any? = withContext(Dispatchers.IO) {
+    private suspend fun raw(path: String, method: String, body: JSONObject?, jwt: String?,onRange:((String?)->Unit)?=null): Any? = withContext(Dispatchers.IO) {
         val connection=URL(config.getString("url").trimEnd('/')+path).openConnection() as HttpURLConnection
         try {
             connection.requestMethod=method;connection.connectTimeout=15000;connection.readTimeout=15000
             connection.setRequestProperty("apikey",config.getString("publishableKey"))
             connection.setRequestProperty("Content-Type","application/json")
             connection.setRequestProperty("Accept","application/json")
+            if(onRange!=null)connection.setRequestProperty("Prefer","count=exact")
             if(jwt!=null) connection.setRequestProperty("Authorization","Bearer $jwt")
             if(body!=null) {connection.doOutput=true;connection.outputStream.use {it.write(body.toString().toByteArray())}}
             val status=connection.responseCode
@@ -159,6 +160,7 @@ class SupabaseClient(private val context: Context) {
                 val detail=error.optString("msg",error.optString("message",error.optString("error_description","Supabase request failed (HTTP $status).")))
                 throw SupabaseFailure(status,reason,detail)
             }
+            onRange?.invoke(connection.getHeaderField("Content-Range"))
             if(text.isBlank() || text=="null") null else JSONTokener(text).nextValue()
         } finally {connection.disconnect()}
     }

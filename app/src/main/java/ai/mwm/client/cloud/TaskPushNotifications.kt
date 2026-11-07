@@ -40,19 +40,19 @@ object TaskPushNotifications {
                 owner=when(assigned) {null->Owner.Together;uid->Owner.Me;else->Owner.You}).inTaskZone(clockZone(p.clockZone))
             if(data.getString("kind") == "sync") {
                 val remaining=current.tasks.filterNot {it.id==task.id}
-                if(account == AccountScope.current(context)) TaskReminders.sync(context,current.copy(tasks=remaining+if(data.optBoolean("deleted") || task.done) emptyList() else listOf(task)))
+                if(account == AccountScope.current(context)) TaskReminders.sync(context,current.copy(tasks=remaining+if(data.optBoolean("deleted") || task.closed) emptyList() else listOf(task)))
                 return true
             }
             if(data.getString("kind") != "due" && account == AccountScope.current(context)) {
-                TaskReminders.sync(context,current.copy(tasks=current.tasks.filterNot {it.id==task.id}+if(task.done) emptyList() else listOf(task)))
+                TaskReminders.sync(context,current.copy(tasks=current.tasks.filterNot {it.id==task.id}+if(task.closed) emptyList() else listOf(task)))
             }
             if(data.getString("kind") == "due") {
-                if(task.done || !task.isOwnReminder()) return true
+                if(task.closed || !task.isOwnReminder()) return true
                 // Shares TaskReminders' delivery key with the local alarm: one visible reminder, no double sound.
                 if(account == AccountScope.current(context)) TaskReminders.sync(context,current.copy(tasks=current.tasks.filterNot {it.id==task.id}+task))
                 return true
             }
-            if(task.owner==Owner.You || task.done || data.optBoolean("deleted"))return true
+            if(task.owner==Owner.You || task.closed || data.optBoolean("deleted"))return true
             NotificationSounds.ensure(context,CHANNEL,"Task assignments",NotificationManager.IMPORTANCE_HIGH,"New and reassigned tasks in your couple workspace")
             if(!PartnerPokeService.allowed(context,CHANNEL)) return true
             val actor = data.optString("actor").takeUnless {it == "null" || it.isBlank()}

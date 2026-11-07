@@ -8,5 +8,6 @@ fun completionDay(task: Task,zone: ZoneId=ZoneId.systemDefault()): Long? =
 fun missedDeadline(task: Task,now: Long=System.currentTimeMillis(),zone: ZoneId=ZoneId.systemDefault()): Boolean {
     val due=if(task.minute!=null) task.dueAt(zone) else LocalDate.ofEpochDay(task.day).plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
     if(now<due) return false
+    if(task.cancelled) return false
     return if(task.done) task.completedAt>0 && if(task.minute==null) task.completedAt>=due else task.completedAt>due else true
 }

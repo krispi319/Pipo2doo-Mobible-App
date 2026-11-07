@@ -118,6 +118,62 @@ object AccountBackup {
     }
     suspend fun syncMain(c: Context): Boolean = sync(c,"main",{mainPrefs(c).contains("state")},{captureMain(c)},{restoreMain(c,it)})
     suspend fun syncCare(c: Context): Boolean = sync(c,"care",{CareRepository.get(c).hasBackupData()},{captureCare(c)},{restoreCare(c,it)})
+    /** Explicit download only. Never uploads the changes the user is trying to replace. */
+    suspend fun restoreLatest(c:Context,expectedOwner:String,expectedSpace:String):String=withContext(Dispatchers.IO) {
+        lock.withLock {
+            check(expectedOwner !in listOf("local","locked") && AccountScope.current(c)==expectedOwner) {"Sign in before restoring your backup."}
+            val client=SupabaseClient(c)
+            check(AccountScope.key(client.uid())==expectedOwner) {"Account changed. Restore canceled."}
+            val oldMain=captureMain(c);val oldCare=captureCare(c)
+            val baseline=canonical(JSONObject().put("main",oldMain).put("care",oldCare))
+            val rows=client.request("/rest/v1/account_backups?user_id=eq.${client.uid()}&section=in.(main,care)&select=section,version,payload") as JSONArray
+            synchronized(CareRepository.get(c)) {
+                check(AccountScope.current(c)==expectedOwner && mainPrefs(c).getString("last_shared_space","").orEmpty()==expectedSpace) {"Account or shared space changed. Restore canceled."}
+                check(baseline==canonical(JSONObject().put("main",captureMain(c)).put("care",captureCare(c)))) {"Your data changed during download. Please retry restoring."}
+                check(rows.length()>0) {"No saved account backup was found. Back up first."}
+                val decoded=(0 until rows.length()).associate {i->
+                    val row=rows.getJSONObject(i);val section=row.getString("section")
+                    check(section in setOf("main","care") && row.getLong("version")>0) {"Invalid backup response."}
+                    section to (row.getLong("version") to unpack(c,row.getJSONObject("payload")))
+                }
+                decoded.forEach {(section,pair)->validateManualBackup(section,pair.second,expectedSpace)}
+                val metadataBefore=decoded.keys.associateWith {section->c.getSharedPreferences("pipo_backup_${expectedOwner}_$section",Context.MODE_PRIVATE).all.toMap()}
+                restoreWithRollback(apply={
+                    decoded["main"]?.let {restoreMain(c,it.second)}
+                    decoded["care"]?.let {restoreCare(c,privateCareRestore(it.second,oldCare))}
+                    decoded.forEach {(section,pair)->
+                        val restored=if(section=="main")captureMain(c) else captureCare(c)
+                        val hash=digest(canonical(pack(c,restored)).toByteArray())
+                        val metadata=c.getSharedPreferences("pipo_backup_${expectedOwner}_$section",Context.MODE_PRIVATE)
+                        check(metadata.edit().putLong("version",pair.first).putString("hash",hash).commit())
+                    }
+                },rollback={
+                    restoreMain(c,oldMain);restoreCare(c,oldCare)
+                    metadataBefore.forEach {(section,before)->
+                        val edit=c.getSharedPreferences("pipo_backup_${expectedOwner}_$section",Context.MODE_PRIVATE).edit().remove("version").remove("hash")
+                        (before["version"] as? Long)?.let {edit.putLong("version",it)}
+                        (before["hash"] as? String)?.let {edit.putString("hash",it)}
+                        check(edit.commit())
+                    }
+                })
+                decoded.keys.forEach {label(expectedOwner,it,"Saved to your account · Restored latest")}
+                "Latest backup restored. Shared records stay current."
+            }
+        }
+    }
+    internal fun validateManualBackup(section:String,data:JSONObject,space:String) {
+        check(data.getInt("schema")==1) {"Install a newer app to read this backup."}
+        val savedSpace=if(section=="main")data.optString("last_shared_space") else data.optString("space")
+        check(savedSpace.isBlank() || savedSpace==space) {"This backup belongs to a different shared space. Nothing was restored."}
+        if(section=="main") {
+            data.getJSONObject("state").getJSONObject("preferences")
+            data.getJSONObject("private_task_notes");data.getJSONObject("personal_reminders")
+        } else {
+            val vault=data.getJSONObject("vault")
+            ai.mwm.client.data.CareCodec.decode(vault)
+            check(vault.getInt("checkTime") in 0..1439 && vault.getInt("headsTime") in 0..1439 && vault.optInt("endTime",540) in 0..1439) {"Invalid Care reminder time in backup."}
+        }
+    }
     private suspend fun sync(c: Context,section: String,hasLocal: ()->Boolean,capture: ()->JSONObject,restore: (JSONObject)->Unit): Boolean = withContext(Dispatchers.IO) {
         lock.withLock {
             val owner=AccountScope.current(c)

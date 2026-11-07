@@ -23,6 +23,7 @@ class MainActivity : ComponentActivity() {
     private var notificationTaskId by mutableStateOf<String?>(null)
     private var locketRequest by mutableStateOf<String?>(null)
     private var chatRequest by mutableStateOf(false)
+    private var loveDayRequest by mutableStateOf<Long?>(null)
     private var privateReminder by mutableStateOf(false)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,7 +35,7 @@ class MainActivity : ComponentActivity() {
             val dark = when(state.preferences.themeMode) { "Night" -> true; "Light" -> false; else -> isSystemInDarkTheme() }
             MyApplicationTheme(darkTheme = dark) {
                 LocalizedApp(state.preferences.language) {
-                    HomeScreen(openChat = chatRequest, onChatLinkHandled = { chatRequest = false }, openLocketId = locketRequest, onLocketLinkHandled = { locketRequest = null }, openTaskId = notificationTaskId, onTaskLinkHandled = { notificationTaskId = null }, openCare = privateReminder, onCareLinkHandled = { privateReminder = false })
+                    HomeScreen(openLoveDay=loveDayRequest,onLoveLinkHandled={loveDayRequest=null},openChat = chatRequest, onChatLinkHandled = { chatRequest = false }, openLocketId = locketRequest, onLocketLinkHandled = { locketRequest = null }, openTaskId = notificationTaskId, onTaskLinkHandled = { notificationTaskId = null }, openCare = privateReminder, onCareLinkHandled = { privateReminder = false })
                 }
             }
         }
@@ -50,6 +51,7 @@ class MainActivity : ComponentActivity() {
         privateReminder=matches && intent.data?.host=="private-reminder"
         locketRequest=null
         chatRequest=false
+        loveDayRequest=null
         if(!matches) {notificationTaskId=null;return}
         if(intent.data?.host=="chat" && intent.hasExtra("account_scope")) {notificationTaskId=null;chatRequest=true;return}
         if(intent.data?.host=="locket" && intent.hasExtra("account_scope")) {
@@ -57,6 +59,7 @@ class MainActivity : ComponentActivity() {
             locketRequest=intent.data?.lastPathSegment
             return
         }
+        if(intent.data?.host=="love-day" && intent.hasExtra("account_scope")) {notificationTaskId=null;loveDayRequest=intent.data?.lastPathSegment?.toLongOrNull()?.takeIf {it in -365000000L..365000000L};return}
         val event=intent.getStringExtra("poke_event_id")
         if(event==null) { notificationTaskId=intent.getStringExtra("task_id"); return }
         notificationTaskId=null

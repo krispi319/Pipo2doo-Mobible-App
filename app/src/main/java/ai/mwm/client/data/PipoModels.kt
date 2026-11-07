@@ -24,9 +24,12 @@ data class Task(
     val repeat: Repeat = Repeat.Once, val reminder: Boolean = true, val offset: Int = 0,
     val status: TaskStatus = TaskStatus.Todo, val completedAt: Long = 0,
     val parentId: String = "", val events: List<TaskEvent> = emptyList(), val assigneeUid: String = "",
-    val scheduledAt: Long = 0, val scheduleZone: String = "", val displayZone: String = "", val seriesId: String = ""
+    val scheduledAt: Long = 0, val scheduleZone: String = "", val displayZone: String = "", val seriesId: String = "",
+    val cancelledAt: Long = 0, val cancelledBy: String = "", val cancelledByName: String = "", val cancelReason: String = ""
 ) {
-    val done: Boolean get() = status == TaskStatus.Done
+    val cancelled: Boolean get() = cancelledAt > 0
+    val closed: Boolean get() = status == TaskStatus.Done
+    val done: Boolean get() = closed && !cancelled
     fun dueAt(zone: ZoneId = ZoneId.systemDefault()): Long = if(scheduledAt > 0 && minute != null) scheduledAt else LocalDate.ofEpochDay(day)
         .atTime(LocalTime.of((minute ?: 540) / 60, (minute ?: 540) % 60)).atZone(zone).toInstant().toEpochMilli()
     fun reminderAt(defaultMinute: Int = 540, zone: ZoneId = ZoneId.systemDefault()): Long {
@@ -50,7 +53,8 @@ data class Preferences(
     val themeMode: String = "System", val language: String = "en", val codeExpiresAt: Long = 0L,
     val togetherSince: Long = LocalDate.of(2023, 2, 14).toEpochDay(),
     val defaultReminderTime: Int = 750, val keepResetHistory: Boolean = true, val shareProfile: Boolean = true,
-    val clockZone: String = "", val partnerClockZone: String = "", val partnerClockOverride: String = "", val listLayout: String = "Wide"
+    val clockZone: String = "", val partnerClockZone: String = "", val partnerClockOverride: String = "", val listLayout: String = "Wide",
+    val loveCelebrations: LoveCelebrationSettings = LoveCelebrationSettings()
 )
 /** Enforced at the persistence boundary, not just by hiding partner controls.
  * This offline installation has one current individual; Owner.You is never its identity. */
@@ -62,7 +66,7 @@ internal fun requireOwnPreferencesUpdate(current: Preferences, next: Preferences
 }
 
 /** Only the assignee receives reminders; Together includes both members. Editing stays shared. */
-fun Task.isOwnReminder(): Boolean = reminder && !done && owner!=Owner.You
+fun Task.isOwnReminder(): Boolean = reminder && !closed && owner!=Owner.You
 
 data class PipoState(val tasks: List<Task> = emptyList(), val lists: List<SharedList> = emptyList(), val tags: List<Tag> = emptyList(), val notes: List<Appreciation> = emptyList(), val preferences: Preferences = Preferences(), val skippedDaily: Set<String> = emptySet())
 

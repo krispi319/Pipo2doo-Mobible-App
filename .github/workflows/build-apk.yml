@@ -264,7 +264,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash ./gradlew :app:assembleRelease \
+          bash ./gradlew :app:testDebugUnitTest :app:lintRelease :app:assembleRelease \
             --no-daemon \
             --stacktrace \
             --max-workers=2 \

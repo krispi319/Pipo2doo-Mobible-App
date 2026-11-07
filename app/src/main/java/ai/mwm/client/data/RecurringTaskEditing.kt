@@ -5,6 +5,7 @@ enum class TaskEditScope { Occurrence, Future, AllUnfinished }
 /** A recurring edit changes shared details without rewriting completed history or personal notes. */
 fun PipoState.withTaskEdit(task: Task, scope: TaskEditScope, now: Long = System.currentTimeMillis()): PipoState {
     val old=tasks.find {it.id==task.id}
+    require(old?.cancelled!=true) {"Cancelled tasks stay in History."}
     val zone=clockZone(preferences.clockZone)
     val saved=task.withSavedSchedule(old,zone).copy(title=task.title.trim(),note=task.note.trim(),
         completedAt=if(task.done) {if(old?.done==true)old.completedAt else now} else 0,
@@ -23,7 +24,7 @@ fun PipoState.withTaskEdit(task: Task, scope: TaskEditScope, now: Long = System.
         val family=tasks.filter {it.id==rootId || it.seriesId==rootId}
         if(old.id==rootId && (details(old)!=old || old.day!=saved.day || old.minute!=saved.minute || old.repeat!=saved.repeat || old.note!=saved.note || old.reminder!=saved.reminder || old.offset!=saved.offset)) {
             // Editing the template alone must not silently change dates generated later.
-            val future=family.filter {it.id!=old.id && it.day>old.day && !it.done}.minByOrNull {it.day}
+            val future=family.filter {it.id!=old.id && it.day>old.day && !it.closed}.minByOrNull {it.day}
                 ?: old.copy(id=dailyOccurrenceId(old.id,old.day+1),day=old.day+1,scheduledAt=0,
                     status=TaskStatus.Todo,completedAt=0,events=listOf(TaskEvent("Daily occurrence",now)))
                     .withSavedSchedule(null,zone)

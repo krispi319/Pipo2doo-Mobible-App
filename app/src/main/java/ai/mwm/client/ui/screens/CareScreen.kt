@@ -57,24 +57,19 @@ private val moods=listOf("Very low","Low","Okay","Good","Great")
     var supportSent by remember(supportOwner) {mutableStateOf(false)}
     val visible=if(partnerView) {if(connection.paired && connection.online && shared.online && shared.spaceId==connection.spaceId) shared.partner else null} else state
     LazyColumn(contentPadding=PaddingValues(20.dp,16.dp,20.dp,100.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
-        item {Row(verticalAlignment=Alignment.CenterVertically) {Column(Modifier.weight(1f)) {PText("Period & Care",style=MaterialTheme.typography.headlineLarge);PText("A little understanding, together",style=MaterialTheme.typography.bodySmall,muted=true)};IconButton(onRefresh) {Icon(Icons.Outlined.Refresh,"Refresh care records")}}}
-        item {Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {FilterChip(!partnerView,{partnerView=false},label={PText(name,preserveContent=true)});FilterChip(partnerView,{partnerView=true},label={PText(partner,preserveContent=true)})}}
-        if(error!=null) item {Paper {PText(error,style=MaterialTheme.typography.bodySmall);TextButton(onRefresh) {PText("Refresh")}}}
-        if(partnerView) item {PText(if(visible==null) "$partner hasn't shared care records yet." else "$partner's records · You can follow along and send support",style=MaterialTheme.typography.bodySmall,muted=true,preserveContent=true)}
+        item {
+            val active=visible?.starts?.lastOrNull()?.takeIf {start->visible.logs.none {it.end && it.day>=start}}
+            CareSlimHeader(name,partner,partnerView,{partnerView=it},onRefresh,
+                cycleTitle=visible?.let {if(active==null)if(partnerView)"Their cycle" else "Your cycle" else "Day ${today-active+1}"},
+                cycleSubtitle=active?.let {"Started ${dayText(it)}"} ?: "A little care, every day") {
+                if(error!=null)Paper {PText(error,style=MaterialTheme.typography.bodySmall);TextButton(onRefresh) {PText("Refresh")}}
+                if(partnerView)PText(if(visible==null)"$partner hasn't shared care records yet." else "$partner's records · You can follow along and send support",style=MaterialTheme.typography.bodySmall,muted=true,preserveContent=true)
+            }
+        }
         if(visible==null) item {Paper {Icon(if(partnerView) Icons.Outlined.FavoriteBorder else Icons.Outlined.LocalFlorist,null,tint=c.accent);PText(if(partnerView) "Give them a little space" else "Opening your records…",style=MaterialTheme.typography.titleMedium);PText(if(partnerView) "Their calendar appears here when they choose to share. Your own records stay separate." else "Your saved logs will appear here.",style=MaterialTheme.typography.bodySmall,muted=true)}}
         if(visible!=null) {
             val active=visible.starts.lastOrNull()?.takeIf {start->visible.logs.none {it.end && it.day>=start}}
             val log=visible.logs.find {it.day==selected}
-            item {
-                Row(Modifier.fillMaxWidth().padding(horizontal=4.dp),verticalAlignment=Alignment.Bottom) {
-                    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                        PText(if(partnerView) "$partner’s cycle" else "$name’s cycle",style=MaterialTheme.typography.labelSmall,muted=true,preserveContent=true)
-                        PText(if(active==null) if(partnerView) "Their cycle" else "Your cycle" else "Day ${today-active+1}",style=MaterialTheme.typography.displaySmall)
-                        PText(active?.let {"Started ${dayText(it)}"} ?: "A little care, every day",style=MaterialTheme.typography.bodySmall,muted=true)
-                    }
-                    ApprovedCat(Modifier.size(92.dp,84.dp),"care")
-                }
-            }
             item {Paper(color=c.accent.copy(alpha=.1f).compositeOver(c.surface)) {
                 PText("A little heads-up",style=MaterialTheme.typography.titleMedium)
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {

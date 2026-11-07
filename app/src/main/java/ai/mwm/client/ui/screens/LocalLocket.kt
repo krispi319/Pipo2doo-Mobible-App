@@ -17,9 +17,9 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
-@Composable fun LocalLocket(notes: List<ai.mwm.client.data.Appreciation> = emptyList(), locketRequest: String? = null, onLocketOpened: () -> Unit = {}, preferences: ai.mwm.client.data.Preferences = ai.mwm.client.data.Preferences()) {
+@Composable fun LocalLocket(notes: List<ai.mwm.client.data.Appreciation> = emptyList(), locketRequest: String? = null, onLocketOpened: () -> Unit = {}, preferences: ai.mwm.client.data.Preferences = ai.mwm.client.data.Preferences(),onCollapse:(()->Unit)?=null) {
     val connection=ai.mwm.client.cloud.LocalPartnerConnection.current
-    if(connection.connected) {SharedLocket(notes,locketRequest,onLocketOpened,preferences);return}
+    if(connection.connected) {SharedLocket(notes,locketRequest,onLocketOpened,preferences,onCollapse);return}
     val context=LocalContext.current
     // Preserve the existing local picture, caption and heart keys verbatim.
     val prefs=remember {context.getSharedPreferences("pipo_locket",0)}
@@ -41,11 +41,12 @@ import androidx.compose.ui.unit.dp
         preferences=preferences,
         photos=if(photo.isBlank()) emptyList() else listOf(Appreciation(id="local_locket",kind="Locket",message=caption,picture=photo,owner=Owner.Me,at=uploadedAt)),
         canAdd=true,onGallery=openLocal,onAdd=picker,
-        onPhoto={owner->if(owner==Owner.Me) openLocal() else partnerInfo=true}
+        onPhoto={owner->if(owner==Owner.Me) openLocal() else partnerInfo=true},onCollapse=onCollapse
     )
     if(locketOpen) AlertDialog(onDismissRequest={locketOpen=false},title={PText("Our locket")},text={
         Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
             LocalPicture(photo,Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(14.dp)))
+            if(uploadedAt>0)PText("Uploaded "+java.time.Instant.ofEpochMilli(uploadedAt).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("d MMM · HH:mm")),style=MaterialTheme.typography.labelSmall,muted=true)
             if(photo.startsWith("asset:")) PText("Sample photo",style=MaterialTheme.typography.bodySmall,muted=true)
             OutlinedTextField(draft,{draft=it.take(120)},label={PText("Caption")})
             Row(verticalAlignment=Alignment.CenterVertically) {
@@ -61,7 +62,7 @@ import androidx.compose.ui.unit.dp
 
 }
 
-@Composable private fun SharedLocket(notes: List<Appreciation>, locketRequest: String?, onLocketOpened: () -> Unit, preferences: ai.mwm.client.data.Preferences) {
+@Composable private fun SharedLocket(notes: List<Appreciation>, locketRequest: String?, onLocketOpened: () -> Unit, preferences: ai.mwm.client.data.Preferences,onCollapse:(()->Unit)?) {
     val connection=ai.mwm.client.cloud.LocalPartnerConnection.current
     val send=ai.mwm.client.cloud.LocalPartnerNote.current
     val photos=notes.filter {it.kind=="Locket" && it.picture.isNotBlank()}.sortedByDescending {it.at}
@@ -73,7 +74,7 @@ import androidx.compose.ui.unit.dp
     val picker=rememberPhotoPicker {draftPhoto=it;draftCaption="";compose=true}
     val c=AppTheme.colors
     LocketCard(preferences,photos,connection.paired && connection.online && !connection.busy,
-        onGallery={locketOpen=true},onAdd=picker,onPhoto={locketOpen=true})
+        onGallery={locketOpen=true},onAdd=picker,onPhoto={locketOpen=true},onCollapse=onCollapse)
 
     if(locketOpen) AlertDialog(onDismissRequest={locketOpen=false},title={PText("Our locket")},text={
         LazyColumn(Modifier.fillMaxWidth().heightIn(max=460.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
@@ -105,27 +106,28 @@ import androidx.compose.ui.unit.dp
     canAdd: Boolean,
     onGallery: () -> Unit,
     onAdd: () -> Unit,
-    onPhoto: (Owner) -> Unit
+    onPhoto: (Owner) -> Unit,
+    onCollapse:(()->Unit)?=null
 ) {
     val c=AppTheme.colors
-    Surface(Modifier.fillMaxWidth().padding(horizontal=20.dp,vertical=8.dp),shape=RoundedCornerShape(24.dp),color=c.accent.copy(alpha=.08f).compositeOver(c.surface),border=androidx.compose.foundation.BorderStroke(1.dp,c.separator)) {
-        Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+    Surface(Modifier.fillMaxWidth().padding(horizontal=20.dp,vertical=6.dp),shape=RoundedCornerShape(20.dp),color=c.accent.copy(alpha=.08f).compositeOver(c.surface),border=androidx.compose.foundation.BorderStroke(1.dp,c.separator)) {
+        Column(Modifier.padding(horizontal=10.dp,vertical=8.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Outlined.FavoriteBorder,null,Modifier.size(18.dp),tint=c.textSecondary)
-                PText("Our locket",Modifier.weight(1f),MaterialTheme.typography.titleSmall)
+                PText("Our Locket",Modifier.weight(1f),MaterialTheme.typography.titleSmall)
                 IconButton(onGallery,Modifier.size(40.dp)) {Icon(Icons.Outlined.Collections,"View memories",Modifier.size(20.dp))}
                 IconButton(onAdd,enabled=canAdd,modifier=Modifier.size(40.dp)) {Icon(Icons.Outlined.AddPhotoAlternate,"Share a locket picture",Modifier.size(20.dp))}
+                onCollapse?.let {IconButton(it,Modifier.size(40.dp)) {Icon(Icons.Outlined.ExpandLess,"Hide Locket",Modifier.size(20.dp))}}
             }
-            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 listOf(Owner.Me,Owner.You).forEach {owner->
                     val latest=photos.firstOrNull {it.owner==owner}
-                    Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(7.dp)) {
-                        Surface(onClick={onPhoto(owner)},modifier=Modifier.fillMaxWidth().height(96.dp),shape=RoundedCornerShape(20.dp),color=c.surface,border=androidx.compose.foundation.BorderStroke(2.dp,c.accent.copy(alpha=.35f))) {
-                            if(latest!=null) LocalPicture(latest.picture,Modifier.padding(4.dp).clip(RoundedCornerShape(15.dp)))
+                    Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                        Surface(onClick={onPhoto(owner)},modifier=Modifier.fillMaxWidth().height(88.dp),shape=RoundedCornerShape(14.dp),color=c.surface,border=androidx.compose.foundation.BorderStroke(2.dp,c.accent.copy(alpha=.35f))) {
+                            if(latest!=null) LocalPicture(latest.picture,Modifier.padding(3.dp).clip(RoundedCornerShape(11.dp)))
                             else Box(contentAlignment=Alignment.Center) {Icon(Icons.Outlined.FavoriteBorder,"No photo yet",tint=c.accent)}
                         }
                         Text(if(owner==Owner.Me) preferences.myName else preferences.partnerName,style=MaterialTheme.typography.labelSmall,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis,color=c.textPrimary)
-                        latest?.takeIf {it.at>0}?.let {PText(java.time.Instant.ofEpochMilli(it.at).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("d MMM · HH:mm")),style=MaterialTheme.typography.labelSmall,muted=true)}
                     }
                 }
             }

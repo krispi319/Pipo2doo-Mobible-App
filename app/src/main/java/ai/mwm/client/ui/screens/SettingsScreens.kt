@@ -18,6 +18,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -84,7 +85,7 @@ import kotlinx.coroutines.launch
 private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/60,minute%60)
 
 @OptIn(ExperimentalLayoutApi::class)
-@Composable fun SettingsScreen(state: PipoState, notificationsAllowed: Boolean, onPreferences: ((Preferences) -> Preferences) -> Unit, onEnable: () -> Unit, onTestReminder: () -> Unit, onTags: () -> Unit, onLeave: () -> Unit, onCare: () -> Unit = {}, onReset: () -> Unit = {}, onPair: () -> Unit = {}, onCheck: () -> Unit = {}, onBackup: () -> Unit = {},onTogetherDate:(Long,Long,(String?)->Unit)->Unit={day,_,done->onPreferences {it.copy(togetherSince=day)};done(null)},onSaveName:(String,(String?)->Unit)->Unit={_,done->done("Name saving is unavailable. Reopen your account settings.")},onChatVisibility:(Boolean)->Unit={},pendingTaskCount:Int=0) {
+@Composable fun SettingsScreen(state: PipoState, notificationsAllowed: Boolean, onPreferences: ((Preferences) -> Preferences) -> Unit, onEnable: () -> Unit, onTestReminder: () -> Unit, onTags: () -> Unit, onLeave: () -> Unit, onCare: () -> Unit = {}, onReset: () -> Unit = {}, onPair: () -> Unit = {}, onCheck: () -> Unit = {}, onBackup: () -> Unit = {},onTogetherDate:(Long,Long,(String?)->Unit)->Unit={day,_,done->onPreferences {it.copy(togetherSince=day)};done(null)},onSaveName:(String,(String?)->Unit)->Unit={_,done->done("Name saving is unavailable. Reopen your account settings.")},onChatVisibility:(Boolean)->Unit={},pendingTaskCount:Int=0,onLoveSave:(LoveCelebrationSettings,(String?)->Unit)->Unit={settings,done->onPreferences {it.copy(loveCelebrations=settings.validated())};done(null)},initialLoveDay:Long?=null,onLoveLinkHandled:()->Unit={},onRestoreBackup:((String?)->Unit)->Unit={done->done("Restore is unavailable. Reopen Settings.")}) {
     ApprovedDesign {
     val context=LocalContext.current
     val connection=ai.mwm.client.cloud.LocalPartnerConnection.current
@@ -101,13 +102,48 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
     var dateSaving by remember(connection.uid,connection.spaceId) {mutableStateOf(false)}
     var dateError by remember(connection.uid,connection.spaceId) {mutableStateOf<String?>(null)}
     var backupDetails by remember {mutableStateOf(false)}
+    var confirmRestore by remember(connection.uid,connection.spaceId) {mutableStateOf(false)}
+    var restoreBusy by remember(connection.uid,connection.spaceId) {mutableStateOf(false)}
+    var restoreMessage by remember(connection.uid,connection.spaceId) {mutableStateOf<String?>(null)}
     var reset by rememberSaveable {mutableStateOf(false)}
     var confirmLeave by rememberSaveable {mutableStateOf(false)}
     var languageOpen by rememberSaveable {mutableStateOf(false)}
     var preview by remember {mutableStateOf(false)}
+    var settingsFolder by rememberSaveable {mutableStateOf(false)}
+    var lovePage by rememberSaveable(connection.uid,connection.spaceId,p.togetherSince) {mutableIntStateOf(0)}
+    var loveReturn by rememberSaveable {mutableIntStateOf(1)}
+    var loveDay by rememberSaveable {mutableLongStateOf(0)}
+    var loveYears by rememberSaveable {mutableStateOf<Int?>(null)}
+    var lovePreview by rememberSaveable(stateSaver=LoveSettingsSaver) {mutableStateOf(p.loveCelebrations)}
+    val loveStates=key(connection.uid,connection.spaceId,p.togetherSince) {rememberSaveableStateHolder()}
+    val mainScroll=rememberLazyListState()
+    val folderScroll=rememberLazyListState()
+    androidx.activity.compose.BackHandler(enabled=settingsFolder) {settingsFolder=false}
     val date=LocalDate.ofEpochDay(p.togetherSince)
     val today=currentTaskDay(p.clockZone)
     val days=if(connection.connected && !connection.togetherDateKnown)null else (today-p.togetherSince).coerceAtLeast(0)
+    val loveKnown=!connection.connected || connection.togetherDateKnown
+    fun openLovePreview(settings:LoveCelebrationSettings,milestone:LoveMilestone?=null) {
+        val selected=milestone ?: loveMilestones(p.copy(loveCelebrations=settings),today,1).firstOrNull()
+            ?: loveMilestones(p.copy(loveCelebrations=LoveCelebrationSettings()),today,1).first()
+        lovePreview=settings;loveDay=selected.day;loveYears=selected.years;loveReturn=lovePage;lovePage=3
+    }
+    LaunchedEffect(initialLoveDay,loveKnown) {if(initialLoveDay!=null && loveKnown) {
+        lovePage=1
+        if(initialLoveDay==today)loveMilestones(p,today,1).firstOrNull {it.day==today}?.let {openLovePreview(p.loveCelebrations,it)}
+        onLoveLinkHandled()
+    }}
+    androidx.activity.compose.BackHandler(enabled=lovePage!=0) {lovePage=when(lovePage){3->loveReturn;2->1;else->0}}
+    if(loveKnown && lovePage!=0) {
+        loveStates.SaveableStateProvider(lovePage) {
+        when(lovePage) {
+            1->LoveMilestonesScreen(p,{lovePage=0},{lovePage=2},pickMe) {openLovePreview(p.loveCelebrations,it)}
+            2->LoveCelebrationOptions(p,{lovePage=1},{openLovePreview(it)},{settings,done->onLoveSave(settings){error->if(error==null)loveStates.removeState(2);done(error)}},onEnable,ai.mwm.client.reminders.LoveDayReminders.allowed(context,p.loveCelebrations))
+            3->LoveCelebrationDay(p.copy(loveCelebrations=lovePreview),LoveMilestone(loveDay,loveDay-p.togetherSince,loveYears)) {lovePage=loveReturn}
+        }
+        }
+        return@ApprovedDesign
+    }
     val manager=context.getSystemService(android.app.NotificationManager::class.java)
     // Read system channels when returning from Android settings, not illustrative mockup states.
     var soundRevision by remember {mutableIntStateOf(0)}
@@ -129,12 +165,100 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
             }.show()
         }
     }
-    LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp,12.dp,16.dp,104.dp),verticalArrangement=Arrangement.spacedBy(20.dp)) {
-        item {Surface(shape=RoundedCornerShape(20.dp),color=c.surface,border=BorderStroke(1.dp,c.separator),shadowElevation=1.dp) {
-            Row(Modifier.fillMaxWidth().padding(16.dp,14.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(6.dp)) {PText("Us & settings",style=MaterialTheme.typography.headlineLarge);Badge("${p.myName} & ${p.partnerName} · ${if(connection.paired) "Connected" else if(connection.connected) "Waiting" else "Local mode"}",c.secondary)};Duo(22.dp)
+    LazyColumn(Modifier.fillMaxSize(),state=if(settingsFolder)folderScroll else mainScroll,contentPadding=PaddingValues(16.dp,12.dp,16.dp,104.dp),verticalArrangement=Arrangement.spacedBy(20.dp)) {
+        if(!settingsFolder) {
+        item {Column(verticalArrangement=Arrangement.spacedBy(14.dp)) {
+        Surface(shape=RoundedCornerShape(20.dp),color=c.surface,border=BorderStroke(1.dp,c.separator),shadowElevation=1.dp) {
+            Row(Modifier.fillMaxWidth().padding(12.dp,8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.2.dp)) {PText("Us & settings",style=MaterialTheme.typography.titleLarge.copy(fontSize=20.sp,lineHeight=24.sp,fontWeight=FontWeight.Bold));Badge("${p.myName} & ${p.partnerName} · ${if(connection.paired) "Connected" else if(connection.connected) "Waiting" else "Local mode"}",c.secondary)};Duo(18.dp)
+            }
+        }
+        Surface(shape=RoundedCornerShape(24.dp),color=c.secondary.copy(alpha=.1f).compositeOver(c.surface),border=BorderStroke(1.dp,c.separator),shadowElevation=1.dp) {
+            Column(Modifier.fillMaxWidth().padding(10.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
+                CompactSettingsProfiles(p,days,onEditPhoto=pickMe,onMilestones=if(loveKnown){{lovePage=1}}else null)
+                if(connection.authenticated) PText("Signed in as ${connection.accountEmail.ifBlank {"your account"}}",style=MaterialTheme.typography.bodySmall,muted=true)
+                PText(connection.message,style=MaterialTheme.typography.bodySmall,muted=true)
+                Surface(onClick=setDate,enabled=!dateSaving && !connection.busy && (!connection.connected || connection.online),modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),color=c.secondary.copy(alpha=.14f).compositeOver(c.surfaceSunken),border=BorderStroke(1.dp,c.separator)) {
+                    Row(Modifier.padding(7.dp),horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {
+                        Surface(shape=RoundedCornerShape(6.dp),color=c.surface) {Column(Modifier.width(34.dp),horizontalAlignment=Alignment.CenterHorizontally) {Box(Modifier.fillMaxWidth().background(c.secondary),contentAlignment=Alignment.Center) {PText(date.format(DateTimeFormatter.ofPattern("MMM",Locale.ENGLISH)).uppercase(),style=MaterialTheme.typography.labelSmall.copy(fontSize=10.sp,lineHeight=12.sp))};PText(date.dayOfMonth.toString(),style=MaterialTheme.typography.titleMedium)}}
+                        Column(Modifier.weight(1f)) {PText(if(connection.connected) "Together since · Shared" else "Together since · This phone",style=MaterialTheme.typography.labelSmall.copy(fontSize=10.sp,lineHeight=12.sp),muted=true);PText(if(days==null) "Choose our date" else date.format(DateTimeFormatter.ofPattern("d MMM yyyy",Locale.ENGLISH)),style=MaterialTheme.typography.titleSmall)}
+                        Surface(modifier=Modifier.heightIn(min=32.dp),shape=CircleShape,color=c.surface,border=BorderStroke(1.dp,c.separator)) {Box(Modifier.padding(8.dp,3.dp),contentAlignment=Alignment.Center) {PText(if(dateSaving)"Saving…" else "✎ Edit",style=MaterialTheme.typography.labelSmall)}}
+                    }
+                }
+                val actionSize=if(androidx.compose.ui.platform.LocalDensity.current.fontScale<=1.1f)Modifier.height(36.dp) else Modifier.heightIn(min=36.dp)
+                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min),horizontalArrangement=Arrangement.spacedBy(8.dp,Alignment.CenterHorizontally),verticalAlignment=Alignment.CenterVertically) {OutlinedButton(onPair,Modifier.weight(1f).then(actionSize).fillMaxHeight(),enabled=!connection.busy,contentPadding=PaddingValues(7.dp)) {PText(if(connection.paired) "Connection details" else "Pair with partner",style=MaterialTheme.typography.labelSmall,align=TextAlign.Center)};OutlinedButton(onCheck,Modifier.weight(1f).then(actionSize).fillMaxHeight(),enabled=!connection.busy,contentPadding=PaddingValues(7.dp)) {PText("Check setup",style=MaterialTheme.typography.labelSmall,align=TextAlign.Center)}}
+                dateError?.let {PText(it,style=MaterialTheme.typography.bodySmall)}
+                if(connection.connected && !connection.online) PText("Reconnect to change the shared date",style=MaterialTheme.typography.labelSmall,muted=true)
+
+            }
+        }}}
+        item {Surface(onClick={settingsFolder=true},modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(20.dp),color=c.surfaceSunken,border=BorderStroke(1.dp,c.separator)) {
+            Row(Modifier.padding(16.dp,14.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                Icon(Icons.Outlined.FolderOpen,null,Modifier.size(24.dp))
+                Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                    PText("Settings",style=MaterialTheme.typography.titleMedium)
+                    PText("Profile, timezones, reminders & more",style=MaterialTheme.typography.bodySmall,muted=true)
+                }
+                Icon(Icons.Outlined.ChevronRight,"Open settings folder",Modifier.size(20.dp))
             }
         }}
+        item {SettingsGroup("Celebrations","Shared joy") {
+            SettingsRow(Icons.Outlined.FavoriteBorder,"Love-day celebrations",if(loveKnown)"Milestones, reminders & your note" else "Waiting for your shared date") {if(loveKnown)Pill("Open",onClick={lovePage=2})}
+            DashedRule(Modifier.padding(horizontal=12.dp))
+            SettingsRow(Icons.Outlined.MusicNote,"Little purr sound","When a task is done") {Switch(p.sound,{value->onPreferences {it.copy(sound=value)}},Modifier.semantics {contentDescription="Little purr sound"})}
+            DashedRule(Modifier.padding(horizontal=12.dp))
+            SettingsRow(Icons.Outlined.Vibration,"Haptic tap","Soft buzz on check-off") {Switch(p.haptics,{value->onPreferences {it.copy(haptics=value)}},Modifier.semantics {contentDescription="Haptic tap"})}
+            SettingsRow(Icons.Outlined.Celebration,"Two-cat confetti","Try a little celebration",paper=true) {Pill("▶ Preview",true,c.secondary) {celebrate(context,p);preview=true}}
+        }}
+        item {Surface(shape=RoundedCornerShape(20.dp),color=c.surface,border=BorderStroke(1.dp,c.warning.copy(alpha=.38f))) {
+            Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)) {Icon(Icons.Outlined.RestartAlt,null,Modifier.size(40.dp),tint=c.textSecondary);Column(Modifier.weight(1f)) {PText("Start fresh",style=MaterialTheme.typography.titleMedium);PText("Clear permitted lists and tasks. Partner-assigned tasks are protected.",style=MaterialTheme.typography.bodySmall,muted=true)}}
+                Row(Modifier.fillMaxWidth()) {listOf(state.lists.size to "Lists",state.tasks.size to "Tasks",state.tasks.count {it.isOwnReminder()} to "Reminders").forEach {(count,label)->Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally) {PText(count.toString(),style=MaterialTheme.typography.headlineSmall);PText(label,style=MaterialTheme.typography.labelSmall,muted=true)}}}
+                DashedRule()
+                Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {Column(Modifier.weight(1f)) {PText("Cleared",style=MaterialTheme.typography.labelSmall,muted=true);PText("× Lists, tasks & tags\n× Scheduled reminders",style=MaterialTheme.typography.bodySmall,muted=true)};Column(Modifier.weight(1f)) {PText("Kept",style=MaterialTheme.typography.labelSmall,muted=true);PText("✓ Profile & settings\n✓ Your care logs",style=MaterialTheme.typography.bodySmall,muted=true)}}
+                DashedRule()
+                Row(verticalAlignment=Alignment.CenterVertically) {Column(Modifier.weight(1f)) {PText("Keep thank-you history",style=MaterialTheme.typography.bodyMedium);PText("Appreciation notes stay in Our progress",style=MaterialTheme.typography.bodySmall,muted=true)};Switch(p.keepResetHistory,{value->onPreferences {it.copy(keepResetHistory=value)}},Modifier.semantics {contentDescription="Keep thank-you history"})}
+                Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {PText(if(connection.connected) "Reset is blocked if it includes your partner's individual tasks. You'll confirm first." else "Only this phone is reset. You'll confirm first.",Modifier.weight(1f),MaterialTheme.typography.bodySmall,true);OutlinedButton({reset=true},shape=CircleShape,border=BorderStroke(1.5.dp,c.error),colors=ButtonDefaults.outlinedButtonColors(contentColor=c.error)) {Text("Reset all…")}}
+            }
+        }}
+        item {Surface(shape=RoundedCornerShape(20.dp),color=c.surface,border=BorderStroke(1.dp,c.error.copy(alpha=.3f))) {
+            Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {Duo(22.dp);Column(Modifier.weight(1f)) {PText("Leave shared space",style=MaterialTheme.typography.titleMedium);PText(if(connection.connected) "Leave your connected space. Future partner access ends." else "Exit local mode. Your tasks stay; reminders pause.",style=MaterialTheme.typography.bodySmall,muted=true)};OutlinedButton({confirmLeave=true},shape=CircleShape,border=BorderStroke(1.5.dp,c.error),colors=ButtonDefaults.outlinedButtonColors(contentColor=c.error)) {Text("Leave…")}}
+        }}
+        item {
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                Surface(Modifier.weight(.64f),shape=RoundedCornerShape(20.dp),color=c.surface,border=BorderStroke(1.dp,c.separator),shadowElevation=1.dp) {
+                    Column(Modifier.padding(10.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                            PText("Account backup",Modifier.weight(1f),style=MaterialTheme.typography.titleSmall)
+                            if(connection.authenticated)IconButton({backupDetails=true},Modifier.size(28.dp)) {Icon(Icons.Outlined.Info,"View status",Modifier.size(16.dp))}
+                        }
+                        val backup by ai.mwm.client.cloud.AccountBackup.status.collectAsState()
+                        val owner=AccountScope.current(context)
+                        val main=backup["$owner:main"].orEmpty();val care=backup["$owner:care"].orEmpty()
+                        val ready=connection.authenticated && main.startsWith("Saved to") && care.startsWith("Saved to")
+                        val backing=connection.authenticated && (main.startsWith("Checking account") || care.startsWith("Checking account"))
+                        val backupLabel=when {
+                            !connection.authenticated->"Sign in to back up"
+                            backing->"Backing up…"
+                            ready->"Backed up"
+                            main.startsWith("Not backed up") || care.startsWith("Not backed up")->"Needs attention"
+                            main.startsWith("Changes waiting") || care.startsWith("Changes waiting")->"Changes waiting"
+                            else->"Not checked yet"
+                        }
+                        Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                            Icon(if(ready)Icons.Outlined.CloudDone else Icons.Outlined.CloudUpload,null,Modifier.size(18.dp),tint=if(ready)c.success else c.textSecondary)
+                            PText(restoreMessage ?: backupLabel,style=MaterialTheme.typography.labelSmall)
+                        }
+                        Button(onBackup,Modifier.fillMaxWidth().height(36.dp),contentPadding=PaddingValues(horizontal=8.dp,vertical=0.dp),enabled=connection.authenticated && !connection.busy && !backing && !restoreBusy){PText("Back up",style=MaterialTheme.typography.labelSmall)}
+                        OutlinedButton({restoreMessage=null;confirmRestore=true},Modifier.fillMaxWidth().height(36.dp),contentPadding=PaddingValues(horizontal=8.dp,vertical=0.dp),enabled=connection.authenticated && !connection.busy && !connection.restoring && !backing && !restoreBusy) {PText(if(restoreBusy)"Restoring…" else "Restore latest",style=MaterialTheme.typography.labelSmall)}
+                    }
+                }
+                AppUpdateCard(Modifier.weight(.36f).fillMaxHeight())
+            }
+        }
+
+        } else {
+        item {BackBar("Settings",{settingsFolder=false})}
         if(connection.connected) item {SettingsGroup("Shared space") {
             SettingsStack {
                 Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -148,24 +272,6 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
                     },Modifier.weight(1f),style=MaterialTheme.typography.bodySmall,muted=true)
                     TextButton(onCheck,enabled=!connection.busy) {PText(if(connection.online)"Refresh" else "Retry")}
                 }
-            }
-        }}
-        item {Surface(shape=RoundedCornerShape(28.dp),color=c.secondary.copy(alpha=.1f).compositeOver(c.surface),border=BorderStroke(1.dp,c.separator),shadowElevation=1.dp) {
-            Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                SettingsOrbit(p,days,onEditPhoto=pickMe)
-                if(connection.authenticated) PText("Signed in as ${connection.accountEmail.ifBlank {"your account"}}",style=MaterialTheme.typography.bodySmall,muted=true)
-                PText(connection.message,style=MaterialTheme.typography.bodySmall,muted=true)
-                Surface(onClick=setDate,enabled=!dateSaving && !connection.busy && (!connection.connected || connection.online),modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),color=c.secondary.copy(alpha=.14f).compositeOver(c.surfaceSunken),border=BorderStroke(1.dp,c.separator)) {
-                    Row(Modifier.padding(10.dp),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
-                        Surface(shape=RoundedCornerShape(8.dp),color=c.surface) {Column(Modifier.width(46.dp),horizontalAlignment=Alignment.CenterHorizontally) {Box(Modifier.fillMaxWidth().background(c.secondary),contentAlignment=Alignment.Center) {PText(date.format(DateTimeFormatter.ofPattern("MMM",Locale.ENGLISH)).uppercase(),style=MaterialTheme.typography.labelSmall)};PText(date.dayOfMonth.toString(),style=MaterialTheme.typography.titleLarge)}}
-                        Column(Modifier.weight(1f)) {PText(if(connection.connected) "Together since · Shared" else "Together since · This phone",style=MaterialTheme.typography.labelSmall,muted=true);PText(if(days==null) "Choose our date" else date.format(DateTimeFormatter.ofPattern("d MMM yyyy",Locale.ENGLISH)),style=MaterialTheme.typography.titleMedium)}
-                        Surface(shape=CircleShape,color=c.surface,border=BorderStroke(1.dp,c.separator)) {PText(if(dateSaving)"Saving…" else "✎ Edit",Modifier.padding(12.dp,10.dp),MaterialTheme.typography.labelLarge)}
-                    }
-                }
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp,Alignment.CenterHorizontally),verticalAlignment=Alignment.CenterVertically) {OutlinedButton(onPair,Modifier.weight(1f).heightIn(min=48.dp),enabled=!connection.busy,contentPadding=PaddingValues(10.dp)) {PText(if(connection.paired) "Connection details" else "Pair with partner",align=TextAlign.Center)};OutlinedButton(onCheck,Modifier.weight(1f).heightIn(min=48.dp),enabled=!connection.busy,contentPadding=PaddingValues(10.dp)) {PText("Check setup",align=TextAlign.Center)}}
-                dateError?.let {PText(it,style=MaterialTheme.typography.bodySmall)}
-                if(connection.connected && !connection.online) PText("Reconnect to change the shared date",style=MaterialTheme.typography.labelSmall,muted=true)
-
             }
         }}
         item {SettingsGroup("My profile",if(connection.connected) "Shared with partner" else "Me") {
@@ -300,12 +406,6 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
             SettingsRow(Icons.Outlined.Settings,"Android channels","Sound, pop-up and badges") {Pill("Open settings ↗",onClick=onEnable)}
             SettingsStack {OutlinedButton({context.startActivity(Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,context.packageName).putExtra(Settings.EXTRA_CHANNEL_ID,ai.mwm.client.reminders.NotificationSounds.channelId(context,TaskReminders.CHANNEL)))},modifier=Modifier.fillMaxWidth().heightIn(min=48.dp),contentPadding=PaddingValues(14.dp,12.dp)) {Icon(Icons.Outlined.Settings,null,Modifier.size(18.dp));Spacer(Modifier.width(8.dp));PText("Task channel settings",style=MaterialTheme.typography.labelLarge)};OutlinedButton(onTestReminder,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp),contentPadding=PaddingValues(14.dp,12.dp)) {Icon(Icons.Outlined.NotificationsActive,null,Modifier.size(18.dp));Spacer(Modifier.width(8.dp));PText("Test reminder",style=MaterialTheme.typography.labelLarge)}}
         }}
-        item {SettingsGroup("Celebrations","Shared joy") {
-            SettingsRow(Icons.Outlined.MusicNote,"Little purr sound","When a task is done") {Switch(p.sound,{value->onPreferences {it.copy(sound=value)}},Modifier.semantics {contentDescription="Little purr sound"})}
-            DashedRule(Modifier.padding(horizontal=12.dp))
-            SettingsRow(Icons.Outlined.Vibration,"Haptic tap","Soft buzz on check-off") {Switch(p.haptics,{value->onPreferences {it.copy(haptics=value)}},Modifier.semantics {contentDescription="Haptic tap"})}
-            SettingsRow(Icons.Outlined.Celebration,"Two-cat confetti","Try a little celebration",paper=true) {Pill("▶ Preview",true,c.secondary) {celebrate(context,p);preview=true}}
-        }}
         item {Surface(onClick=onCare,modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(20.dp),color=c.surface,border=BorderStroke(1.dp,c.separator),shadowElevation=1.dp) {
             Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {Icon(Icons.Outlined.LocalFlorist,null,Modifier.size(32.dp),tint=c.secondary);Column(Modifier.weight(1f)) {PText("Period & care",style=MaterialTheme.typography.titleMedium);PText("Your calendar, partner updates & support notes",style=MaterialTheme.typography.bodySmall,muted=true)};SettingsStatus("Care",true);Icon(Icons.Outlined.ArrowForward,"Open Period and care",Modifier.size(20.dp),tint=c.textSecondary)}
@@ -314,51 +414,15 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
                 PText("Pairing alone never grants access to health records.",style=MaterialTheme.typography.bodySmall,muted=true)
             }
         }}
-        item {Surface(shape=RoundedCornerShape(20.dp),color=c.surface,border=BorderStroke(1.dp,c.warning.copy(alpha=.38f))) {
-            Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)) {Icon(Icons.Outlined.RestartAlt,null,Modifier.size(40.dp),tint=c.textSecondary);Column(Modifier.weight(1f)) {PText("Start fresh",style=MaterialTheme.typography.titleMedium);PText("Clear permitted lists and tasks. Partner-assigned tasks are protected.",style=MaterialTheme.typography.bodySmall,muted=true)}}
-                Row(Modifier.fillMaxWidth()) {listOf(state.lists.size to "Lists",state.tasks.size to "Tasks",state.tasks.count {it.isOwnReminder()} to "Reminders").forEach {(count,label)->Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally) {PText(count.toString(),style=MaterialTheme.typography.headlineSmall);PText(label,style=MaterialTheme.typography.labelSmall,muted=true)}}}
-                DashedRule()
-                Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {Column(Modifier.weight(1f)) {PText("Cleared",style=MaterialTheme.typography.labelSmall,muted=true);PText("× Lists, tasks & tags\n× Scheduled reminders",style=MaterialTheme.typography.bodySmall,muted=true)};Column(Modifier.weight(1f)) {PText("Kept",style=MaterialTheme.typography.labelSmall,muted=true);PText("✓ Profile & settings\n✓ Your care logs",style=MaterialTheme.typography.bodySmall,muted=true)}}
-                DashedRule()
-                Row(verticalAlignment=Alignment.CenterVertically) {Column(Modifier.weight(1f)) {PText("Keep thank-you history",style=MaterialTheme.typography.bodyMedium);PText("Appreciation notes stay in Our progress",style=MaterialTheme.typography.bodySmall,muted=true)};Switch(p.keepResetHistory,{value->onPreferences {it.copy(keepResetHistory=value)}},Modifier.semantics {contentDescription="Keep thank-you history"})}
-                Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {PText(if(connection.connected) "Reset is blocked if it includes your partner's individual tasks. You'll confirm first." else "Only this phone is reset. You'll confirm first.",Modifier.weight(1f),MaterialTheme.typography.bodySmall,true);OutlinedButton({reset=true},shape=CircleShape,border=BorderStroke(1.5.dp,c.error),colors=ButtonDefaults.outlinedButtonColors(contentColor=c.error)) {Text("Reset all…")}}
-            }
-        }}
-        item {Surface(shape=RoundedCornerShape(20.dp),color=c.surface,border=BorderStroke(1.dp,c.error.copy(alpha=.3f))) {
-            Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {Duo(22.dp);Column(Modifier.weight(1f)) {PText("Leave shared space",style=MaterialTheme.typography.titleMedium);PText(if(connection.connected) "Leave your connected space. Future partner access ends." else "Exit local mode. Your tasks stay; reminders pause.",style=MaterialTheme.typography.bodySmall,muted=true)};OutlinedButton({confirmLeave=true},shape=CircleShape,border=BorderStroke(1.5.dp,c.error),colors=ButtonDefaults.outlinedButtonColors(contentColor=c.error)) {Text("Leave…")}}
-        }}
-        item {
-            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                Surface(Modifier.weight(.64f),shape=RoundedCornerShape(20.dp),color=c.surface,border=BorderStroke(1.dp,c.separator),shadowElevation=1.dp) {
-                    Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                        PText("Account backup",style=MaterialTheme.typography.titleSmall)
-                        val backup by ai.mwm.client.cloud.AccountBackup.status.collectAsState()
-                        val owner=AccountScope.current(context)
-                        val main=backup["$owner:main"].orEmpty();val care=backup["$owner:care"].orEmpty()
-                        val ready=connection.authenticated && main.startsWith("Saved to") && care.startsWith("Saved to")
-                        val backing=connection.authenticated && (main.startsWith("Checking account") || care.startsWith("Checking account"))
-                        val backupLabel=when {
-                            !connection.authenticated->"Sign in to back up"
-                            backing->"Backing up…"
-                            ready->"Backed up"
-                            main.startsWith("Not backed up") || care.startsWith("Not backed up")->"Needs attention"
-                            main.startsWith("Changes waiting") || care.startsWith("Changes waiting")->"Changes waiting"
-                            else->"Not checked yet"
-                        }
-                        Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                            Icon(if(ready)Icons.Outlined.CloudDone else Icons.Outlined.CloudUpload,null,Modifier.size(24.dp),tint=if(ready)c.success else c.textSecondary)
-                            PText(backupLabel,style=MaterialTheme.typography.bodySmall)
-                        }
-                        Button(onBackup,Modifier.fillMaxWidth(),enabled=connection.authenticated && !connection.busy && !backing){PText("Back up")}
-                        if(!ready && connection.authenticated)TextButton({backupDetails=true}){PText("View status",style=MaterialTheme.typography.labelSmall)}
-                    }
-                }
-                AppUpdateCard(Modifier.weight(.36f).fillMaxHeight())
-            }
         }
-
     }
+    if(confirmRestore) AlertDialog(onDismissRequest={if(!restoreBusy)confirmRestore=false},title={PText("Restore latest backup?")},text={PText("Replace personal settings, private notes, reminders and private Care with your latest saved backup. Shared tasks, lists and shared Care history stay current.")},confirmButton={TextButton({
+        restoreBusy=true
+        onRestoreBackup {failure->
+            restoreBusy=false;confirmRestore=false
+            restoreMessage=failure ?: "Latest backup restored ✓"
+        }
+    },enabled=!restoreBusy) {PText(if(restoreBusy)"Restoring…" else "Restore")}},dismissButton={TextButton({confirmRestore=false},enabled=!restoreBusy) {PText("Cancel")}})
     if(backupDetails) {
         val backup by ai.mwm.client.cloud.AccountBackup.status.collectAsState()
         val owner=AccountScope.current(context)
@@ -376,12 +440,12 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
 }
 }
 
-@Composable private fun SettingsOrbit(p:Preferences,days:Long?,modifier:Modifier=Modifier,onEditPhoto:()->Unit={}) {
+@Composable internal fun SettingsOrbit(p:Preferences,days:Long?,modifier:Modifier=Modifier,onEditPhoto:(()->Unit)?=null,onMilestones:(()->Unit)?=null) {
     val c=AppTheme.colors
     val connection=ai.mwm.client.cloud.LocalPartnerConnection.current
     Row(modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
         listOf(true,false).forEachIndexed {index,me->
-            if(index==1) Column(Modifier.weight(.9f),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(4.dp)) {
+            if(index==1) Column(Modifier.weight(.9f).then(if(onMilestones!=null)Modifier.clickable(onClick=onMilestones).semantics {contentDescription="Open our milestones"} else Modifier),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(4.dp)) {
                 Icon(Icons.Outlined.Favorite,null,Modifier.size(18.dp),tint=c.accent)
                 BasicText(days?.toString() ?: "♡",Modifier.fillMaxWidth(),style=MaterialTheme.typography.headlineSmall.copy(color=c.textPrimary,fontWeight=FontWeight.Bold,textAlign=TextAlign.Center),maxLines=1,softWrap=false,autoSize=TextAutoSize.StepBased(minFontSize=10.sp,maxFontSize=24.sp,stepSize=1.sp))
                 PText(if(days==null) "Set our date" else "days together",style=MaterialTheme.typography.labelSmall,muted=true,align=TextAlign.Center)
@@ -393,8 +457,8 @@ private fun clock(minute: Int)=String.format(Locale.ENGLISH,"%02d:%02d",minute/6
                         if(photo==if(me)"asset:profile_mina" else "asset:profile_partner") Image(painterResource(if(me)R.drawable.settings_demo_me else R.drawable.settings_demo_partner),"Sample portrait",Modifier.fillMaxSize(),contentScale=ContentScale.Crop)
                         else ProfilePhoto(photo,me,Modifier.fillMaxSize(),if(me)p.avatar else -1)
                     }
-                    if(me) OutlinedIconButton(onEditPhoto,Modifier.align(Alignment.BottomEnd).offset(x=4.dp,y=4.dp).size(36.dp),colors=IconButtonDefaults.outlinedIconButtonColors(containerColor=c.surface,contentColor=c.textPrimary),border=BorderStroke(1.dp,c.separator)) {Icon(Icons.Outlined.Edit,"Change my photo",Modifier.size(16.dp))}
-                    else Box(Modifier.align(Alignment.BottomEnd).offset(x=4.dp,y=4.dp).size(28.dp).background(c.surface,CircleShape).border(1.dp,c.separator,CircleShape),contentAlignment=Alignment.Center) {Icon(Icons.Outlined.Lock,"Partner photo is read-only",Modifier.size(13.dp),tint=c.textSecondary)}
+                    if(me && onEditPhoto!=null) OutlinedIconButton(onEditPhoto,modifier=Modifier.align(Alignment.BottomEnd).offset(x=4.dp,y=4.dp).size(36.dp),colors=IconButtonDefaults.outlinedIconButtonColors(containerColor=c.surface,contentColor=c.textPrimary),border=BorderStroke(1.dp,c.separator)) {Icon(Icons.Outlined.Edit,"Change my photo",Modifier.size(16.dp))}
+                    else if(!me) Box(Modifier.align(Alignment.BottomEnd).offset(x=4.dp,y=4.dp).size(28.dp).background(c.surface,CircleShape).border(1.dp,c.separator,CircleShape),contentAlignment=Alignment.Center) {Icon(Icons.Outlined.Lock,"Partner photo is read-only",Modifier.size(13.dp),tint=c.textSecondary)}
                 }
                 Text(if(me)p.myName else p.partnerName,Modifier.fillMaxWidth(),style=MaterialTheme.typography.titleSmall,color=c.textPrimary,textAlign=TextAlign.Center,maxLines=2,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 val role=if(me)connection.role else connection.partnerRole

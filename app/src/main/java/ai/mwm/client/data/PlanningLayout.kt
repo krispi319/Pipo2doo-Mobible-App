@@ -2,7 +2,7 @@ package ai.mwm.client.data
 
 data class PlanningGroup(val key:String,val title:String,val tasks:List<Task>)
 fun planningGroups(tasks:List<Task>,today:Long,selected:Long?=null):List<PlanningGroup> {
-    val open=tasks.filterNot {it.done}.sortedWith(compareBy<Task> {it.day}.thenBy {it.minute ?: 1440}.thenBy {it.id})
+    val open=tasks.filterNot {it.closed}.sortedWith(compareBy<Task> {it.day}.thenBy {it.minute ?: 1440}.thenBy {it.id})
     if(selected!=null) return listOf(PlanningGroup("day_$selected","Selected day",open.filter {it.day==selected}))
     return listOf(
         PlanningGroup("overdue","Overdue",open.filter {it.day<today}),
@@ -17,7 +17,7 @@ fun compactBoardWidth(viewport:Float,fontScale:Float=1f):Float =
 
 /** Disjoint, chronological sections for the vertical Upcoming page. */
 fun upcomingSections(tasks:List<Task>,today:Long,selected:Long?=null):List<PlanningGroup> {
-    val open=tasks.filterNot {it.done}.sortedWith(compareBy<Task> {it.day}.thenBy {it.minute ?: 1440}.thenBy {it.id})
+    val open=tasks.filterNot {it.closed}.sortedWith(compareBy<Task> {it.day}.thenBy {it.minute ?: 1440}.thenBy {it.id})
     if(selected!=null) return listOf(PlanningGroup("selected","Selected day",open.filter {it.day==selected}))
     val weekEnd=java.time.LocalDate.ofEpochDay(today).with(java.time.temporal.TemporalAdjusters.nextOrSame(java.time.DayOfWeek.SUNDAY)).toEpochDay()
     return listOf(

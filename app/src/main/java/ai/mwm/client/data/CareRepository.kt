@@ -128,6 +128,19 @@ class CareViewModel(app: Application): AndroidViewModel(app) {
     fun pause(){polling?.cancel();polling=null}
     fun refresh(){viewModelScope.launch(Dispatchers.IO){refreshRemote()}}
     fun backupNow(){val owner=loadedOwner;viewModelScope.launch(Dispatchers.IO){backup?.join();if(same(owner) && owner!="local")backupLater(owner,true)}}
+    /** Pause Care edits, refresh and publishing while restoring both private backup sections. */
+    suspend fun withLatestBackupRestore(restore:suspend ()->String):String=withContext(Dispatchers.IO) {
+        refreshLock.withLock {publishLock.withLock {lock.withLock {
+            val owner=loadedOwner
+            check(same(owner) && owner !in listOf("local","locked")) {"Wait for Care settings to open before restoring."}
+            backup?.cancelAndJoin()
+            val result=restore()
+            check(same(owner)) {"Account changed. Reopen Settings."}
+            mutable.value=repository.load()
+            CareReminders.sync(getApplication(),requireNotNull(mutable.value))
+            result
+        }}}
+    }
     private fun backupLater(owner:String,force:Boolean=false) {
         if(backup?.isActive==true || (!force && System.currentTimeMillis()-backupAt<60_000))return
         backupAt=System.currentTimeMillis()

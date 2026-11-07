@@ -30,7 +30,7 @@ import java.time.format.DateTimeFormatter
     LaunchedEffect(Unit) {while(true) {now=System.currentTimeMillis();delay(30_000)}}
     val completed=state.tasks.filter {completionDay(it,clockZone(state.preferences.clockZone))==selected}
     val missed=state.tasks.filter {it.day==selected && missedDeadline(it,now,clockZone(state.preferences.clockZone))}
-    val planned=state.tasks.filter {it.day==selected && it !in missed && completionDay(it,clockZone(state.preferences.clockZone))!=selected}
+    val planned=state.tasks.filter {!it.cancelled && it.day==selected && it !in missed && completionDay(it,clockZone(state.preferences.clockZone))!=selected}
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp,12.dp,16.dp,100.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
         item {Row(verticalAlignment=Alignment.CenterVertically) {OutlinedIconButton(onBack) {Icon(Icons.Outlined.ArrowBack,"Back")};Column(Modifier.weight(1f)) {PText("Our calendar",style=MaterialTheme.typography.headlineSmall);PText("Little wins, one day at a time",style=MaterialTheme.typography.bodySmall,muted=true)};PipoBrand(Modifier.size(42.dp))}}
         item {Paper(color=c.primary.copy(alpha=.08f).compositeOver(c.surface)) {

@@ -44,29 +44,24 @@ class PipoFirebase private constructor(context: Context) {
     suspend fun issueCode()=map(obj(client.rpc("issue_pair_code")))
     suspend fun joinSpace(code: String,role: String)=map(obj(client.rpc("redeem_pair_code_with_role",JSONObject().put("p_code",code).put("p_role",role))))
     suspend fun leaveSpace(): Map<String,Any?> {client.rpc("leave_partner_space");return emptyMap()}
-    private suspend fun records(sid: String): List<JSONObject> {
-        val all=mutableListOf<JSONObject>()
-        var offset=0
-        while(true) {
-            val page=rows(client.request("/rest/v1/shared_records?space_id=eq.$sid&deleted_at=is.null&select=*&order=id.asc&limit=500&offset=$offset"))
-            all.addAll(page)
-            if(page.isEmpty()) return all.distinctBy {it.getString("id")}
-            offset+=page.size
-        }
+    private suspend fun records(sid:String,kindFilter:String=""):List<JSONObject> = loadRecordPages {offset->
+        var range:String?=null
+        val page=rows(client.request("/rest/v1/shared_records?space_id=eq.$sid&deleted_at=is.null&select=*&order=id.asc&limit=500&offset=$offset$kindFilter",onRange={range=it}))
+        SharedRecordPage(page,range)
     }
     private suspend fun space(): String {
         val uid=client.uid()
         return rows(client.request("/rest/v1/space_members?user_id=eq.$uid&select=space_id")).firstOrNull()?.getString("space_id") ?: throw NoMembership()
     }
-    suspend fun snapshot(): Map<String,Any?> {
+    suspend fun snapshot(includeNotes:Boolean=true): Map<String,Any?> {
         val uid=client.uid();val sid=space()
-        val snapshot=coroutineScope {
+        val (snapshot,reminderSettings)=withParallelReminders(loadRecords={coroutineScope {
             val members=async {rows(client.request("/rest/v1/space_members?space_id=eq.$sid&select=user_id,member_role"))}
             val active=async {rows(client.request("/rest/v1/partner_spaces?id=eq.$sid&closed_at=is.null&select=id"))}
-            val rs=async {records(sid)}
+            val rs=async {records(sid,if(includeNotes)"" else "&kind=neq.appreciation")}
             val date=async {rows(client.request("/rest/v1/couple_dates?space_id=eq.$sid&select=since_day,version")).singleOrNull()}
             listOf(members.await(),active.await(),rs.await(),listOfNotNull(date.await()))
-        }
+        }},loadReminders={taskReminderSettings(sid)})
         val members=snapshot[0];val active=snapshot[1];val rs=snapshot[2];val date=snapshot[3].singleOrNull()
         if(active.isEmpty() || members.none {it.getString("user_id")==uid})throw NoMembership()
         fun payload(r: JSONObject): Map<String,Any?> {
@@ -78,7 +73,18 @@ class PipoFirebase private constructor(context: Context) {
         val partner=members.singleOrNull {it.getString("user_id")!=uid}
         val role=self.getString("member_role")
         check(role in listOf("user_1","user_2") && (partner==null || partner.getString("member_role")!=role)){"Invalid member roles. Shared edits are blocked."}
-        return mapOf("togetherDate" to date?.let(::map),"role" to role,"partnerRole" to (partner?.getString("member_role") ?: ""),"uid" to uid,"spaceId" to sid,"generation" to sid,"partnerUid" to (members.firstOrNull {it.getString("user_id")!=uid}?.getString("user_id") ?: ""),"tasks" to rs.filter {it.getString("kind")=="task"}.map(::payload),"lists" to rs.filter {it.getString("kind")=="list"}.map(::payload),"profiles" to rs.filter {it.getString("kind")=="profile"}.map(::payload),"notes" to rs.filter {it.getString("kind")=="appreciation"}.map(::payload),"tags" to rs.filter {it.getString("kind")=="tag"}.map(::payload))
+        return mapOf("taskReminders" to reminderSettings,"notesComplete" to includeNotes,"togetherDate" to date?.let(::map),"role" to role,"partnerRole" to (partner?.getString("member_role") ?: ""),"uid" to uid,"spaceId" to sid,"generation" to sid,"partnerUid" to (members.firstOrNull {it.getString("user_id")!=uid}?.getString("user_id") ?: ""),"tasks" to rs.filter {it.getString("kind")=="task"}.map(::payload),"lists" to rs.filter {it.getString("kind")=="list"}.map(::payload),"profiles" to rs.filter {it.getString("kind")=="profile"}.map(::payload),"notes" to rs.filter {it.getString("kind")=="appreciation"}.map(::payload),"tags" to rs.filter {it.getString("kind")=="tag"}.map(::payload))
+    }
+    /** Deferred history is independently membership-checked; never imports tasks or profiles. */
+    suspend fun sharedNotes(expectedUid:String,expectedSpace:String):List<Appreciation> {
+        check(client.uid()==expectedUid && space()==expectedSpace) {"Account or partner changed."}
+        return records(expectedSpace,"&kind=eq.appreciation").map {r->
+            val p=r.getJSONObject("payload")
+            Appreciation(id=r.getString("id"),kind=p.getString("kind"),message=p.optString("message"),
+                owner=if(r.getString("created_by")==expectedUid)Owner.Me else Owner.You,
+                at=if(p.optString("kind")=="Locket")OffsetDateTime.parse(r.getString("updated_at")).toInstant().toEpochMilli() else p.optLong("at"),
+                taskTitle=p.optString("taskTitle"),picture=p.optString("picture"),replyTo=p.optString("replyTo"))
+        }
     }
     suspend fun saveTogetherDate(expectedUid:String,expectedSpace:String,day:Long,expectedVersion:Long):Map<String,Any?> {
         require(validTogetherDate(day)) {"Choose a date from 1900 through today."}
@@ -147,7 +153,7 @@ class PipoFirebase private constructor(context: Context) {
     suspend fun saveTask(task: Task,uid: String,partner: String?,version: Long): Map<String,Any?> {
         check(uid==client.uid()) {"Account changed. Reopen this task."}
         val canonical = task.canonicalSchedule()
-        return write(task.id,"task",mapOf("seriesId" to task.seriesId,"scheduledAt" to canonical.scheduledAt,"scheduleZone" to canonical.scheduleZone,"title" to task.title,"listId" to task.listId,"day" to canonical.day,"minute" to canonical.minute,"repeat" to task.repeat.name,"status" to task.status.name,"tags" to task.tags,"parentId" to task.parentId,"completedAt" to task.completedAt),version,parent=task.parentId.ifBlank {task.listId}.takeIf {runCatching {UUID.fromString(it)}.isSuccess},assigned=assigned(task.owner,uid,partner))
+        return write(task.id,"task",mapOf("seriesId" to task.seriesId,"scheduledAt" to canonical.scheduledAt,"scheduleZone" to canonical.scheduleZone,"title" to task.title,"listId" to task.listId,"day" to canonical.day,"minute" to canonical.minute,"repeat" to task.repeat.name,"status" to task.status.name,"tags" to task.tags,"parentId" to task.parentId,"completedAt" to task.completedAt,"cancelledAt" to task.cancelledAt,"cancelledBy" to task.cancelledBy,"cancelledByName" to task.cancelledByName,"cancelReason" to task.cancelReason),version,parent=task.parentId.ifBlank {task.listId}.takeIf {runCatching {UUID.fromString(it)}.isSuccess},assigned=assigned(task.owner,uid,partner))
     }
     suspend fun saveTaskBatch(changed: List<Task>, deleted: List<Task>, uid: String, partner: String?, versions: Map<String,Long>, deletedLists: List<SharedList> = emptyList(), listVersions: Map<String,Long> = emptyMap(),seriesTaskId:String?=null,expectedSeriesIds:List<String> = emptyList()) {
         check(uid==client.uid()) {"Account changed. Reopen this task."}
@@ -156,7 +162,7 @@ class PipoFirebase private constructor(context: Context) {
             val canonical=t.canonicalSchedule()
             val payload=JSONObject().put("seriesId",t.seriesId).put("scheduledAt",canonical.scheduledAt).put("scheduleZone",canonical.scheduleZone)
                 .put("title",t.title).put("listId",t.listId).put("day",canonical.day).put("minute",canonical.minute ?: JSONObject.NULL)
-                .put("repeat",t.repeat.name).put("status",t.status.name).put("tags",JSONArray(t.tags)).put("parentId",t.parentId).put("completedAt",t.completedAt)
+                .put("repeat",t.repeat.name).put("status",t.status.name).put("tags",JSONArray(t.tags)).put("parentId",t.parentId).put("completedAt",t.completedAt).put("cancelledAt",t.cancelledAt).put("cancelledBy",t.cancelledBy).put("cancelledByName",t.cancelledByName).put("cancelReason",t.cancelReason)
             val parent=t.parentId.ifBlank {t.listId}.takeIf {runCatching {UUID.fromString(it)}.isSuccess}
             changes.put(JSONObject().put("id",t.id).put("payload",payload).put("parent",parent ?: JSONObject.NULL)
                 .put("assigned",assigned(t.owner,uid,partner) ?: JSONObject.NULL).put("version",versions[t.id] ?: 0)

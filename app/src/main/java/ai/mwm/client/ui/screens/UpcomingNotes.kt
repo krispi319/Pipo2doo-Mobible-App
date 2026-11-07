@@ -30,7 +30,7 @@ import java.time.format.DateTimeFormatter
     ApprovedDesign {
     val c=AppTheme.colors;val today=currentTaskDay(state.preferences.clockZone)
     var selected by rememberSaveable {mutableStateOf<Long?>(null)}
-    val open=state.tasks.filterNot {it.done}.sortedWith(compareBy<Task> {it.day}.thenBy {it.minute ?: 1440}.thenBy {it.id})
+    val open=state.tasks.filterNot {it.closed}.sortedWith(compareBy<Task> {it.day}.thenBy {it.minute ?: 1440}.thenBy {it.id})
     val groups=upcomingSections(open,today)
     val pager=rememberPagerState(initialPage=1,pageCount={groups.size})
     val scope=rememberCoroutineScope()
@@ -125,7 +125,7 @@ import java.time.format.DateTimeFormatter
                     if(task.repeat!=Repeat.Once) Badge(task.repeat.label,c.surfaceSunken)
                     task.tags.mapNotNull {id->state.tags.find {it.id==id}?.name}.forEach {Badge("#$it",c.surfaceSunken)}
                 }
-                if(task.owner!=Owner.Me) PokeButton(state.preferences.partnerName,task)
+                TaskActionPills(task,state)
             }
             OutlinedIconButton({onEdit(task.id)},enabled=editable,modifier=Modifier.size(40.dp),border=BorderStroke(1.dp,c.separator),colors=IconButtonDefaults.outlinedIconButtonColors(containerColor=c.surface,contentColor=c.textPrimary)) {Icon(Icons.Outlined.EditCalendar,"Move or edit ${task.title}",Modifier.size(20.dp))}
         }

@@ -60,6 +60,7 @@ class ChatVisibilityUiTest {
         compose.setContent {CompositionLocalProvider(LocalInspectionMode provides true,LocalPartnerConnection provides connection) {MyApplicationTheme {
             SettingsScreen(state,true,{}, {}, {}, {}, {},onChatVisibility={choice=it})
         }}}
+        compose.onNodeWithText("Settings").performClick()
         compose.onNodeWithText("Connected to shared space").assertExists()
         compose.onNodeWithText("Refresh").assertExists()
         compose.onNode(hasScrollAction()).performScrollToNode(hasContentDescription("Show online status"))

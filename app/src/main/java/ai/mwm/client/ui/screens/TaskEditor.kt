@@ -74,7 +74,7 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
     var seriesHelp by remember {mutableStateOf(false)}
     val recurring=remember(task?.id,state.tasks) {task!=null && state.hasRecurrence(task.id)}
     var noteExpanded by rememberSaveable(task?.id) {mutableStateOf(task?.note?.isNotBlank()==true)}
-    val unfinishedSeriesCount=remember(task?.id,state.tasks) {state.recurringFamily(task?.id.orEmpty()).count {!it.done}}
+    val unfinishedSeriesCount=remember(task?.id,state.tasks) {state.recurringFamily(task?.id.orEmpty()).count {!it.closed}}
     var saveError by remember { mutableStateOf<String?>(null) }
     val presetOffsets = listOf(0, 10, 30, 60, 120, 1440, 2880)
     var customReminder by rememberSaveable { mutableStateOf(draft.offset !in presetOffsets) }

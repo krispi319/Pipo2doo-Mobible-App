@@ -32,7 +32,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 
-@Composable fun HomeScreen(openTaskId: String? = null, onTaskLinkHandled: () -> Unit = {}, openCare: Boolean = false, onCareLinkHandled: () -> Unit = {}, openLocketId: String? = null, onLocketLinkHandled: () -> Unit = {}, openChat: Boolean = false, onChatLinkHandled: () -> Unit = {}) {
+@Composable fun HomeScreen(openTaskId: String? = null, onTaskLinkHandled: () -> Unit = {}, openCare: Boolean = false, onCareLinkHandled: () -> Unit = {}, openLocketId: String? = null, onLocketLinkHandled: () -> Unit = {}, openChat: Boolean = false, onChatLinkHandled: () -> Unit = {},openLoveDay:Long?=null,onLoveLinkHandled:()->Unit={}) {
     val preview = LocalInspectionMode.current
     val vm: PipoViewModel? = if(preview) null else viewModel()
     val state = vm?.state?.collectAsState()?.value ?: remember { seedState().copy(preferences = Preferences(started = true)) }
@@ -49,6 +49,7 @@ import kotlinx.coroutines.launch
     val lifecycle = LocalLifecycleOwner.current
     var appForeground by remember {mutableStateOf(lifecycle.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))}
     var locketToOpen by remember { mutableStateOf<String?>(null) }
+    var loveDayToOpen by remember {mutableStateOf<Long?>(null)}
     var tab by rememberSaveable { mutableStateOf("Today") }
     var taskId by rememberSaveable { mutableStateOf<String?>(null) }
     var listId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -107,7 +108,7 @@ import kotlinx.coroutines.launch
     val accountScope by AccountScope.changes.collectAsState()
     val screenStates=key(accountScope,connection.spaceId) {rememberSaveableStateHolder()}
     LaunchedEffect(accountScope) {
-        locketToOpen=null;taskId=null;listId=null;notesOpen=false;calendarOpen=false;careOpen=false;remindersOpen=false
+        loveDayToOpen=null;locketToOpen=null;taskId=null;listId=null;notesOpen=false;calendarOpen=false;careOpen=false;remindersOpen=false
         editorOpen=false;listEditorOpen=false;tagsOpen=false;editId=null;editListId=null
         deleteListConfirm=null;thanksFor="";tab="Today"
         snack.currentSnackbarData?.dismiss()
@@ -158,7 +159,7 @@ import kotlinx.coroutines.launch
         when { pairingOpen -> pairingOpen = false; careOpen -> careOpen = false; taskId != null -> taskId = null; listId != null -> listId = null; calendarOpen -> calendarOpen=false; notesOpen -> notesOpen = false; remindersOpen -> remindersOpen = false }
     }
     val userContent = remember(state, connection) { (state.tasks.flatMap { listOf(it.title,it.note,it.id,it.parentId) } + state.lists.flatMap {listOf(it.name,it.id)} + state.tags.flatMap {listOf(it.name,it.id)} + state.notes.flatMap {listOf(it.message,it.taskTitle,it.id)} + listOf(state.preferences.myName,state.preferences.partnerName,state.preferences.code,connection.code,connection.accountEmail,connection.uid)).filter {it.isNotBlank()}.toSet() }
-    CompositionLocalProvider(LocalUserContent provides userContent, ai.mwm.client.cloud.LocalPartnerConnection provides connection, ai.mwm.client.cloud.LocalPartnerNote provides {kind,message,task,picture -> vm?.thank(kind,message,task,picture)}, ai.mwm.client.cloud.LocalPartnerPoke provides {task -> vm?.poke(task)}) {
+    CompositionLocalProvider(LocalUserContent provides userContent, ai.mwm.client.cloud.LocalPartnerConnection provides connection, ai.mwm.client.cloud.LocalPartnerNote provides {kind,message,task,picture -> vm?.thank(kind,message,task,picture)}, LocalTaskCancel provides {task,scope,reason,result -> if(vm!=null)vm.cancelWithResult(task.id,scope,reason,result) else result("Preview only")}, ai.mwm.client.cloud.LocalPartnerPoke provides {task -> vm?.poke(task)}) {
     Scaffold(containerColor = AppTheme.colors.background,
         snackbarHost = { SnackbarHost(snack) { data ->
         Snackbar(action = { data.visuals.actionLabel?.let { label -> TextButton(onClick = { data.performAction() }) { Text(appDisplayText(label)) } } }, dismissAction = { if(data.visuals.withDismissAction) IconButton(onClick = { data.dismiss() }) { Icon(Icons.Outlined.Close, "Dismiss message") } }) { Text(appDisplayText(data.visuals.message)) }
@@ -199,12 +200,20 @@ import kotlinx.coroutines.launch
                 tab == "Upcoming" -> screenStates.SaveableStateProvider("Upcoming") { UpcomingScreen(state, openTask, toggle, { id -> editId=id; editorOpen=true },{calendarOpen=true}) }
                 tab == "Lists" -> screenStates.SaveableStateProvider("Lists") { ListsScreen(state, { listId = it }, { editListId = null; listEditorOpen = true }, openTask, { vm?.saveList(it) }, toggle, {layout->vm?.preferences {it.copy(listLayout=layout)}}) }
                 tab == "Progress" -> ProgressScreen(state, openTask) { thanksFor = ""; notesOpen = true }
-                tab == "Us" -> SettingsScreen(state, allowed, { vm?.preferences(it) }, notificationControl, { if(allowed) { vm?.testReminder(); scope.launch { snack.showSnackbar("Test task created. Complete it to clear its reminder.") } } else { requestIfNeeded(); scope.launch { snack.showSnackbar("Enable notifications, then create your test task.") } } }, { tagsOpen = true }, { vm?.leaveConnection(); careVm?.refresh(); tab = "Today" }, { tab="Care" }, {vm?.resetWorkspace()}, {pairingOpen=true}, {vm?.checkConnection()}, {vm?.backupNow();careVm?.backupNow()}, {day,version,done->if(vm!=null)vm.setTogetherDate(day,version,done) else done("Run the app to save the date.")}, onSaveName={name,done->if(vm!=null)vm.saveName(name,done) else done("Run the app to save your name.")},onChatVisibility={vm?.setChatVisibility(it,connection.uid,connection.spaceId)},pendingTaskCount=pendingTaskCount)
+                tab == "Us" -> SettingsScreen(state, allowed, { vm?.preferences(it) }, notificationControl, { if(allowed) { vm?.testReminder(); scope.launch { snack.showSnackbar("Test task created. Complete it to clear its reminder.") } } else { requestIfNeeded(); scope.launch { snack.showSnackbar("Enable notifications, then create your test task.") } } }, { tagsOpen = true }, { vm?.leaveConnection(); careVm?.refresh(); tab = "Today" }, { tab="Care" }, {vm?.resetWorkspace()}, {pairingOpen=true}, {vm?.checkConnection()}, {vm?.backupNow();careVm?.backupNow()}, {day,version,done->if(vm!=null)vm.setTogetherDate(day,version,done) else done("Run the app to save the date.")}, onSaveName={name,done->if(vm!=null)vm.saveName(name,done) else done("Run the app to save your name.")},onChatVisibility={vm?.setChatVisibility(it,connection.uid,connection.spaceId)},pendingTaskCount=pendingTaskCount,onLoveSave={settings,done->if(vm!=null)vm.saveLoveCelebrations(settings,done) else done("Run the app to save celebration settings.")},initialLoveDay=loveDayToOpen,onLoveLinkHandled={loveDayToOpen=null},onRestoreBackup={done->scope.launch {
+                    val failure=try {
+                        check(vm!=null && careVm!=null) {"Run the app to restore your backup."}
+                        careVm.withLatestBackupRestore {vm.restoreLatestBackup()};null
+                    } catch(e:kotlinx.coroutines.CancellationException) {throw e} catch(e:Exception) {e.message ?: "Restore failed. Please retry."}
+                    done(failure)
+                }})
                 else -> screenStates.SaveableStateProvider("Today") { TodayScreen(state, openTask, toggle, { vm?.preferences(it) }, { remindersOpen = true }, { tab="Care" }, locketToOpen, {locketToOpen=null}) }
             }
         }
     }
-    AppUpdatePrompt(primary && tab=="Today" && !editorOpen && !listEditorOpen && !tagsOpen)
+    LaunchedEffect(openLoveDay) {if(openLoveDay!=null){taskId=null;listId=null;notesOpen=false;calendarOpen=false;remindersOpen=false;tab="Us";loveDayToOpen=openLoveDay;onLoveLinkHandled()}}
+    val loveShowing=LoveCelebrationAutoHost(state.preferences,!preview && appForeground && primary && tab!="Us" && !editorOpen && !listEditorOpen && !tagsOpen && !pairingOpen && !connection.needsAuth && !connection.busy && openLoveDay==null && (connection.uid.isBlank() || AccountScope.key(connection.uid)==accountScope) && (!connection.connected || connection.togetherDateKnown),accountScope+":"+connection.spaceId)
+    AppUpdatePrompt(primary && tab=="Today" && !editorOpen && !listEditorOpen && !tagsOpen && !loveShowing)
     if(connection.needsAuth) PairingSignInDialog(connection, {vm?.dismissAuth()}, {email,password,signup->vm?.authenticate(email,password,signup)})
     if(editorOpen) {
         val edited = state.tasks.find { it.id == editId }

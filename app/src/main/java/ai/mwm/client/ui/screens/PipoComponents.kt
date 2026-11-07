@@ -133,7 +133,9 @@ fun ownerName(owner: Owner, p: Preferences): String = when(owner) { Owner.Me -> 
     val cooling=until>now
     val send=ai.mwm.client.cloud.LocalPartnerPoke.current
     var explain by remember { mutableStateOf(false) }
-    OutlinedButton({ if(task!=null && connection.paired && connection.online) send(task) else explain = true }, enabled=!connection.busy && !cooling, modifier = Modifier.height(36.dp), contentPadding = PaddingValues(horizontal = 12.dp), border = BorderStroke(1.5.dp, AppTheme.colors.accent.copy(alpha = .55f)), shape = CircleShape, colors = ButtonDefaults.outlinedButtonColors(containerColor = AppTheme.colors.accent.copy(alpha = .22f).compositeOver(AppTheme.colors.surface))) { Icon(Icons.Outlined.Pets, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); PText(if(cooling) "Again in ${(until-now)/60000+1} min" else "Poke", style = MaterialTheme.typography.labelSmall) }
+    CompactTaskPill(if(cooling) "Again in ${(until-now)/60000+1} min" else "Poke",Icons.Outlined.Pets,AppTheme.colors.accent.copy(alpha=.22f).compositeOver(AppTheme.colors.surface),!connection.busy && !cooling) {
+        if(task!=null && connection.paired && connection.online) send(task) else explain=true
+    }
     if(explain) AlertDialog(onDismissRequest = { explain = false }, icon = { Icon(Icons.Outlined.Pets, null, tint = AppTheme.colors.accent) }, title = { PText("A little setup first") }, text = { PText("We couldn't send a nudge to $partner. Partner Pokes need a connected shared space and phone push notifications. Connect both accounts, then let your partner enable Receive pokes in Settings.") }, confirmButton = { OutlinedButton({ explain = false }) { PText("Got it") } })
 }
 
@@ -174,7 +176,7 @@ fun ownerName(owner: Owner, p: Preferences): String = when(owner) { Owner.Me -> 
         Surface(Modifier.fillMaxWidth().clickable(onClick = onOpen), color = if(task.done) colors.surfaceSunken else if(together) color.copy(alpha = .14f).compositeOver(colors.surface) else colors.surface,
             shape = RoundedCornerShape(20.dp), border = if(task.done) null else BorderStroke(1.dp, colors.separator), shadowElevation = if(task.done) 0.dp else 1.dp) {
             Row(Modifier.then(if(!aligned) Modifier.drawBehind { drawRect(color, size = Size(4.dp.toPx(), size.height)) } else Modifier).padding(horizontal=16.dp,vertical=if(aligned) 16.dp else 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
-                CompactCheck(task.done, "Complete ${task.title}", color, onToggle,enabled=editable)
+                CompactCheck(task.done, "Complete ${task.title}", color, onToggle,enabled=editable && !task.cancelled)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = alignment) {
                     PText(task.title, Modifier.fillMaxWidth(), MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold, lineHeight = 22.sp), align = textAlign, decoration = if(task.done) TextDecoration.LineThrough else null, muted = task.done)
                     FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = if(partner) Arrangement.End else if(together) Arrangement.Center else Arrangement.Start, verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -188,7 +190,7 @@ fun ownerName(owner: Owner, p: Preferences): String = when(owner) { Owner.Me -> 
                         task.tags.mapNotNull { id -> state.tags.find { it.id == id } }.forEach { tag -> Surface(Modifier.padding(end = 5.dp), color = colors.surfaceSunken, shape = CircleShape) { PText(tag.name, Modifier.padding(8.dp, 3.dp), MaterialTheme.typography.bodySmall, true) } }
                         if(task.note.isNotBlank()) Icon(Icons.Outlined.StickyNote2, "Has a note", Modifier.padding(3.dp).size(14.dp), tint = colors.textSecondary)
                     }
-                    if(aligned && task.owner != Owner.Me && !task.done) PokeButton(state.preferences.partnerName,task)
+                    if(aligned) TaskActionPills(task,state)
                     extra?.invoke()
                 }
             }

@@ -35,15 +35,22 @@ import java.util.Locale
 @Composable fun TodayScreen(state: PipoState, onOpen: (String) -> Unit, onToggle: (Task) -> Unit, onPreferences: ((Preferences) -> Preferences) -> Unit = {}, onReminders: () -> Unit, onCare: () -> Unit = {}, locketRequest: String? = null, onLocketOpened: () -> Unit = {}) {
     var filter by rememberSaveable { mutableStateOf("All") }
     val today = currentTaskDay(state.preferences.clockZone)
-    val tasks = state.tasks.filter { (!it.done && it.day <= today) || (it.done && it.completedAt > 0 && Instant.ofEpochMilli(it.completedAt).atZone(clockZone(state.preferences.clockZone)).toLocalDate().toEpochDay() == today) }
+    val tasks = state.tasks.filter { (!it.closed && it.day <= today) || (it.done && it.completedAt > 0 && Instant.ofEpochMilli(it.completedAt).atZone(clockZone(state.preferences.clockZone)).toLocalDate().toEpochDay() == today) }
     var clockTarget by rememberSaveable {mutableStateOf("")}
-    var locketExpanded by rememberSaveable {mutableStateOf(false)}
+    var locketExpanded by rememberSaveable {mutableStateOf(true)}
     LaunchedEffect(locketRequest) {if(locketRequest!=null)locketExpanded=true}
     val colors = AppTheme.colors
     LazyColumn(contentPadding = PaddingValues(top = 8.dp, bottom = 144.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
         item { Row(Modifier.fillMaxWidth().padding(20.dp,12.dp), verticalAlignment = Alignment.Top) { Column(Modifier.weight(1f)) { PText("Good morning, ${state.preferences.myName}", style = MaterialTheme.typography.labelLarge, muted = true); PText("Today", style = MaterialTheme.typography.headlineLarge) }; Surface(onClick = onReminders, modifier = Modifier.size(48.dp), shape = CircleShape, color = colors.surface, border = BorderStroke(1.dp, colors.separator), shadowElevation = 1.dp) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Outlined.NotificationsNone, "Notifications",Modifier.size(22.dp)); if(state.tasks.any { it.isOwnReminder() }) Box(Modifier.align(Alignment.TopEnd).padding(top=11.dp,end=12.dp).size(9.dp).background(colors.accent,CircleShape)) } } } }
         item {
             TodayRings(state.preferences,tasks,filter,onClock={clockTarget=if(it==Owner.Me) "mine" else "partner"}) {filter=it}
+        }
+        item {
+            if(!locketExpanded)TextButton({locketExpanded=!locketExpanded},Modifier.fillMaxWidth().padding(horizontal=12.dp)) {
+                Icon(Icons.Outlined.PhotoLibrary,null,Modifier.size(18.dp));Spacer(Modifier.width(8.dp));PText("Our Locket",Modifier.weight(1f))
+                Icon(if(locketExpanded)Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,if(locketExpanded)"Hide Locket" else "Show Locket")
+            }
+            if(locketExpanded)LocalLocket(state.notes,locketRequest,onLocketOpened,state.preferences,onCollapse={locketExpanded=false})
         }
         val shown = tasks.filter { filter == "All" || it.owner.label == filter }
         item { Row(Modifier.fillMaxWidth().padding(start=20.dp,end=20.dp,top=8.dp,bottom=10.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -52,20 +59,14 @@ import java.util.Locale
                 if(filter!="All")PText(ownerName(Owner.valueOf(filter),state.preferences),style=MaterialTheme.typography.labelSmall,muted=true)
             }
             if(filter!="All")TextButton({filter="All"}) {PText("All tasks",style=MaterialTheme.typography.labelMedium)}
-            PText("${shown.count { !it.done }} left",style=MaterialTheme.typography.bodySmall,muted=true)
+            PText("${shown.count { !it.closed }} left",style=MaterialTheme.typography.bodySmall,muted=true)
         } }
-        items(shown.filterNot { it.done }.sortedWith(compareBy<Task> { it.day }.thenBy { it.minute ?: 1440 }), key = { it.id }) { task -> TodayTaskRow(task,state,onOpen,onToggle) }
-        if(shown.none { !it.done }) item { PText("A clear windowsill. Add a little task when you're ready.", Modifier.padding(24.dp), muted = true) }
+        items(shown.filterNot { it.closed }.sortedWith(compareBy<Task> { it.day }.thenBy { it.minute ?: 1440 }), key = { it.id }) { task -> TodayTaskRow(task,state,onOpen,onToggle) }
+        if(shown.none { !it.closed }) item { PText("A clear windowsill. Add a little task when you're ready.", Modifier.padding(24.dp), muted = true) }
         item { Row(Modifier.fillMaxWidth().padding(20.dp,12.dp),verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.spacedBy(12.dp)) { DashedRule(Modifier.weight(1f).padding(bottom=10.dp));ApprovedCat(Modifier.size(58.dp,44.dp)) } }
         if(shown.any { it.done }) item { Row(Modifier.fillMaxWidth().padding(20.dp,12.dp),horizontalArrangement=Arrangement.SpaceBetween) { PText("Done today",style=MaterialTheme.typography.titleMedium);PText("${shown.count { it.done }} finished",style=MaterialTheme.typography.bodySmall,muted=true) } }
         items(shown.filter { it.done }.sortedByDescending { it.completedAt }, key = { it.id }) { task -> TodayTaskRow(task,state,onOpen,onToggle) }
-        item {
-            TextButton({locketExpanded=!locketExpanded},Modifier.fillMaxWidth().padding(horizontal=12.dp)) {
-                Icon(Icons.Outlined.PhotoLibrary,null,Modifier.size(18.dp));Spacer(Modifier.width(8.dp));PText("Our Locket",Modifier.weight(1f))
-                Icon(if(locketExpanded)Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,if(locketExpanded)"Hide Locket" else "Show Locket")
-            }
-            if(locketExpanded)LocalLocket(state.notes,locketRequest,onLocketOpened,state.preferences)
-        }
+
     }
     if(clockTarget.isNotBlank()) TimezoneChoiceDialog(clockTarget=="mine",{clockTarget=""}) {zone->
         val mine=clockTarget=="mine"
@@ -78,7 +79,7 @@ import java.util.Locale
 @Composable private fun TodayTaskRow(task:Task,state:PipoState,onOpen:(String)->Unit,onToggle:(Task)->Unit) {
     Box(Modifier.padding(horizontal=20.dp)) {
         TaskRow(task,state,{onOpen(task.id)},{onToggle(task)},aligned=false) {
-            if(task.owner!=Owner.Me && !task.done)PokeButton(state.preferences.partnerName,task)
+            TaskActionPills(task,state)
         }
     }
 }
@@ -104,19 +105,19 @@ import java.util.Locale
         if(lists.any { it.pinned }) item(span = { GridItemSpan(2) }) { Column { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { PText("Pinned on the fridge", Modifier.weight(1f), MaterialTheme.typography.titleMedium); OutlinedButton({ manage = true },contentPadding=PaddingValues(horizontal=12.dp),modifier=Modifier.height(40.dp)) { Icon(Icons.Outlined.Tune,null,Modifier.size(16.dp));PText("Manage",style=MaterialTheme.typography.bodySmall) } };PText("Tap a pin to unpin, or choose lists in fridge settings.",style=MaterialTheme.typography.bodySmall,muted=true) } }
         items(lists.filter { it.pinned }.chunked(if(wide) 1 else 2), key = { "pinned_${it.first().id}" }, span = { GridItemSpan(2) }) { pair ->
             Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                pair.forEach { list -> FridgeListCard(list,state.tasks.filter { it.listId==list.id },state,true,{onOpen(list.id)},{onListSave(list.copy(pinned=false))},Modifier.weight(1f).fillMaxHeight()) }
+                pair.forEach { list -> FridgeListCard(list,state.tasks.filter {!it.cancelled &&  it.listId==list.id },state,true,{onOpen(list.id)},{onListSave(list.copy(pinned=false))},Modifier.weight(1f).fillMaxHeight()) }
                 if(pair.size==1 && !wide) Spacer(Modifier.weight(1f))
             }
         }
         item(span = { GridItemSpan(2) }) { PText("All lists", Modifier.padding(top = 8.dp), MaterialTheme.typography.titleMedium) }
         items(lists.filterNot { it.pinned }.chunked(if(wide) 1 else 2), key = { "list_${it.first().id}" }, span = { GridItemSpan(2) }) { pair ->
             Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                pair.forEach { list -> FridgeListCard(list,state.tasks.filter { it.listId==list.id },state,false,{onOpen(list.id)},{onListSave(list.copy(pinned=true))},Modifier.weight(1f).fillMaxHeight()) }
+                pair.forEach { list -> FridgeListCard(list,state.tasks.filter { !it.cancelled && it.listId==list.id },state,false,{onOpen(list.id)},{onListSave(list.copy(pinned=true))},Modifier.weight(1f).fillMaxHeight()) }
                 if(pair.size==1 && !wide) Spacer(Modifier.weight(1f))
             }
         }
         item(span={GridItemSpan(if(wide) 2 else 1)}) { Surface(onClick=onNew,modifier=Modifier.fillMaxWidth().heightIn(min=if(wide) 130.dp else 270.dp),shape=RoundedCornerShape(20.dp),color=AppTheme.colors.primary.copy(alpha=.06f),border=BorderStroke(1.5.dp,AppTheme.colors.primary)) {Column(Modifier.padding(14.dp,12.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(10.dp,Alignment.CenterVertically)) {OutlinedIconButton(onNew,Modifier.size(56.dp)) {Icon(Icons.Outlined.Add,"New list")};PText("New list",style=MaterialTheme.typography.titleLarge);PText("Name it, pick an emoji or a cat",style=MaterialTheme.typography.bodySmall,muted=true,align=TextAlign.Center)}} }
-        item(span = { GridItemSpan(2) }) { PText("${state.tasks.count { !it.done }} open tasks · ${state.lists.size} shared lists", Modifier.fillMaxWidth().padding(12.dp), MaterialTheme.typography.bodySmall, true, TextAlign.Center) }
+        item(span = { GridItemSpan(2) }) { PText("${state.tasks.count { !it.closed }} open tasks · ${state.lists.size} shared lists", Modifier.fillMaxWidth().padding(12.dp), MaterialTheme.typography.bodySmall, true, TextAlign.Center) }
     }
     if(filterMenu) AlertDialog(onDismissRequest={filterMenu=false},title={PText("Whose lists?")},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {(listOf("All")+Owner.entries.map {it.name}).forEach {value->Pill(if(value=="All") "All of us" else ownerName(Owner.valueOf(value),state.preferences),ownerFilter==value) {ownerFilter=value;filterMenu=false}}}},confirmButton={TextButton({filterMenu=false}) {PText("Close")}})
     if(manage) AlertDialog(onDismissRequest = { manage = false }, title = { PText("Fridge settings") }, text = { LazyColumn { items(state.lists, key = { it.id }) { list -> Row(verticalAlignment = Alignment.CenterVertically) { PText(list.name, Modifier.weight(1f)); Switch(list.pinned, { onListSave(list.copy(pinned = it)) },enabled=ai.mwm.client.cloud.canEditList(list,ai.mwm.client.cloud.LocalPartnerConnection.current)) } } } }, confirmButton = { OutlinedButton({ manage = false }) { PText("Done") } })
@@ -137,7 +138,7 @@ import java.util.Locale
                 }
                 PText(list.name,Modifier.fillMaxWidth(),MaterialTheme.typography.titleMedium.copy(fontSize=if(pinned) 22.sp else 21.sp,lineHeight=if(pinned) 27.sp else 26.sp,fontWeight=FontWeight.Bold),align=if(owner==Owner.You) TextAlign.End else TextAlign.Start)
                 if(!pinned) Badge(ownerName(owner,state.preferences),color)
-                val next=tasks.filterNot {it.done}.take(2).joinToString(", ") {it.title}
+                val next=tasks.filterNot {it.closed}.take(2).joinToString(", ") {it.title}
                 if(list.pictures.isNotEmpty()) Box(Modifier.weight(1f).fillMaxWidth().heightIn(min=100.dp).clip(RoundedCornerShape(8.dp))) {
                     LocalPicture(list.pictures.first(),Modifier.matchParentSize())
                     Box(Modifier.align(if(owner==Owner.You) Alignment.BottomEnd else Alignment.BottomStart).padding(6.dp)) { Badge("${list.pictures.size} ${if(list.pictures.size==1) "picture" else "pictures"}",c.surface) }
@@ -177,10 +178,10 @@ import java.util.Locale
     val boardScroll=rememberLazyListState()
     val todoScroll=rememberLazyListState()
     val doneScroll=rememberLazyListState()
-    val tasks = state.tasks.filter { it.listId == list.id && (filter == "All" || it.owner.label == filter) }
+    val tasks = state.tasks.filter { !it.cancelled && it.listId == list.id && (filter == "All" || it.owner.label == filter) }
     Column(Modifier.fillMaxSize()) {
         BackBar("Lists", onBack) { Box { IconButton({ more = true }) { Icon(Icons.Outlined.MoreVert, "More list options") }; DropdownMenu(more, { more = false }) { DropdownMenuItem({ PText("Edit list") }, { more = false; onEdit() },enabled=editable); DropdownMenuItem({ PText(if(list.pinned) "Unpin list" else "Pin to fridge") }, { more = false; onPin() },enabled=editable); DropdownMenuItem({ PText("Delete list") }, { more = false; onDelete() },enabled=deletable) } } }
-        val allTasks = state.tasks.filter { it.listId == list.id }
+        val allTasks = state.tasks.filter { !it.cancelled &&  it.listId == list.id }
         Column(Modifier.padding(16.dp,4.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
             Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) { Surface(Modifier.size(44.dp),color=AppTheme.colors.secondary.copy(alpha=.3f).compositeOver(AppTheme.colors.surface),shape=RoundedCornerShape(14.dp)) { Box(contentAlignment=Alignment.Center) { PText(list.emoji,style=MaterialTheme.typography.headlineLarge) } };Column(Modifier.weight(1f)) { PText(list.name,style=MaterialTheme.typography.headlineSmall);PText("Shared by ${state.preferences.myName} & ${state.preferences.partnerName} · ${allTasks.size} tasks",style=MaterialTheme.typography.labelLarge,muted=true) } }
             Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) { Duo(22.dp);LinearProgressIndicator(progress={if(allTasks.isEmpty()) 0f else allTasks.count { it.done }.toFloat()/allTasks.size},modifier=Modifier.weight(1f).height(6.dp),color=AppTheme.colors.secondary,trackColor=AppTheme.colors.surfaceSunken);PText("${allTasks.count { it.done }} of ${allTasks.size} done",style=MaterialTheme.typography.bodySmall,muted=true) }
@@ -192,7 +193,7 @@ import java.util.Locale
         LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(listOf("All") + Owner.entries.map { it.label }) { label -> Pill("${if(label == "All") "Everyone" else if(label == "Me") state.preferences.myName else if(label == "You") state.preferences.partnerName else label} · ${allTasks.count { label=="All" || it.owner.label==label }}", filter == label) { filter = label } } }
         if(board) BoardView(tasks, state, Modifier.weight(1f), onOpen, onToggle, onStatus, editable, boardScroll, todoScroll, doneScroll) { status -> onAdd(list.id, status) }
         else LazyColumn(Modifier.weight(1f), state=listScroll, contentPadding = PaddingValues(16.dp)) {
-            items(tasks.filterNot { it.done }, key = { it.id }) { task -> TaskRow(task, state, { onOpen(task.id) }, { onToggle(task) }) }
+            items(tasks.filterNot { it.closed }, key = { it.id }) { task -> TaskRow(task, state, { onOpen(task.id) }, { onToggle(task) }) }
             item { OutlinedButton({ doneExpanded = !doneExpanded }) { PText("${if(doneExpanded) "Hide" else "Show"} completed · ${tasks.count { it.done }}") } }
             if(doneExpanded) items(tasks.filter { it.done }.sortedByDescending { it.completedAt }, key = { it.id }) { task -> TaskRow(task, state, { onOpen(task.id) }, { onToggle(task) }) }
         }

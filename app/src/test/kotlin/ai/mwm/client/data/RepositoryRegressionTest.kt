@@ -19,6 +19,35 @@ class RepositoryRegressionTest {
         repository.restoreLocal()
         repository.change { PipoState(preferences=it.preferences) }
     }
+    @Test fun cancellationPersistsAcrossReloadAndCannotBeReopened() {
+        val task=Task(title="Keep in history")
+        repository.saveTask(task)
+        repository.cancelTask(task.id,TaskCancelScope.Occurrence,"actor","Not needed")
+        repository.restoreLocal()
+        val saved=repository.state.value.tasks.single {it.id==task.id}
+        assertTrue(saved.cancelled);assertFalse(saved.done);assertEquals("actor",saved.cancelledBy)
+        assertEquals("Not needed",saved.cancelReason);assertEquals(0L,saved.completedAt)
+        try {repository.setStatus(task.id,TaskStatus.Todo);fail("Cancelled task reopened")}
+        catch(_:IllegalArgumentException) { }
+        assertFalse(repository.state.value.tasks.single {it.id==task.id}.isOwnReminder())
+    }
+    @Test fun soloCancellationClearsItsOngoingReminderAndPreservesOtherNotifications() {
+        val context=RuntimeEnvironment.getApplication()
+        val manager=context.getSystemService(android.app.NotificationManager::class.java)
+        manager.cancelAll()
+        repository.change {it.copy(preferences=it.preferences.copy(started=true,quietEnabled=false))}
+        val task=Task(title="Reminder cancellation fixture",owner=Owner.Me,day=java.time.LocalDate.now().plusDays(1).toEpochDay())
+        repository.saveTask(task)
+        val notification=android.app.Notification.Builder(context,ai.mwm.client.reminders.TaskReminders.CHANNEL)
+            .setContentTitle("Synthetic reminder").setSmallIcon(android.R.drawable.ic_dialog_info).build()
+        manager.notify(task.id,501,notification)
+        manager.notify("unrelated",999,notification)
+        assertTrue(manager.activeNotifications.any {it.tag==task.id})
+        repository.cancelTask(task.id,TaskCancelScope.Occurrence,"","Not needed")
+        assertFalse(manager.activeNotifications.any {it.tag==task.id})
+        assertTrue(manager.activeNotifications.any {it.tag=="unrelated" && it.id==999})
+        manager.cancelAll()
+    }
     @Test fun completeCreatesExactlyOneNextOccurrence() {
         val task = Task(title = "Daily", repeat = Repeat.Weekly)
         repository.saveTask(task)

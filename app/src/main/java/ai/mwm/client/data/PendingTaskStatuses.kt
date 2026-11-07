@@ -8,7 +8,7 @@ data class PendingTaskBatch(val scope: String = "", val items: List<PendingTaskS
 fun withPendingTaskStatuses(state: PipoState, pending: PendingTaskBatch, currentScope: String): PipoState {
     if(currentScope.isBlank() || pending.scope != currentScope || pending.items.isEmpty()) return state
     val latest = pending.items.associateBy {it.taskId}
-    return state.copy(tasks=state.tasks.map {task -> latest[task.id]?.let {intent ->
+    return state.copy(tasks=state.tasks.map {task -> latest[task.id]?.takeUnless {task.cancelled}?.let {intent ->
         task.copy(status=intent.status, completedAt=if(intent.status==TaskStatus.Done) {
             if(task.done && task.completedAt>0) task.completedAt else intent.at
         } else 0)

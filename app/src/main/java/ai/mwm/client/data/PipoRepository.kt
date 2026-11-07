@@ -48,13 +48,14 @@ class PipoRepository private constructor(private val context: Context) {
                     day = t.optLong("day", java.time.LocalDate.now().toEpochDay()), minute = t.optInt("minute", -1).takeIf { it in 0..1439 },
                     listId = t.optString("listId", "home"), note = t.optString("note"), tags = t.optJSONArray("tags")?.strings() ?: emptyList(),
                     repeat = enumValue(t.optString("repeat"), Repeat.Once), reminder = t.optBoolean("reminder", true), offset = t.optInt("offset"),
+                    cancelledAt=t.optLong("cancelledAt"), cancelledBy=t.optString("cancelledBy"), cancelledByName=t.optString("cancelledByName"), cancelReason=t.optString("cancelReason"),
                     status = enumValue(t.optString("status"), TaskStatus.Todo), completedAt = t.optLong("completedAt"), parentId = t.optString("parentId"), seriesId = t.optString("seriesId"), scheduledAt = t.optLong("scheduledAt"), scheduleZone = t.optString("scheduleZone"),
                     events = t.optJSONArray("events")?.objects()?.map { TaskEvent(it.optString("text"), it.optLong("at"), enumValue(it.optString("owner"), Owner.Me)) } ?: emptyList()
                 ) } ?: emptyList(),
                 lists = root.optJSONArray("lists")?.objects()?.map { SharedList(it.getString("id"), it.getString("name"), it.optString("emoji", "🧺"), it.optBoolean("pinned"), enumValue(it.optString("owner"), Owner.Together), it.optJSONArray("pictures")?.strings() ?: emptyList()) } ?: emptyList(),
                 tags = root.optJSONArray("tags")?.objects()?.map { Tag(it.getString("id"), it.getString("name")) } ?: emptyList(),
                 notes = root.optJSONArray("notes")?.objects()?.map { Appreciation(it.getString("id"), it.getString("kind"), it.optString("message"), enumValue(it.optString("owner"), Owner.Me), it.optLong("at"), it.optString("taskTitle"), it.optBoolean("sample", it.optString("id").startsWith("sample_") || it.optString("message") in listOf("You even got the oat milk I like.", "Pipo's litter box has never smelled so innocent.")), it.optString("picture"),it.optString("replyTo")) } ?: emptyList(),
-                preferences = Preferences(p.optString("myName", "User 1"), p.optString("partnerName", "User 2"), p.optString("code", "K4T9PB"), p.optBoolean("started"), p.optInt("avatar", -1).let { if(root.optInt("version") < 4 && it == 0 && p.optString("myPhoto").isBlank()) -1 else it }, p.optBoolean("quietEnabled", true), p.optInt("quietStart", 1320), p.optInt("quietEnd", 450), p.optString("style", "Soft purr"), p.optBoolean("sound", true), p.optBoolean("haptics", true), p.optString("myPhoto"), p.optString("partnerPhoto"), p.optBoolean("pokeOptIn", true), p.optString("themeMode", "System"), p.optString("language", "en"), p.optLong("codeExpiresAt"), p.optLong("togetherSince", java.time.LocalDate.of(2023,2,14).toEpochDay()), p.optInt("defaultReminderTime",750).coerceIn(0,1439), p.optBoolean("keepResetHistory",true), true,p.optString("clockZone"),"",p.optString("partnerClockOverride"),p.optString("listLayout","Wide"))
+                preferences = Preferences(p.optString("myName", "User 1"), p.optString("partnerName", "User 2"), p.optString("code", "K4T9PB"), p.optBoolean("started"), p.optInt("avatar", -1).let { if(root.optInt("version") < 4 && it == 0 && p.optString("myPhoto").isBlank()) -1 else it }, p.optBoolean("quietEnabled", true), p.optInt("quietStart", 1320), p.optInt("quietEnd", 450), p.optString("style", "Soft purr"), p.optBoolean("sound", true), p.optBoolean("haptics", true), p.optString("myPhoto"), p.optString("partnerPhoto"), p.optBoolean("pokeOptIn", true), p.optString("themeMode", "System"), p.optString("language", "en"), p.optLong("codeExpiresAt"), p.optLong("togetherSince", java.time.LocalDate.of(2023,2,14).toEpochDay()), p.optInt("defaultReminderTime",750).coerceIn(0,1439), p.optBoolean("keepResetHistory",true), true,p.optString("clockZone"),"",p.optString("partnerClockOverride"),p.optString("listLayout","Wide"),LoveCelebrationSettings.fromJson(p.optJSONObject("loveCelebrations")))
             ).inTaskZone()
         }.getOrElse { if(AccountScope.current(context)=="local") seedState() else PipoState(preferences=Preferences(myName="Me",partnerName="Partner")) }
     }
@@ -76,7 +77,7 @@ class PipoRepository private constructor(private val context: Context) {
             prefs=context.getSharedPreferences(AccountScope.preferencesName(context),Context.MODE_PRIVATE)
             ai.mwm.client.reminders.CareReminders.clear(context)
             mutable.value=load()
-            TaskReminders.sync(context,mutable.value)
+            TaskReminders.sync(context,mutable.value); ai.mwm.client.reminders.LoveDayReminders.sync(context,mutable.value.preferences)
         }
     }
     /** A new couple is a new workspace. Never import the previous couple's local helpers. */
@@ -89,13 +90,13 @@ class PipoRepository private constructor(private val context: Context) {
             val old=mutable.value.preferences
             val p=old.startNewCouple(java.time.LocalDate.now().toEpochDay())
             val stored=JSONObject(prefs.getString("state","{}") ?: "{}")
-            val own=(stored.optJSONObject("preferences") ?: JSONObject()).put("myName",p.myName).put("avatar",p.avatar).put("started",p.started).put("togetherSince",p.togetherSince).put("partnerName",p.partnerName).put("partnerPhoto","").put("myPhoto",p.myPhoto).put("shareProfile",true).put("partnerClockOverride","").put("code","------").put("codeExpiresAt",0)
+            val own=(stored.optJSONObject("preferences") ?: JSONObject()).put("loveCelebrations",p.loveCelebrations.toJson()).put("myName",p.myName).put("avatar",p.avatar).put("started",p.started).put("togetherSince",p.togetherSince).put("partnerName",p.partnerName).put("partnerPhoto","").put("myPhoto",p.myPhoto).put("shareProfile",true).put("partnerClockOverride","").put("code","------").put("codeExpiresAt",0)
             stored.put("preferences",own).put("tasks",JSONArray()).put("lists",JSONArray()).put("notes",JSONArray()).put("tags",JSONArray())
             edit.putString("state",stored.toString()).remove("private_task_notes").remove("personal_reminders")
             check(edit.commit()) {"Could not open the new couple workspace."}
             mutable.value=PipoState(preferences=p)
             ai.mwm.client.cloud.PartnerPokeService.clear(context)
-            TaskReminders.sync(context,mutable.value)
+            TaskReminders.sync(context,mutable.value); ai.mwm.client.reminders.LoveDayReminders.sync(context,mutable.value.preferences)
         } else check(edit.commit()) {"Could not remember your couple workspace."}
     }
     @Synchronized internal fun savePrivateNotes(tasks: List<Task>) {
@@ -113,14 +114,17 @@ class PipoRepository private constructor(private val context: Context) {
         val item=runCatching {JSONObject(prefs.getString("personal_reminders","{}") ?: "{}").optJSONObject(id)}.getOrNull()
         return (item?.optBoolean("enabled", defaultEnabled) ?: defaultEnabled) to (item?.optInt("offset") ?: defaultOffset)
     }
-    @Synchronized internal fun importRemote(next: PipoState) { remoteMarker.writeText("active"); remote = true; mutable.value = next.inTaskZone(); TaskReminders.sync(context,mutable.value) }
-    @Synchronized internal fun restoreLocal() { remoteMarker.delete(); remote=false; mutable.value=load(); TaskReminders.sync(context,mutable.value) }
+    @Synchronized internal fun importRemote(next: PipoState) { remoteMarker.writeText("active"); remote = true; mutable.value = next.inTaskZone(); TaskReminders.sync(context,mutable.value); ai.mwm.client.reminders.LoveDayReminders.sync(context,mutable.value.preferences) }
+    @Synchronized internal fun restoreLocal() { remoteMarker.delete(); remote=false; mutable.value=load(); TaskReminders.sync(context,mutable.value); ai.mwm.client.reminders.LoveDayReminders.sync(context,mutable.value.preferences) }
     /** Backup restores account settings, never local task rows over a live shared snapshot. */
     @Synchronized internal fun restoreAccountSettings() {
         if(!remote){restoreLocal();return}
         val saved=load().preferences
         val current=mutable.value.preferences
-        change {it.copy(preferences=saved.copy(started=current.started,myName=current.myName,myPhoto=current.myPhoto,
+        change {it.copy(tasks=it.tasks.map {task->
+            val reminder=personalReminder(task.id,task.reminder,task.offset)
+            task.copy(note=privateNote(task.id),reminder=reminder.first,offset=reminder.second)
+        },preferences=saved.copy(started=current.started,myName=current.myName,myPhoto=current.myPhoto,
             avatar=current.avatar,partnerName=current.partnerName,partnerPhoto=current.partnerPhoto,
             clockZone=current.clockZone,partnerClockZone=current.partnerClockZone,code=current.code,
             codeExpiresAt=current.codeExpiresAt,togetherSince=current.togetherSince))}
@@ -135,13 +139,14 @@ class PipoRepository private constructor(private val context: Context) {
         val json = JSONObject().put("version", 4).put("skippedDaily",JSONArray(next.skippedDaily.toList())).put("tasks", JSONArray(next.tasks.map { t -> JSONObject()
             .put("id", t.id).put("title", t.title).put("owner", t.owner.name).put("day", t.day).put("minute", t.minute ?: -1)
             .put("listId", t.listId).put("note", t.note).put("tags", JSONArray(t.tags)).put("repeat", t.repeat.name)
+            .put("cancelledAt",t.cancelledAt).put("cancelledBy",t.cancelledBy).put("cancelledByName",t.cancelledByName).put("cancelReason",t.cancelReason)
             .put("reminder", t.reminder).put("offset", t.offset).put("status", t.status.name).put("completedAt", t.completedAt).put("parentId", t.parentId)
             .put("seriesId",t.seriesId).put("scheduledAt",t.scheduledAt).put("scheduleZone",t.scheduleZone)
             .put("events", JSONArray(t.events.map { JSONObject().put("text", it.text).put("at", it.at).put("owner", it.owner.name) })) }))
             .put("lists", JSONArray(next.lists.map { JSONObject().put("id", it.id).put("name", it.name).put("emoji", it.emoji).put("pinned", it.pinned).put("owner", it.owner.name).put("pictures", JSONArray(it.pictures)) }))
             .put("tags", JSONArray(next.tags.map { JSONObject().put("id", it.id).put("name", it.name) }))
             .put("notes", JSONArray(next.notes.map { JSONObject().put("id", it.id).put("kind", it.kind).put("message", it.message).put("owner", it.owner.name).put("at", it.at).put("taskTitle", it.taskTitle).put("sample", it.sample).put("picture", it.picture).put("replyTo",it.replyTo) }))
-            .put("preferences", JSONObject().put("myName", p.myName).put("partnerName", p.partnerName).put("code", p.code).put("started", p.started).put("avatar", p.avatar).put("quietEnabled", p.quietEnabled).put("quietStart", p.quietStart).put("quietEnd", p.quietEnd).put("style", p.style).put("sound", p.sound).put("haptics", p.haptics).put("myPhoto", p.myPhoto).put("partnerPhoto", p.partnerPhoto).put("pokeOptIn", p.pokeOptIn).put("themeMode", p.themeMode).put("language", p.language).put("codeExpiresAt", p.codeExpiresAt).put("togetherSince", p.togetherSince).put("defaultReminderTime", p.defaultReminderTime).put("keepResetHistory",p.keepResetHistory).put("shareProfile",true).put("clockZone",p.clockZone).put("partnerClockOverride",p.partnerClockOverride).put("listLayout",p.listLayout))
+            .put("preferences", JSONObject().put("myName", p.myName).put("partnerName", p.partnerName).put("code", p.code).put("started", p.started).put("avatar", p.avatar).put("quietEnabled", p.quietEnabled).put("quietStart", p.quietStart).put("quietEnd", p.quietEnd).put("style", p.style).put("sound", p.sound).put("haptics", p.haptics).put("myPhoto", p.myPhoto).put("partnerPhoto", p.partnerPhoto).put("pokeOptIn", p.pokeOptIn).put("themeMode", p.themeMode).put("language", p.language).put("codeExpiresAt", p.codeExpiresAt).put("togetherSince", p.togetherSince).put("defaultReminderTime", p.defaultReminderTime).put("keepResetHistory",p.keepResetHistory).put("shareProfile",true).put("clockZone",p.clockZone).put("partnerClockOverride",p.partnerClockOverride).put("listLayout",p.listLayout).put("loveCelebrations",p.loveCelebrations.toJson()))
         val persisted = if(remote) {
             // Never persist partner task/photo data into the local demo workspace.
             val local=JSONObject(prefs.getString("state", "{}") ?: "{}")
@@ -153,6 +158,7 @@ class PipoRepository private constructor(private val context: Context) {
         ai.mwm.client.cloud.AccountBackup.pending(context,"main")
         mutable.value = next
         TaskReminders.sync(context, next)
+        ai.mwm.client.reminders.LoveDayReminders.sync(context,next.preferences)
     }
     /** The local session owns only My profile. Partner data is read-only here.
      * Any future sync import must use a separately authenticated partner-owned path. */
@@ -165,6 +171,7 @@ class PipoRepository private constructor(private val context: Context) {
     fun saveTask(task: Task, scope: TaskEditScope = TaskEditScope.Occurrence) = change {it.withTaskEdit(task,scope)}
     fun setStatus(id: String, status: TaskStatus) = change { s ->
         val task = s.tasks.find { it.id == id } ?: return@change s
+        require(!task.cancelled) {"Cancelled tasks stay in History."}
         if(task.status == status) return@change s
         if(status == TaskStatus.Done) {
             val done = task.copy(status = status, completedAt = System.currentTimeMillis(), events = task.events + TaskEvent("Ticked it off", owner = task.owner))
@@ -179,6 +186,7 @@ class PipoRepository private constructor(private val context: Context) {
             s.copy(tasks = tasks.map { if(it.id == id) it.copy(status = status, completedAt = 0, events = it.events + TaskEvent(if(task.done) "Reopened this task" else "Started this task")) else it })
         }
     }
+    fun cancelTask(id:String,scope:TaskCancelScope,actor:String,reason:String) = change {it.withTaskCancellation(id,scope,actor,reason)}
     fun deleteTask(id: String,scope:TaskDeleteScope=TaskDeleteScope.Occurrence) = change {it.withTaskDeletion(id,scope)}
     companion object {
         @Volatile private var instance: PipoRepository? = null
@@ -271,6 +279,7 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
         catch(e:Exception){errorState.value=ai.mwm.client.cloud.connectionError(e)}
     }}
     fun backupNow() = sync.backupNow()
+    suspend fun restoreLatestBackup():String=withContext(Dispatchers.IO) {sync.restoreLatestBackup()}
     fun resumeConnection() = sync.resume()
     fun pauseConnection() = sync.pause()
     fun leaveConnection() = sync.leave()
@@ -317,8 +326,13 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
             onResult(failure)
         }
     }
+    fun cancelWithResult(id:String,scope:TaskCancelScope,reason:String,onResult:(String?)->Unit) = mutationWithResult(onResult,"task:$id",seriesTaskId=id) {
+        check(pendingTaskCount.value==0) {"Wait for pending task updates before cancelling."}
+        repository.cancelTask(id,scope,connection.value.uid,reason)
+    }
     fun status(id: String, value: TaskStatus) {
         val task=repository.state.value.tasks.find {it.id==id} ?: return
+        if(task.cancelled) {errorState.value="Cancelled tasks stay in History.";return}
         val c=connection.value
         if(!ai.mwm.client.cloud.canEditTask(task,repository.state.value,c) || currentStatusScope().isBlank()) {
             errorState.value="This task cannot be changed right now. Wait for syncing or reconnect and refresh."
@@ -336,6 +350,16 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
         repository.change {s->s.copy(lists=s.lists.filterNot {it.id==id},tasks=s.tasks.filterNot {it.listId==id})}
     }
     fun preferences(update: (Preferences) -> Preferences) = act { repository.updateOwnPreferences(update) }
+    fun saveLoveCelebrations(settings:LoveCelebrationSettings,onResult:(String?)->Unit) {
+        val account=AccountScope.current(getApplication());val space=connection.value.spaceId
+        viewModelScope.launch {
+            val failure=try {withContext(Dispatchers.IO) {sync.updateLocalPreferences {
+                check(account==AccountScope.current(getApplication()) && space==connection.value.spaceId) {"Account changed. Reopen celebration settings."}
+                repository.updateOwnPreferences {it.copy(loveCelebrations=settings.validated())}
+            }};null} catch(e:Exception){e.message ?: "Could not save celebration settings."}
+            onResult(failure)
+        }
+    }
     fun saveName(name:String,onResult:(String?)->Unit) = mutationWithResult(onResult,"profile-name",forceProfile=true) {
         val clean=name.trim()
         require(clean.isNotBlank() && clean.length<=40) {"Use a name between 1 and 40 characters."}
@@ -445,7 +469,7 @@ class PipoViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun thank(kind: String, message: String, taskTitle: String = "", picture: String = "") = act(after={event(if(connection.value.connected) "appreciation_shared" else "appreciation_saved_local")}) { repository.change { it.copy(notes = it.notes + Appreciation(kind = kind, message = message.trim(), taskTitle = taskTitle,picture=picture)) } }
     fun deleteNote(id: String) = act { repository.change { s -> s.copy(notes = s.notes.filterNot { it.id == id }) } }
-    fun syncReminders() = act { TaskReminders.sync(getApplication(), state.value, restore = true) }
+    fun syncReminders() = act { TaskReminders.sync(getApplication(), state.value, restore = true); ai.mwm.client.reminders.LoveDayReminders.resume(getApplication()) }
     fun testReminder() = act {
         val now = java.time.LocalDateTime.now()
         repository.saveTask(Task(title = "Check your reminder", owner = Owner.Me, day = now.toLocalDate().toEpochDay(), minute = now.hour * 60 + now.minute, listId = state.value.lists.firstOrNull()?.id ?: "home", reminder = true, note = "Complete this task here or in the notification to clear it."))
