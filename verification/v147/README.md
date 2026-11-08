@@ -30,4 +30,10 @@ Validation:
   did not execute; zero synthetic accounts found afterward. Prepared test script
   remains local for future execution. No live two-device acceptance test run.
 
-Publication, CI full lint/tests and signed artifact verification pending.
+Published: https://github.com/krispi319/Pipo2doo-Mobible-App/releases/tag/v1.4.7
+Source/tag commit: 4144fa754aff3b07ddf3adc076f88a39e8f2a67b.
+GitHub run 42514229565 passed tests, full release lint, build and signing.
+Public APK downloaded after one transient timeout; checksum, original certificate,
+package/version 1.4.7 / 158 and both feature markers were independently verified.
+See published-artifact.json and backend-verification.json.
+Physical-device/two-phone acceptance remains unverified.

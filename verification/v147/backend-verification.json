@@ -1,0 +1,14 @@
+{
+  "deployed": true,
+  "occupiedDateCasesPassed": 5,
+  "privateExecutionRetained": true,
+  "noUserTaskDataRewritten": true,
+  "securityAdvisors": {
+    "beforeCount": 3,
+    "afterCount": 3,
+    "unchanged": true
+  },
+  "fullSyntheticTransactionExecuted": false,
+  "syntheticTransactionStatus": "confirmation expired",
+  "syntheticAccountsRemaining": 0
+}

@@ -1,4 +1,4 @@
-# v1.4.7 / 158 release preparation — 8 November 2026
+# Published v1.4.7 / 158 — 8 November 2026
 
 - User authorized series-time fix, content-sized chat bubbles and v1.4.7 release.
   Bulk fixed times now propagate to linked open/planned tasks and future templates;
@@ -13,7 +13,11 @@
   Security advisor comparison unchanged. Existing generator backup saved locally.
 - Optional full synthetic live time-edit transaction did not run: confirmation
   expired. Follow-up found zero fixture accounts. Physical two-device tests remain.
-- Release CI/publication pending; evidence: verification/v147/.
+- Published from 4144fa7 via successful workflow 42514229565. CI tests, full
+  release lint, assembly and original-key signing passed. Public APK downloaded;
+  checksum, package/version, matching certificate and both feature markers verified.
+  Release: https://github.com/krispi319/Pipo2doo-Mobible-App/releases/tag/v1.4.7
+  Evidence: verification/v147/.
 
 # Unreleased series due-time fix — 8 November 2026
 
