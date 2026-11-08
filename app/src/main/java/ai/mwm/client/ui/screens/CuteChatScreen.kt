@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
@@ -220,12 +221,12 @@ private fun chatIcon(kind: String)=when(kind) {
                 val mine=note.owner==Owner.Me
                 Box(Modifier.fillMaxWidth()) {
                     Column(Modifier.align(if(mine) Alignment.CenterEnd else Alignment.CenterStart).fillMaxWidth(.87f),horizontalAlignment=if(mine) Alignment.End else Alignment.Start,verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                        Surface(shape=if(mine) RoundedCornerShape(20.dp,20.dp,6.dp,20.dp) else RoundedCornerShape(20.dp,20.dp,20.dp,6.dp),color=(if(mine)c.primary else c.accent).copy(alpha=.18f).compositeOver(c.surface),border=BorderStroke(1.dp,c.separator.copy(alpha=.55f))) {
-                            Column(Modifier.fillMaxWidth().padding(14.dp,12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                                if(note.kind!="Message") Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(7.dp)) {Icon(chatIcon(note.kind),null,Modifier.size(18.dp),tint=c.textSecondary);PText(if(note.kind=="Heart") "A little love" else note.kind,Modifier.weight(1f),MaterialTheme.typography.titleSmall)}
+                        Surface(modifier=Modifier.testTag("chat-bubble:${note.id}"),shape=if(mine) RoundedCornerShape(20.dp,20.dp,6.dp,20.dp) else RoundedCornerShape(20.dp,20.dp,20.dp,6.dp),color=(if(mine)c.primary else c.accent).copy(alpha=.18f).compositeOver(c.surface),border=BorderStroke(1.dp,c.separator.copy(alpha=.55f))) {
+                            Column(Modifier.padding(12.dp,8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                                if(note.kind!="Message") Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(7.dp)) {Icon(chatIcon(note.kind),null,Modifier.size(18.dp),tint=c.textSecondary);PText(if(note.kind=="Heart") "A little love" else note.kind,style=MaterialTheme.typography.titleSmall)}
                                 if(note.replyTo.isNotBlank()) {
                                     val quoted=notes.find {it.id==note.replyTo}
-                                    Surface(shape=RoundedCornerShape(10.dp),color=c.surface.copy(alpha=.7f)) {Column(Modifier.fillMaxWidth().padding(10.dp)) {
+                                    Surface(shape=RoundedCornerShape(10.dp),color=c.surface.copy(alpha=.7f)) {Column(Modifier.padding(10.dp)) {
                                         PText(quoted?.let {if(it.owner==Owner.Me) p.myName else p.partnerName} ?: "Reply",style=MaterialTheme.typography.labelSmall,muted=true,preserveContent=true)
                                         Text(quoted?.message?.ifBlank {"Photo"} ?: "Original message unavailable",maxLines=2,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis,style=MaterialTheme.typography.bodySmall,color=c.textSecondary)
                                     }}
@@ -235,7 +236,7 @@ private fun chatIcon(kind: String)=when(kind) {
                                     else PText(note.message,preserveContent=true)
                                 }
                                 if(note.picture.isNotBlank()) LocalPicture(note.picture,Modifier.fillMaxWidth().height(172.dp).clip(RoundedCornerShape(14.dp)).clickable(onClickLabel="Open picture") {openPhoto=note.picture})
-                                chatContext(note,state)?.let {label->Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)) {Icon(if(note.kind=="Heart") Icons.Outlined.Image else Icons.Outlined.AttachFile,null,Modifier.size(14.dp));PText(label,Modifier.weight(1f),MaterialTheme.typography.labelSmall,true,preserveContent=true)}}
+                                chatContext(note,state)?.let {label->Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)) {Icon(if(note.kind=="Heart") Icons.Outlined.Image else Icons.Outlined.AttachFile,null,Modifier.size(14.dp));PText(label,style=MaterialTheme.typography.labelSmall,muted=true,preserveContent=true)}}
                                 if(note.sample) TextButton({onDeleteNote(note.id)},contentPadding=PaddingValues(0.dp)) {PText("Delete example",style=MaterialTheme.typography.labelSmall)}
                             }
                         }

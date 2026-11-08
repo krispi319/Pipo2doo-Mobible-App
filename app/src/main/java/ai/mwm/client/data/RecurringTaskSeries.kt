@@ -31,15 +31,21 @@ private fun PipoState.nextDailyTemplate(source:Task,day:Long,now:Long):Task {
 internal fun PipoState.withRecurringDetails(old:Task,edited:Task,scope:TaskEditScope,now:Long):PipoState {
     require(hasRecurrence(old.id)) {"This task has no linked recurring series."}
     require(!edited.hasOccurrenceChangesComparedTo(old)) {
-        "Series edits change the title, assignee, list and tags. Use Only this occurrence for dates, times, repeat settings, reminders or private notes."
+        "Series edits change the title, fixed time, assignee, list and tags. Use This task for dates, Anytime mode, repeat settings, reminders or private notes."
     }
     val unchangedShared=old.title==edited.title && old.owner==edited.owner && old.listId==edited.listId && old.tags==edited.tags
     val syncCurrentTitle=scope==TaskEditScope.AllUnfinished && unchangedShared
-    fun details(t:Task)=t.copy(title=if(old.title!=edited.title || syncCurrentTitle)edited.title else t.title,
+    // All open can reapply an already corrected title/time to mixed existing copies.
+    val syncTime=edited.minute!=null && (old.minute!=edited.minute || syncCurrentTitle)
+    val editZone=clockZone(preferences.clockZone)
+    fun details(t:Task):Task {
+        val shared=t.copy(title=if(old.title!=edited.title || syncCurrentTitle)edited.title else t.title,
         owner=if(old.owner!=edited.owner)edited.owner else t.owner,
         listId=if(old.listId!=edited.listId)edited.listId else t.listId,
         tags=if(old.tags!=edited.tags)edited.tags else t.tags)
-    if(unchangedShared && !syncCurrentTitle)return this
+        return if(syncTime)shared.inTaskZone(editZone).copy(minute=edited.minute,scheduledAt=0,scheduleZone="").withSavedSchedule(null,editZone) else shared
+    }
+    if(unchangedShared && !syncCurrentTitle && !syncTime)return this
     val family=recurringFamily(old.id);val ids=family.mapTo(hashSetOf()) {it.id}
     val boundary=if(scope==TaskEditScope.AllUnfinished)Long.MIN_VALUE else old.day
     var result=tasks.map {if(it.id in ids && !it.closed && it.day>=boundary)details(it) else it}
@@ -47,7 +53,9 @@ internal fun PipoState.withRecurringDetails(old:Task,edited:Task,scope:TaskEditS
         // A stopped/edited occurrence can still belong to a daily series. Keep its linkage.
         val source=family.first {it.repeat==Repeat.Daily && it.seriesId.isBlank()}
         val intendedTemplate=details(source)
-        val template=result.filter {it.id in ids && !it.closed && it.day>=boundary && it.repeat==Repeat.Daily && it.minute==source.minute && it.scheduleZone==source.scheduleZone &&
+        val templateMinute=if(syncTime)edited.minute else source.minute
+        val templateZone=if(syncTime)if(edited.minute==null)"" else editZone.id else source.scheduleZone
+        val template=result.filter {it.id in ids && !it.closed && it.day>=boundary && it.repeat==Repeat.Daily && it.minute==templateMinute && it.scheduleZone==templateZone &&
             it.title==intendedTemplate.title && it.owner==intendedTemplate.owner && it.listId==intendedTemplate.listId && it.tags==intendedTemplate.tags}
             .let {pending->if(scope==TaskEditScope.Future)pending.firstOrNull {it.id==old.id} ?: pending.minByOrNull {it.day} else pending.minByOrNull {it.day}}
             ?: details(nextDailyTemplate(source,maxOf(Instant.ofEpochMilli(now).atZone(clockZone(preferences.clockZone)).toLocalDate().toEpochDay()+1,family.maxOf {it.day}+1),now))

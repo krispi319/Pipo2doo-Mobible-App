@@ -118,12 +118,12 @@ fun pickTime(context: android.content.Context, minute: Int?, onSelect: (Int) -> 
     if(confirmOccurrenceSave) AlertDialog(
         onDismissRequest={confirmOccurrenceSave=false},
         title={PText("Save changes to this task?")},
-        text={PText("Date, time, repeat, reminders and private notes apply to one task. Save your changes to this task, or keep editing to change the title, assignee, list or tags across the series.")},
+        text={PText("Dates, Anytime mode, repeat settings, reminders and private notes apply to one task. Save your changes to this task, or keep editing to change the title, fixed time, assignee, list or tags across the series.")},
         confirmButton={TextButton({confirmOccurrenceSave=false;editScope=TaskEditScope.Occurrence.name;submit(TaskEditScope.Occurrence)}) {PText("Save this task")}},
         dismissButton={TextButton({confirmOccurrenceSave=false}) {PText("Keep editing")}},
         containerColor=c.surface
     )
-    if(seriesHelp) AlertDialog(onDismissRequest={seriesHelp=false},title={PText("Series edits")},text={PText("Sync the title, assignee, list and tags across linked unfinished tasks. To copy an already corrected title, choose All open and Save. Dates, notes and reminders use This task. Completed history stays.")},confirmButton={TextButton({seriesHelp=false}) {PText("Got it")}},containerColor=c.surface)
+    if(seriesHelp) AlertDialog(onDismissRequest={seriesHelp=false},title={PText("Series edits")},text={PText("Sync the title, fixed time, assignee, list and tags across linked unfinished tasks. To reapply an already corrected title and time, choose All open and Save. Time uses your selected app clock. Dates, Anytime mode, repeat settings, notes and reminders use This task. Completed and cancelled history stays.")},confirmButton={TextButton({seriesHelp=false}) {PText("Got it")}},containerColor=c.surface)
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = {if(!saving) onClose()}, sheetState = sheet, sheetGesturesEnabled = false, containerColor = c.surface, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp), dragHandle = null) {
         Column(Modifier.fillMaxWidth().fillMaxHeight(.98f).imePadding()) {

@@ -2,9 +2,9 @@ package ai.mwm.client.data
 
 import java.time.Instant
 
-/** Series edits intentionally leave scheduling and private fields on each occurrence. */
+/** Series edits allow fixed-time changes; dates, Anytime mode and private fields remain occurrence-only. */
 fun Task.hasOccurrenceChangesComparedTo(base:Task):Boolean =
-    day!=base.day || minute!=base.minute || repeat!=base.repeat || note!=base.note || reminder!=base.reminder || offset!=base.offset
+    day!=base.day || (minute==null)!=(base.minute==null) || repeat!=base.repeat || note!=base.note || reminder!=base.reminder || offset!=base.offset
 
 /** Retry only fields the user changed; preserve newer partner changes to the rest of the task. */
 fun mergeTaskDetailEdit(current:Task,base:Task,edited:Task):Task {

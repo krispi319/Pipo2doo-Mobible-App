@@ -1,3 +1,43 @@
+# v1.4.7 / 158 release preparation — 8 November 2026
+
+- User authorized series-time fix, content-sized chat bubbles and v1.4.7 release.
+  Bulk fixed times now propagate to linked open/planned tasks and future templates;
+  All open can reapply an already corrected occurrence's title/time. History,
+  private fields, unrelated tasks, layouts and assignee notifications retained.
+- Chat body no longer fills its maximum width: content wraps naturally up to the
+  existing 87% cap, with 12/8 dp padding. Replies, photos, reactions and labels
+  preserved. Native synthetic render inspected; sizing/local/paired tests pass.
+- All 288 local tests passed with zero failures/errors/skips; debug build passed.
+- Server series_time_occupancy correction DEPLOYED. Five date fixtures pass;
+  private scope/empty search_path/direct execute restrictions retained.
+  Security advisor comparison unchanged. Existing generator backup saved locally.
+- Optional full synthetic live time-edit transaction did not run: confirmation
+  expired. Follow-up found zero fixture accounts. Physical two-device tests remain.
+- Release CI/publication pending; evidence: verification/v147/.
+
+# Unreleased series due-time fix — 8 November 2026
+
+- User clarified All open must change 19:30 to 19:29 across existing and planned
+  linked tasks. v1.4.6 only recovered one-occurrence scheduling saves; it did not
+  implement bulk time edits.
+- Working source now allows due time in From here / All open. All open with no
+  changed shared fields reapplies the selected title/time to mixed open copies.
+  Each affected date uses the selected app clock; timestamps are recomputed.
+  Switching Anytime/fixed-time mode remains occurrence-only for compatibility.
+  Completed/cancelled times, private fields and unrelated same-name tasks stay.
+- Daily template selection follows the intended new time/zone (including a DST
+  gap safeguard); new local weekly/daily occurrences inherit the new time.
+- Server generator date-occupancy edge found when a time edit changes the series
+  timezone. backend/supabase/series_time_occupancy.sql is a narrow guarded patch.
+  SQL date fixtures passed and patch compiled in BEGIN/ROLLBACK only; NOT DEPLOYED.
+  Deploy and verify it before releasing this app change. No persistent DB/task
+  data changes and no release/version bump/commit made for this task.
+- Added eight data regressions and three real time-picker/save/retry UI tests.
+  All 286 final tests passed (zero failures/errors/skips) and debug APK built.
+  Five SQL date fixtures passed; guarded server patch compiled in rollback-only
+  transaction and remains undeployed. No physical phone/two-device test.
+  Evidence: verification/series-time-fix/. Published v1.4.6 remains unchanged.
+
 # Published v1.4.6 / 157 hotfix — 7 November 2026
 
 - Screenshot error traced to series-field validation; user confirmed editing

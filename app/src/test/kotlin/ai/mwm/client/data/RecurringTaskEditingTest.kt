@@ -62,7 +62,7 @@ class RecurringTaskEditingTest {
         assertEquals(s.tasks.map {it.id to it.day},edited.tasks.map {it.id to it.day})
     }
     @Test fun futureScopeRejectsUnimplementedScheduleAndPrivateChanges() {
-        for(edit in listOf(root.copy(day=day+1),root.copy(minute=600),root.copy(repeat=Repeat.Once),root.copy(note="Changed"),root.copy(reminder=false))) {
+        for(edit in listOf(root.copy(day=day+1),root.copy(repeat=Repeat.Once),root.copy(note="Changed"),root.copy(reminder=false))) {
             assertTrue(runCatching {daily().withTaskEdit(edit,TaskEditScope.Future,now)}.isFailure)
         }
     }
